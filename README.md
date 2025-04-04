@@ -12,11 +12,12 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
     - [Group Management](#group-management)
     - [Customization](#customization)
     - [Others](#others)
-  - [Support](#support)
   - [Installation](#installation)
+  - [Screenshots](#screenshots)
+  - [Video Demo](#video-demo)
   - [How to Use](#how-to-use)
   - [License](#license)
-
+  - [Support](#support)
 
 
 
@@ -46,24 +47,13 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 3. Run **AppGroup.exe** — no installation required!
 
 
-## Support  
-AppGroup is actively maintained, and your support helps keep it improving. If you find this tool helpful, consider donating to support its development. Your contribution ensures new updates and improvements:  
-
-**[🍵 Donate on Ko-fi ](https://ko-fi.com/iandiv/tip)**  
-
-
-<a href="https://ko-fi.com/iandiv/tip" target="_blank">
-  <img src="https://github.com/user-attachments/assets/b8cb52d7-b60f-4610-9a1c-6fc05d615520" width="400" alt="explorer_iaflNp0ULV">
-</a>
-
-
 
 
 ## Screenshots
  <img src="https://github.com/user-attachments/assets/a665f338-8b7f-4092-89bb-47c4c87ff1c0" alt="explorer_R1L5xazeSe" width ="300"> <img src="https://github.com/user-attachments/assets/8aabf86b-747e-4a21-9a07-77d303196e45" alt="explorer_diGSIGlrYF"  width ="300"><img src="https://github.com/user-attachments/assets/8bd4ba3b-5a84-4d70-9ade-a0a31f86b656" alt="explorer_iaflNp0ULV"  width ="300">
 
 
-## Demo 
+## Video Demo 
 
 
 https://github.com/user-attachments/assets/36a8ee1e-9ce4-4129-9c61-31e8a96c4ce1
@@ -97,6 +87,17 @@ https://github.com/user-attachments/assets/36a8ee1e-9ce4-4129-9c61-31e8a96c4ce1
    - **Right-click → Pin to Taskbar**  
 
 
+
+
+## Support  
+AppGroup is actively maintained, and your support helps keep it improving. If you find this tool helpful, consider donating to support its development. Your contribution ensures new updates and improvements:  
+
+**[🍵 Donate on Ko-fi ](https://ko-fi.com/iandiv/tip)**  
+
+
+<a href="https://ko-fi.com/iandiv/tip" target="_blank">
+  <img src="https://github.com/user-attachments/assets/b8cb52d7-b60f-4610-9a1c-6fc05d615520" width="400" alt="explorer_iaflNp0ULV">
+</a>
 
   
 

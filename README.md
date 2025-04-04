@@ -1,4 +1,5 @@
-![AppGroup](https://github.com/user-attachments/assets/ad36293b-d0aa-467e-97d6-0a5997c14936)
+
+![AppGroup](https://github.com/user-attachments/assets/169e1383-fe84-4f6b-997e-75ee218abe0c)
 
 
 # App Group  
@@ -48,16 +49,18 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 3. Run **AppGroup.exe** — no setup needed!
 
 
-
-
 ## Screenshots
- <img src="https://github.com/user-attachments/assets/a665f338-8b7f-4092-89bb-47c4c87ff1c0" alt="explorer_R1L5xazeSe" width ="300"> <img src="https://github.com/user-attachments/assets/8aabf86b-747e-4a21-9a07-77d303196e45" alt="explorer_diGSIGlrYF"  width ="300"><img src="https://github.com/user-attachments/assets/8bd4ba3b-5a84-4d70-9ade-a0a31f86b656" alt="explorer_iaflNp0ULV"  width ="300">
 
+
+ <img src="https://github.com/user-attachments/assets/39d02528-0cda-43f3-abc4-7a2567140c58" alt="explorer_iaflNp0ULV"  width ="300"> <img src="https://github.com/user-attachments/assets/73703278-b4c8-4b93-a4cb-5c8cf49ae2a8" alt="explorer_diGSIGlrYF"  width ="300"><img src="https://github.com/user-attachments/assets/4ef0825d-506e-49be-9f1b-5f66faf4ad8f" alt="explorer_R1L5xazeSe" width ="300">
 
 ## Video Demo 
 
 
-https://github.com/user-attachments/assets/36a8ee1e-9ce4-4129-9c61-31e8a96c4ce1
+
+https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
+
+
 
 ## How to Use  
 
@@ -96,8 +99,9 @@ AppGroup is actively maintained, and your support helps keep it improving. If yo
 **[🍵 Donate on Ko-fi ](https://ko-fi.com/iandiv/tip)**  
 
 
+
 <a href="https://ko-fi.com/iandiv/tip" target="_blank">
-  <img src="https://github.com/user-attachments/assets/b8cb52d7-b60f-4610-9a1c-6fc05d615520" width="400" alt="explorer_iaflNp0ULV">
+  <img src="https://github.com/user-attachments/assets/2e1376d4-d3a5-4ac4-95fc-e5aa512a1704" width="400" alt="explorer_iaflNp0ULV">
 </a>
 
   

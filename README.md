@@ -44,7 +44,7 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 
 1. [Download the latest version](https://github.com/iandiv/AppGroup/releases) from the **Releases** page.  
 2. Extract the downloaded `.zip` file.  
-3. Run **AppGroup.exe** — no installation required!
+3. Run **AppGroup.exe** — no setup needed!
 
 
 

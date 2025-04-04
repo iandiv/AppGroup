@@ -1,0 +1,174 @@
+<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="600"
+    x:Class="AppGroup.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AppGroup"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="App Group">
+
+    <Window.SystemBackdrop>
+      
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid Background="{ThemeResource DesktopAcrylicTransparentBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Padding="40,45,35,0">
+
+            <Grid  Background="{ThemeResource DesktopAcrylicTransparentBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="5"  VerticalAlignment="Center">
+                    <TextBlock FontSize="25" Margin="0,10,0,0" FontWeight="SemiBold" >App Group</TextBlock>
+                    <StackPanel Orientation="Horizontal" Opacity="0.8"  Spacing="3" Margin="-15,0,0,0">
+
+                        <Button Click="GitHubButton_Click" HorizontalAlignment="Left" Background="Transparent"  BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Image Source="{ThemeResource GitHubIcon}" Width="15" Height="15"/>
+                                <TextBlock Text="IanDiv" FontSize="13" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Click="CoffeeButton_Click" HorizontalAlignment="Left" Background="Transparent"   BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Image Source="{ThemeResource CoffeeIcon}" Width="15" Height="15"/>
+                                <TextBlock Text="Support" FontSize="13" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+                <Grid Grid.Column="1" Width="220" VerticalAlignment="Center">
+
+
+                    <TextBox Grid.Column="0"   x:Name="SearchTextBox" Height="35" VerticalContentAlignment="Center" HorizontalAlignment="Stretch" PlaceholderText="Search groups..." Padding="40,7,0,0" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" TextChanged="SearchTextBox_TextChanged" VerticalAlignment="Center"/>
+                    <FontIcon Glyph="&#xe71e;" FontSize="16" Margin="10,0,0,0"  HorizontalAlignment="Left" />
+                  
+                </Grid>
+            </Grid>
+           
+
+        </StackPanel>
+        <StackPanel Grid.Row="1" Padding="35,20,35,0" >
+            <Grid   >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="GroupsCount" Grid.Column="0" FontWeight="SemiBold" HorizontalAlignment="Stretch" VerticalAlignment="Center" >Groups</TextBlock>
+                <Button Grid.Column="1" Margin="10,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right" Click="Reload">
+                    <FontIcon Glyph="&#xe72c;"  FontSize="15"  />
+
+                </Button>
+                <Button Grid.Column="2" Padding="10" Background="Transparent"  BorderThickness="0"    Click="AddGroup">
+                    <FontIcon Glyph="&#xe710;"  FontSize="15"  />
+                </Button>
+            </Grid>
+        </StackPanel>
+        <ScrollViewer Grid.Row="2" Padding="20,0,20,0" CornerRadius="5">
+            <StackPanel Margin="0,0,0,30" >
+                <ListView x:Name="GroupListView"  SelectionMode="None" CornerRadius="10"   SelectionChanged="GroupListView_SelectionChanged" >
+                    <ListView.Resources>
+                        <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+                    </ListView.Resources>
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1,0,0" HorizontalAlignment="Stretch" CornerRadius="5"  Padding="10" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
+                                    <StackPanel Spacing="5" VerticalAlignment="Center" Padding="6"  Orientation="Vertical" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}"   CornerRadius="5">
+                                        <StackPanel CornerRadius="4" >
+                                            <Image Source="{Binding GroupIcon}" Width="35" Height="35"  Stretch="UniformToFill"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel Spacing="0"  Orientation="Vertical">
+                                        <TextBlock Text="{Binding GroupName}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <StackPanel CornerRadius="5" Orientation="Horizontal"  >
+                                            <ItemsControl ItemsSource="{Binding PathIcons}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}" Margin="1" CornerRadius="2" Padding="3">
+                                                            <Image Source="{Binding}" Width="15" Height="15"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                            </ItemsControl>
+
+                                            <TextBlock Text="{Binding AdditionalIconsText}" FontSize="11" VerticalAlignment="Center" Margin="5,0,0,5"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                               
+
+                                <Button Grid.Column="1" Margin="10,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right" Click="EditButton_Click">
+                                    <FontIcon Glyph="&#xe70f;"  FontSize="15"   />
+                                </Button>
+
+                                <Button Grid.Column="2" Margin="0,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right">
+                                    <FontIcon Glyph="&#xe712;"  FontSize="15"   />
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="Open File Location"  Icon="Folder"  Click="OpenLocationButton_Click"   />
+
+
+                                            <MenuFlyoutItem Text="Duplicate" Icon="Copy" Click="DuplicateButton_Click"/>
+
+                                            <MenuFlyoutItem Text="Delete"  Icon="Delete"  Click="DeleteButton_Click"/>
+                                           
+
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <Grid VerticalAlignment="Stretch" Height="350" x:Name="EmptyView" Visibility="Visible">
+                 
+                    <StackPanel Orientation="Vertical"  VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <Image Source="/AppGroup.png" Height="80" />
+                        <StackPanel Spacing="10">
+                            <TextBlock HorizontalAlignment="Center"  FontSize="20" FontWeight="Bold">No Groups Found!</TextBlock>
+                            <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="Normal">Click + to create a Group</TextBlock>
+                          
+                        </StackPanel>
+                        
+                    </StackPanel>
+                </Grid>
+
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</winex:WindowEx>

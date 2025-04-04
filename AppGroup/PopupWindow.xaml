@@ -1,0 +1,40 @@
+<Window
+    xmlns:winuiex="using:WinUIEx"
+    x:Class="AppGroup.PopupWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AppGroup"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="App Group">
+    <Window.SystemBackdrop>
+        <winuiex:TransparentTintBackdrop />
+        <!--<MicaBackdrop />-->
+    </Window.SystemBackdrop>
+    <Grid x:Name="MainGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel  Grid.Row="0">
+            <Grid x:Name="Header" Margin="10,5,10,5" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <Button Grid.Column="1" Padding="7" VerticalAlignment="Center" Click="EditGroup_Click" BorderThickness="0" Background="Transparent">
+                    <FontIcon Glyph="&#xe70f;" FontSize="13"/>
+                </Button>
+                
+            </Grid>
+        </StackPanel>
+
+        <ScrollView Grid.Row="1" VerticalScrollMode="Auto" x:Name="ScrollView"  VerticalAlignment="Center" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="GridPanel" Width="Auto" HorizontalAlignment="Center"/>
+        </ScrollView>
+    </Grid>
+</Window>

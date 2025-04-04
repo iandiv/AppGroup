@@ -1,0 +1,200 @@
+<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="600" 
+    x:Class="AppGroup.EditGroupWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AppGroup"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Edit Group">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+
+    </Window.SystemBackdrop>
+    <Grid >
+
+        <!-- Define the custom dialog within the same XAML file -->
+        <ContentDialog x:Name="CustomDialog"
+                      >
+            <ContentDialog.Resources>
+                <Thickness x:Key="ContentDialogPadding">0,0,0,0</Thickness>
+            </ContentDialog.Resources>
+
+           
+            <StackPanel Spacing="10" VerticalAlignment="Center" Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}"   CornerRadius="5"  HorizontalAlignment="Stretch">
+                <Grid Padding="10,0,5,0" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+
+                        <ColumnDefinition Width="Auto"/>
+
+                    </Grid.ColumnDefinitions>
+
+
+                    <TextBlock FontSize="20" Margin="10" VerticalAlignment="Center"  FontWeight="SemiBold">Grid Icon
+                    </TextBlock>
+                    <Button  Click="CloseDialog" Grid.Column="1" Height="35" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" >
+                        <FontIcon Glyph="&#xe711;"  FontSize="15"   />
+                    </Button>
+
+                </Grid>
+                <StackPanel Spacing="0" Padding="15,0,15,15">
+
+                    <Button  BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  FontSize="12" Padding="5"  Click="RegularClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" >
+                        <StackPanel Spacing="20" Padding="10" Orientation="Horizontal" HorizontalAlignment="Left"  VerticalAlignment="Center">
+
+                            <FontIcon Glyph="&#xe91b;"  FontSize="25"  />
+                        <StackPanel >
+                            <TextBlock FontSize="16" FontWeight="SemiBold">Regular Icon
+                            </TextBlock>
+                                <TextBlock FontSize="13" >Choose an icon from a directory
+                                </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+
+                    </Button>
+
+                    <Button BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  FontSize="12" Padding="5"  Click="GridClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" >
+                        <StackPanel Spacing="20" Padding="10" Orientation="Horizontal" HorizontalAlignment="Left"  VerticalAlignment="Center">
+
+                            <FontIcon Glyph="&#xf0e2;"  FontSize="25"  />
+
+                            <StackPanel >
+                                <TextBlock FontSize="16" FontWeight="SemiBold">Grid Icon
+                                </TextBlock>
+                                <TextBlock FontSize="13" >Create grid icon from selected applications
+                                </TextBlock>
+
+                            </StackPanel>
+                           
+                        </StackPanel>
+
+                    </Button>
+                </StackPanel>
+
+            </StackPanel>
+        </ContentDialog>
+
+        <Grid Padding="20,50,20,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <!-- Allow the second row to take remaining space -->
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <Grid ColumnSpacing="10" Margin="10,0,10,10" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBox FontWeight="SemiBold" x:Name="GroupNameTextBox" PlaceholderText="App Group..." FontSize="25" Height="45" TextChanged="GroupNameTextBox_TextChanged" Background="Transparent" BorderBrush="Transparent" BorderThickness="0" TextWrapping="Wrap">
+                            <TextBox.Resources>
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            </TextBox.Resources>
+                        </TextBox>
+                        <TextBlock Grid.Column="1" Padding="10,0,0,0" FontSize="12" Opacity=".8" VerticalAlignment="Center">Group Name</TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Padding="5" VerticalAlignment="Center" CornerRadius="5" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefault}" Orientation="Horizontal">
+                        <ComboBox x:Name="IconGridComboBox" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" Visibility="Collapsed" SelectionChanged="IconGridComboBox_SelectionChanged" Margin="0,0,0,0" Grid.Column="0"/>
+                        <Button x:Name="BrowseIconButton" Background="Transparent" BorderThickness="0" FontSize="12" Padding="5" Click="BrowseIconButton_Click">
+                            <Border x:Name="IconPreviewBorder" CornerRadius="3">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image x:Name="IconPreviewImage"  Stretch="UniformToFill"  Width="50" Height="50" Source="ms-appx:///default_preview.png"/>
+                                </StackPanel>
+                            </Border>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+                <InfoBar Margin="10,0,10,0" IsOpen="False" Severity="Warning" x:Name="RenameInfoBar" Message="Renaming a group requires re-pinning to the taskbar."/>
+            </StackPanel>
+            
+                    <ScrollViewer Grid.Row="1" Padding="10,10,10,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,0,20">
+                    <StackPanel Spacing="5" CornerRadius="5" Padding="0,0,0,0"  Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center">
+                        <Grid HorizontalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!--<TextBlock Margin="5,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center">Options</TextBlock>-->
+                        </Grid>
+                        <Grid ColumnSpacing="5" Margin="0,0,0,5" CornerRadius="5" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Vertical" VerticalAlignment="Center" Padding="6" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
+                                <Grid HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="50"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Show Header"/>
+                                    <ToggleSwitch Grid.Column="1" x:Name="GroupHeader" OnContent="" OffContent=""/>
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center" Padding="10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
+                                <Grid HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Columns</TextBlock>
+                                    <ComboBox x:Name="GroupColComboBox" Grid.Column="1" SelectionChanged="GroupColComboBox_SelectionChanged"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,0" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
+                                <StackPanel Orientation="Vertical">
+                                    <Grid HorizontalAlignment="Stretch" Margin="15,0,10,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="ApplicationCount" FontWeight="SemiBold"  VerticalAlignment="Center"></TextBlock>
+                                        </StackPanel>
+                                        <Button x:Name="BrowseFilePathButton" Padding="10" Margin="0,5,0,5" Background="Transparent" BorderThickness="0" Grid.Column="1" Click="BrowseFilePathButton_Click">
+                                   
+                                    <FontIcon Glyph="&#xe710;" FontSize="15"/>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Margin="10,0,10,10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
+                                    <ListView x:Name="ExeListView" Height="230" Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
+                                        <ListView.Resources>
+                                            <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
+                                        </ListView.Resources>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid HorizontalAlignment="Stretch">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Orientation="Horizontal" Spacing="15" Padding="0,10,0,10" VerticalAlignment="Center">
+                                                        <Image Source="{Binding Icon}" Width="25" Height="25"/>
+                                                        <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <Button Click="RemoveItem_Click" Background="Transparent" BorderThickness="0" Tag="{Binding}" Grid.Column="1" HorizontalAlignment="Right">
+                                                          <TextBlock Text="✕" FontSize="12"/>
+                                                    </Button>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </StackPanel>
+                                <Button x:Name="CreateShortcutButton" Content="Save" Margin="0,10,0,0" HorizontalAlignment="Right" Click="CreateShortcut_Click" Style="{StaticResource AccentButtonStyle}"/>
+
+                </StackPanel>
+                    </ScrollViewer>
+               
+              
+        </Grid>
+    </Grid>
+</winex:WindowEx>

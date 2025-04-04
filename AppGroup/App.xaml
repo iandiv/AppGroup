@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="AppGroup.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AppGroup">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- Other merged dictionaries here -->
+            </ResourceDictionary.MergedDictionaries>
+            <!-- Other app resources here -->
+
+
+            <Style TargetType="Button">
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid x:Name="RootGrid" Background="{TemplateBinding Background}" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}" CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter x:Name="ContentPresenter" Padding="{TemplateBinding Padding}"  Content="{TemplateBinding Content}"/>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="RootGrid.Background" Value="#22666666"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="RootGrid.Background" Value="#44666666"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- Light Theme -->
+
+                <ResourceDictionary x:Key="Light">
+                  <BitmapImage x:Key="GitHubIcon" UriSource="ms-appx:///Assets/github_dark.png"/>
+                    <BitmapImage x:Key="CoffeeIcon" UriSource="ms-appx:///Assets/coffee_dark.png"/>
+                </ResourceDictionary>
+
+                <!-- Dark Theme -->
+                <ResourceDictionary x:Key="Dark">
+                     <BitmapImage x:Key="GitHubIcon" UriSource="ms-appx:///Assets/github_light.png"/>
+                    <BitmapImage x:Key="CoffeeIcon" UriSource="ms-appx:///Assets/coffee_light.png"/>
+
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

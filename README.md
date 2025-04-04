@@ -16,8 +16,9 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
   - [Screenshots](#screenshots)
   - [Video Demo](#video-demo)
   - [How to Use](#how-to-use)
-  - [License](#license)
   - [Support](#support)
+  - [License](#license)
+
 
 
 

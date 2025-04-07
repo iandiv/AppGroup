@@ -39,8 +39,8 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 ### Others 
 - **Supports UWP & PWA apps** via shortcuts  
 - **Run apps as Admin**  
-- **Add .lnk shortcuts** without the annoying arrow  
-
+- **Support .lnk shortcuts** without the arrow if possible
+- Persistent In-Memory Caching
 
 ## Installation  
 

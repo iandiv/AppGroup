@@ -595,13 +595,45 @@ namespace AppGroup {
             return _apw.Presenter as OverlappedPresenter;
         }
 
+        private bool _isClosingInProgress = false;
+
         private void Window_Activated(object sender, WindowActivatedEventArgs e) {
-            if (e.WindowActivationState == WindowActivationState.Deactivated) {
-                this.Close();
+            if (e.WindowActivationState == WindowActivationState.Deactivated && !_isClosingInProgress) {
+                _isClosingInProgress = true;
 
+                try {
+                    this.Activated -= Window_Activated;
+
+                    if (gridView != null) {
+                        try {
+                            gridView.RightTapped -= GridView_RightTapped;
+                            gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"Error detaching gridView events: {ex.Message}");
+                        }
+                    }
+
+                    DispatcherQueue.TryEnqueue(() => {
+                        try {
+                            this.Close();
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"Error closing window: {ex.Message}");
+                        }
+                    });
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Error in Window_Activated: {ex.Message}");
+                    try {
+                        this.Close();
+                    }
+                    catch {
+                    }
+                }
             }
-
         }
+
         public static class NativeMethods {
             [DllImport("user32.dll")]
             public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);

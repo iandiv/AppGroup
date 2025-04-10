@@ -43,9 +43,9 @@ namespace AppGroup {
         private FileSystemWatcher fileWatcher;
         private string groupIdFilePath;
         private int? lastGroupId = null;
-     
+        private bool openOnHover = false;
+
         public EditGroupWindow(int groupId) {
-   
             InitializeComponent();
 
             GroupId = groupId;
@@ -78,14 +78,12 @@ namespace AppGroup {
             fileWatcher.Changed += OnGroupIdFileChanged;
             fileWatcher.EnableRaisingEvents = true;
 
-          
             ExeListView.ItemsSource = ExeFiles;
 
             MinHeight = 600;
             MinWidth = 530;
             ExtendsContentIntoTitleBar = true;
-           
-           
+
             ThemeHelper.UpdateTitleBarColors(this);
             _ = LoadGroupDataAsync(GroupId);
             Closed += MainWindow_Closed;
@@ -385,8 +383,21 @@ namespace AppGroup {
         }
 
         private async void BrowseIconButton_Click(object sender, RoutedEventArgs e) {
-            ContentDialogResult result = await CustomDialog.ShowAsync();
-            
+            // Remove the ShowAsync call since it will be handled by hover
+        }
+
+        private void BrowseIconButton_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) {
+            if (HoverToggle.IsOn) {
+                CustomDialog.ShowAsync();
+            }
+        }
+
+        private void BrowseIconButton_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) {
+            CustomDialog.Hide();
+        }
+
+        private void HoverToggle_Toggled(object sender, RoutedEventArgs e) {
+            openOnHover = HoverToggle.IsOn;
         }
 
         private void CloseDialog(object sender, RoutedEventArgs e) {

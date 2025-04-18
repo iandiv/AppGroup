@@ -5,14 +5,18 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.Drawing.Printing;
 using System.IO;
@@ -26,8 +30,10 @@ using Windows.Foundation;
 using Windows.Graphics;
 using WinRT.Interop;
 using WinUIEx;
+using File = System.IO.File;
 
 namespace AppGroup {
+
     public class GroupData {
         public List<string> path { get; set; }
         public string groupIcon { get; set; }
@@ -36,123 +42,163 @@ namespace AppGroup {
         public int groupCol { get; set; }
         public int groupId { get; set; }
     }
-    public class PopupItem {
-
+    public class PopupItem : INotifyPropertyChanged {
         public string Path { get; set; }
         public string Name { get; set; }
         public string ToolTip { get; set; }
-        public BitmapImage Icon { get; set; }
-
-
-
-
-       
+        //public BitmapImage Icon { get; set; }
+        private BitmapImage _icon;
+        public BitmapImage Icon {
+            get => _icon;
+            set {
+                if (_icon != value) {
+                    _icon = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icon)));
+                }
+            }
+        }
+        public event PropertyChangedEventHandler PropertyChanged;
     }
+
     public sealed partial class PopupWindow : Window {
-        private readonly Dictionary<int, EditGroupWindow> _openEditWindows = new Dictionary<int, EditGroupWindow>();
+        // Constants for UI elements
+        private const int BUTTON_SIZE = 40;
+        private const int ICON_SIZE = 24;
+        private const int BUTTON_MARGIN = 4;
 
-        private const int BUTTON_SIZE = 40; // Reduced from 50
-        private const int ICON_SIZE = 25;   // Reduced from 25
-        private const int BUTTON_MARGIN = 4; // Reduced from 8
-
-        private string groupFilter = null;
-        private string json = "";
-
-
-        private WindowHelper _windowHelper;
-
-        private readonly Window _window;
-
-        private SystemBackdropConfiguration _configurationSource;
-        private MicaBackdrop _micaBackdrop;
-        private bool _micaEnabled;
-        ObservableCollection<PopupItem> PopupItems = new ObservableCollection<PopupItem>();
-        private PopupItem clickedItem;
-
-        private GridView gridView;
-        private int groupId;
+        // Static JSON options to prevent redundant creation
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions {
             PropertyNameCaseInsensitive = true
         };
 
-        private Dictionary<string, GroupData> groups;
+        // Member variables
+        private readonly Dictionary<int, EditGroupWindow> _openEditWindows = new Dictionary<int, EditGroupWindow>();
+        private readonly WindowHelper _windowHelper;
+        private ObservableCollection<PopupItem> PopupItems = new ObservableCollection<PopupItem>();
+        private Dictionary<string, GroupData> _groups;
+        private GridView _gridView;
+        private PopupItem _clickedItem;
+        private int _groupId;
+        private string _groupFilter = null;
+        private string _json = "";
+        private bool _anyGroupDisplayed;
+        private DataTemplate _itemTemplate;
+        private ItemsPanelTemplate _panelTemplate;
+        private nint hWnd;
 
+        // Constructor
         public PopupWindow(string groupFilter = null) {
+            InitializeComponent();
 
-
-            this.InitializeComponent();
-
-            this.groupFilter = groupFilter;
+            _groupFilter = groupFilter;
             this.Title = groupFilter;
 
-
+            // Setup window
             _windowHelper = new WindowHelper(this);
-
             _windowHelper.SetSystemBackdrop(WindowHelper.BackdropType.AcrylicBase);
             _windowHelper.IsMaximizable = false;
             _windowHelper.IsMinimizable = false;
             _windowHelper.IsResizable = true;
             _windowHelper.HasBorder = true;
             _windowHelper.HasTitleBar = false;
+            _windowHelper.IsAlwaysOnTop = true;
 
+            // Initialize templates
+            InitializeTemplates();
 
-
-
-            _ = LoadConfigurationAsync();
+            // Load on activation
+            this.Activated += Window_Activated;
         }
-        private async Task LoadConfigurationAsync() {
-            json = await LoadConfigurationFromFileAsync();
-            groups = DeserializeGroups(json);
-            await InitializeWindowAsync();
+
+        // Initialize UI templates - improves performance by caching these
+        private void InitializeTemplates() {
+            // Create item template once
+            _itemTemplate = (DataTemplate)XamlReader.Load(
+     $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+    xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+    <Grid VerticalAlignment=""Center""
+          HorizontalAlignment=""Center""
+          Width=""{BUTTON_SIZE}""
+          Height=""{BUTTON_SIZE}""
+          ToolTipService.ToolTip=""{{Binding ToolTip}}"">
+        <Image Source=""{{Binding Icon}}""
+               Width=""{ICON_SIZE}""
+               Height=""{ICON_SIZE}""
+               Stretch=""Uniform""
+               VerticalAlignment=""Center""
+               HorizontalAlignment=""Center""
+               Margin=""8"" />
+    </Grid>
+</DataTemplate>");
+
+            // Create panel template once
+            const int EFFECTIVE_BUTTON_WIDTH = BUTTON_SIZE + (BUTTON_MARGIN * 2);
+            _panelTemplate = (ItemsPanelTemplate)XamlReader.Load(
+                $@"<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+                xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+                <ItemsWrapGrid Orientation=""Horizontal""
+                              ItemWidth=""{EFFECTIVE_BUTTON_WIDTH}""
+                              ItemHeight=""{EFFECTIVE_BUTTON_WIDTH}""
+                              HorizontalAlignment=""Center""
+                              VerticalAlignment=""Center""/>
+            </ItemsPanelTemplate>");
         }
-        private Dictionary<string, GroupData> DeserializeGroups(string json) {
-            return JsonSerializer.Deserialize<Dictionary<string, GroupData>>(json, JsonOptions);
-        }
-        private async Task<string> LoadConfigurationFromFileAsync() {
+
+        // Load configuration with better error handling and caching
+        private void LoadConfiguration() {
             try {
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
-                return JsonConfigHelper.ReadJsonFromFile(configPath);
+                _json = JsonConfigHelper.ReadJsonFromFile(configPath);
+                _groups = JsonSerializer.Deserialize<Dictionary<string, GroupData>>(_json, JsonOptions);
+
+                // Only initialize the window and create dynamic content if groups are loaded successfully
+                if (_groups != null) {
+                    InitializeWindow();
+                    CreateDynamicContent();
+                }
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error loading configuration: {ex.Message}");
-                return GetDefaultJsonConfiguration();
+                _json = GetDefaultJsonConfiguration();
+                _groups = JsonSerializer.Deserialize<Dictionary<string, GroupData>>(_json, JsonOptions);
+                InitializeWindow();
+                CreateDynamicContent();
             }
         }
+
         private string GetDefaultJsonConfiguration() {
             return @"{
             ""Group1NameHere"": {
-            ""groupCol"": 3,
-            ""groupIcon"": ""test.png"",
-            ""path"": [""C:\\Windows\\System32\\notepad.exe"", ""C:\\Windows\\System32\\calc.exe"", ""C:\\Windows\\System32\\mspaint.exe""]
-                }
+                ""groupCol"": 3,
+                ""groupIcon"": ""test.png"",
+                ""path"": [""C:\\Windows\\System32\\notepad.exe"", ""C:\\Windows\\System32\\calc.exe"", ""C:\\Windows\\System32\\mspaint.exe""]
+            }
         }";
         }
-        private async Task InitializeWindowAsync() {
-      
+
+        // Non-async window initialization for faster loading
+        private void InitializeWindow() {
             int maxPathItems = 1;
             int maxColumns = 1;
             string groupIcon = "AppGroup.ico";
             bool groupHeader = false;
 
-           
             // If we have a group filter, only consider that group
-            if (!string.IsNullOrEmpty(groupFilter) && groups.Values.Any(g => g.groupName.Equals(groupFilter, StringComparison.OrdinalIgnoreCase))) {
-                var filteredGroup = groups.FirstOrDefault(g => g.Value.groupName.Equals(groupFilter, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
                 maxPathItems = filteredGroup.Value.path.Count;
                 maxColumns = filteredGroup.Value.groupCol;
-
                 groupHeader = filteredGroup.Value.groupHeader;
-
                 groupIcon = filteredGroup.Value.groupIcon;
 
-                if (!int.TryParse(filteredGroup.Key, out groupId)) {
+                if (!int.TryParse(filteredGroup.Key, out _groupId)) {
                     Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
                     return;
                 }
             }
             else {
-                foreach (var group in groups.Values) {
+                foreach (var group in _groups.Values) {
                     maxPathItems = Math.Max(maxPathItems, group.path.Count);
                     maxColumns = Math.Max(maxColumns, group.groupCol);
                 }
@@ -160,108 +206,250 @@ namespace AppGroup {
 
             int numberOfRows = (int)Math.Ceiling((double)maxPathItems / maxColumns);
             int dynamicWidth = maxColumns * (BUTTON_SIZE + BUTTON_MARGIN * 2);
-            if (groupHeader == true) {
-                if (maxColumns < 2) {
-                    dynamicWidth = 2 * (BUTTON_SIZE + BUTTON_MARGIN * 2);
-
-                }
+            if (groupHeader == true && maxColumns < 2) {
+                dynamicWidth = 2 * (BUTTON_SIZE + BUTTON_MARGIN * 2);
             }
 
             int dynamicHeight = numberOfRows * (BUTTON_SIZE + BUTTON_MARGIN * 2);
             var displayInfo = GetDisplayInformation();
             float scaleFactor = displayInfo.Item1;
 
-            Debug.WriteLine($"Display scale factor: {scaleFactor}");
-
             int scaledWidth = (int)(dynamicWidth * scaleFactor);
             int scaledHeight = (int)(dynamicHeight * scaleFactor);
-            if (groupHeader == true) {
+            if (groupHeader) {
                 scaledHeight += 40;
             }
 
+            // Set window icon - simplified from previous version
             this.AppWindow.SetIcon(groupIcon);
-
-
-
-
             MainGrid.Margin = new Thickness(0, 0, -5, -15);
 
             int finalWidth = scaledWidth + 30;
             int finalHeight = scaledHeight + 20;
             this.AppWindow.Resize(new SizeInt32(finalWidth, finalHeight));
+            hWnd = WindowNative.GetWindowHandle(this);
+            NativeMethods.PositionWindowAboveTaskbar(hWnd);
 
-            PositionAboveCursor(this.AppWindow, finalHeight);
-            await CreateDynamicContentAsync(json);
-
-            this.Activated += Window_Activated;
-
-          
         }
 
+        private void CreateDynamicContent() {
+            // Clear existing items
+            PopupItems.Clear();
+            GridPanel.Children.Clear();
 
-        private Tuple<float, int, int> GetDisplayInformation() {
-            var hwnd = WindowNative.GetWindowHandle(this);
+            _anyGroupDisplayed = false;
 
-            uint dpi = GetDpiForWindow(hwnd);
-            float scaleFactor = (float)dpi / 96.0f;
-            RECT rect;
+            foreach (var group in _groups) {
+                // Skip this group if filtering is active and this isn't the requested group
+                if (_groupFilter != null && !group.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
+                    continue;
+                }
 
-            GetWindowRect(hwnd, out rect);
+                _anyGroupDisplayed = true;
 
-            IntPtr monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                // Set header visibility
+                if (group.Value.groupHeader) {
+                    Header.Visibility = Visibility.Visible;
+                    HeaderText.Text = group.Value.groupName;
+                    ScrollView.Margin = new Thickness(0, 0, 0, 5);
+                }
+                else {
+                    Header.Visibility = Visibility.Collapsed;
+                    ScrollView.Margin = new Thickness(0, 5, 0, 5);
+                }
 
-            MONITORINFOEX monitorInfo = new MONITORINFOEX();
-            monitorInfo.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
-            GetMonitorInfo(monitor, ref monitorInfo);
+                // Configure GridView
+                _gridView = new GridView {
+                    SelectionMode = ListViewSelectionMode.Extended,
+                    IsItemClickEnabled = true,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    CanDragItems = true,
+                    CanReorderItems = true,
+                    AllowDrop = true,
+                    ItemTemplate = _itemTemplate,
+                    ItemsPanel = _panelTemplate
+                };
 
-            int screenWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
-            int screenHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
 
-            Debug.WriteLine($"DPI: {dpi}, Scale Factor: {scaleFactor}, Screen: {screenWidth}x{screenHeight}");
+                // Set up events
+                _gridView.RightTapped += GridView_RightTapped;
+                _gridView.DragItemsCompleted += GridView_DragItemsCompleted;
+                _gridView.ItemClick += GridView_ItemClick;
 
-            return new Tuple<float, int, int>(scaleFactor, screenWidth, screenHeight);
+                // Load items
+                LoadGridItems(group.Value.path);
+
+                _gridView.ItemsSource = PopupItems;
+                GridPanel.Children.Add(_gridView);
+            }
+
+            // Handle case where no groups match filter
+            if (!_anyGroupDisplayed) {
+                TextBlock noGroupsText = new TextBlock {
+                    Text = $"No group found matching '{_groupFilter}'",
+                    Margin = new Thickness(10),
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextAlignment = TextAlignment.Center
+                };
+                GridPanel.Children.Add(noGroupsText);
+
+                this.AppWindow.Resize(new SizeInt32(250, 120));
+            }
         }
 
+        // Load grid items efficiently
+        private void LoadGridItems(List<string> paths) {
+            foreach (string path in paths) {
+                string displayName = GetDisplayName(path);
+                var popupItem = new PopupItem {
+                    Path = path,
+                    Name = Path.GetFileNameWithoutExtension(path),
+                    ToolTip = displayName,
+                    Icon = null 
+                };
+                PopupItems.Add(popupItem);
+
+                _ = LoadIconAsync(popupItem, path);
+            }
+        }
+
+        private async Task LoadIconAsync(PopupItem item, string path) {
+            try {
+                string iconPath = await IconCache.GetIconPathAsync(path);
+                BitmapImage icon = await IconCache.LoadImageFromPathAsync(iconPath);
+
+                // Update on UI thread
+                DispatcherQueue.TryEnqueue(() => {
+                    item.Icon = icon;
+                });
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error loading icon for {path}: {ex.Message}");
+                DispatcherQueue.TryEnqueue(() => {
+                    item.Icon = null;
+                });
+            }
+        }
+
+        private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
+            if (e.ClickedItem is PopupItem popupItem) {
+                TryLaunchApp(popupItem.Path);
+            }
+        }
 
         private void GridView_RightTapped(object sender, RightTappedRoutedEventArgs e) {
-            var gridView = sender as GridView;
             var item = (e.OriginalSource as FrameworkElement)?.DataContext as PopupItem;
 
             if (item != null) {
                 MenuFlyout flyout = CreateItemFlyout();
-                flyout.ShowAt(gridView, e.GetPosition(gridView));
-
-                clickedItem = item;
+                flyout.ShowAt(_gridView, e.GetPosition(_gridView));
+                _clickedItem = item;
             }
         }
 
+        private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
+            try {
+                if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
+                    Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
+                    return;
+                }
 
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
-        private void EditGroup_Click(object sender, RoutedEventArgs e) {
+                if (filteredGroup.Key == null) {
+                    Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
+                    return;
+                }
 
-            EditGroupHelper editGroup = new EditGroupHelper("Edit Group", groupId);
-            editGroup.Activate();
+                string[] newPathOrder = PopupItems.Select(file => file.Path).ToArray();
 
-        }
+                if (!int.TryParse(filteredGroup.Key, out int groupId)) {
+                    Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
+                    return;
+                }
 
-        private void OpenItem_Click(object sender, RoutedEventArgs e) {
-            if (clickedItem != null) {
-                TryLaunchApp(clickedItem.Path);
+                JsonConfigHelper.AddGroupToJson(
+                    JsonConfigHelper.GetDefaultConfigPath(),
+                    groupId,
+                    filteredGroup.Value.groupName,
+                    filteredGroup.Value.groupHeader,
+                    filteredGroup.Value.groupIcon,
+                    filteredGroup.Value.groupCol,
+                    newPathOrder
+                );
+
+                _json = File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
+                ShowErrorDialog($"Failed to save new item order: {ex.Message}");
             }
         }
 
-        private void RunAsAdminItem_Click(object sender, RoutedEventArgs e) {
-            if (clickedItem != null) {
-                TryRunAsAdmin(clickedItem.Path);
+        private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
+            if (e.WindowActivationState == WindowActivationState.Deactivated) {
+                
+
+
+
+                if (_gridView != null) {
+                    _gridView.RightTapped -= GridView_RightTapped;
+                    _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
+                    _gridView.ItemClick -= GridView_ItemClick;
+                }
+
+                foreach (var item in PopupItems) {
+                    item.Icon = null;
+                }
+
+                PopupItems.Clear();
+                GridPanel.Children.Clear();
+
+                _groups = null;
+                _json = "";
+                _clickedItem = null;
+                _gridView = null;
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
+                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+
+                if (!_anyGroupDisplayed) {
+                  this.Close();
+
+                }
+                else {
+                    this.Hide();
+
+                }
+
+            }
+            else if (e.WindowActivationState == WindowActivationState.CodeActivated) {
+                LoadConfiguration();
             }
         }
 
-        private void OpenFileLocation_Click(object sender, RoutedEventArgs e) {
-            if (clickedItem != null) {
-                OpenFileLocation(clickedItem.Path);
+        private void ForceTerminate() {
+            // Get current process ID
+            int pid = Process.GetCurrentProcess().Id;
+
+            // Launch external process to kill this app
+            var startInfo = new ProcessStartInfo {
+                FileName = "cmd.exe",
+                Arguments = $"/c start /b taskkill /F /PID {pid} >nul 2>&1",
+                CreateNoWindow = true,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+
+            try {
+                Process.Start(startInfo);
+            }
+            catch {
+                // Last resort - this will be abrupt but effective
+                Environment.FailFast(null);
             }
         }
-
+        // Action methods
         private void TryLaunchApp(string path) {
             try {
                 ProcessStartInfo psi = new ProcessStartInfo {
@@ -281,7 +469,7 @@ namespace AppGroup {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = path,
                     Verb = "runas",
-                    UseShellExecute = true // Ensure this is set to true
+                    UseShellExecute = true
                 };
                 Process.Start(psi);
             }
@@ -290,9 +478,10 @@ namespace AppGroup {
                 ShowErrorDialog($"Failed to run as admin {path}: {ex.Message}");
             }
         }
+
         private void OpenFileLocation(string path) {
             try {
-                string directory = System.IO.Path.GetDirectoryName(path);
+                string directory = Path.GetDirectoryName(path);
 
                 if (Directory.Exists(directory)) {
                     Process.Start("explorer.exe", directory);
@@ -307,18 +496,17 @@ namespace AppGroup {
             }
         }
 
-
-
-
-        private async void ShowErrorDialog(string message) {
+        // UI Helpers
+        private void ShowErrorDialog(string message) {
             ContentDialog dialog = new ContentDialog {
                 Title = "Error",
                 Content = message,
                 CloseButtonText = "OK",
                 XamlRoot = this.Content.XamlRoot
             };
-            await dialog.ShowAsync();
+            _ = dialog.ShowAsync();
         }
+
         private MenuFlyout CreateItemFlyout() {
             MenuFlyout flyout = new MenuFlyout();
 
@@ -336,159 +524,89 @@ namespace AppGroup {
             runAsAdminItem.Click += RunAsAdminItem_Click;
             flyout.Items.Add(runAsAdminItem);
 
-            MenuFlyoutItem deleteItem = new MenuFlyoutItem {
+            MenuFlyoutItem fileLocationItem = new MenuFlyoutItem {
                 Text = "Open File Location",
                 Icon = new FontIcon { Glyph = "\ued43" }
-            }; ;
-            deleteItem.Click += OpenFileLocation_Click;
-            flyout.Items.Add(deleteItem);
-            MenuFlyoutSeparator separator = new MenuFlyoutSeparator();
-            flyout.Items.Add(separator);
+            };
+            fileLocationItem.Click += OpenFileLocation_Click;
+            flyout.Items.Add(fileLocationItem);
+
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
             MenuFlyoutItem editItem = new MenuFlyoutItem {
                 Text = "Edit this Group",
                 Icon = new FontIcon { Glyph = "\ue70f" }
-            }; ;
+            };
             editItem.Click += EditGroup_Click;
             flyout.Items.Add(editItem);
 
+            MenuFlyoutItem launchAll = new MenuFlyoutItem {
+                Text = "Launch All",
+                Icon = new FontIcon { Glyph = "\ue8a9" }
+            };
+            launchAll.Click += launchAllGroup_Click;
+
+
+
+            flyout.Items.Add(launchAll);
             return flyout;
         }
 
+        private void launchAllGroup_Click(object sender, RoutedEventArgs e) {
+            List<string> pathItems;
 
-        private async Task CreateDynamicContentAsync(string json) {
-            // Increase button size and add margin between buttons
+            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                pathItems = filteredGroup.Value.path;
 
-            const int EFFECTIVE_BUTTON_WIDTH = BUTTON_SIZE + (BUTTON_MARGIN * 2);
+                var tasks = pathItems.Select(path => Task.Run(() => {
+                    try {
+                        ProcessStartInfo startInfo = new ProcessStartInfo(path);
+                        startInfo.UseShellExecute = true;
 
-            var options = new JsonSerializerOptions {
-                PropertyNameCaseInsensitive = true
-            };
-
-            
-            bool anyGroupDisplayed = false;
-
-            foreach (var group in groups) {
-                // Skip this group if filtering is active and this isn't the requested group
-                if (groupFilter != null && !group.Value.groupName.Equals(groupFilter, StringComparison.OrdinalIgnoreCase)) {
-                    Debug.WriteLine($"Skipping group {group.Value.groupName} due to filter");
-                    continue;
-                }
-
-                anyGroupDisplayed = true;
-                Debug.WriteLine($"Displaying group: {group.Value.groupName}");
-
-                if (group.Value.groupHeader == true) {
-                    Header.Visibility = Visibility.Visible;
-                    HeaderText.Text = group.Value.groupName;
-                    ScrollView.Margin = new Thickness(0, 0, 0, 5);
-
-                }
-                else {
-
-                    ScrollView.Margin = new Thickness(0, 5, 0, 5);
-
-                }
-
-
-
-                int totalItems = group.Value.path.Count;
-                int groupColumns = group.Value.groupCol;
-
-                gridView = new GridView();
-                gridView.SelectionMode = ListViewSelectionMode.Extended;
-                gridView.IsItemClickEnabled = true;
-                gridView.HorizontalAlignment = HorizontalAlignment.Left;
-                gridView.CanDragItems = true;
-                gridView.CanReorderItems = true;
-                gridView.AllowDrop = true;
-                gridView.DragItemsCompleted += GridView_DragItemsCompleted;
-
-                int gridWidth = groupColumns * EFFECTIVE_BUTTON_WIDTH + BUTTON_MARGIN * 2;
-
-                gridView.RightTapped += GridView_RightTapped;
-                gridView.ItemsPanel = (ItemsPanelTemplate)XamlReader.Load(
-                    $@"<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
-                     xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
-                        <ItemsWrapGrid  
-                                      Orientation=""Horizontal"" 
-                                      ItemWidth=""{EFFECTIVE_BUTTON_WIDTH}"" 
-                                      ItemHeight=""{EFFECTIVE_BUTTON_WIDTH}""
-                                      HorizontalAlignment=""Center""
-                                      VerticalAlignment=""Center""/>
-                    </ItemsPanelTemplate>");
-
-
-
-
-                for (int i = 0; i < totalItems; i++) {
-                    string path = group.Value.path[i];
-                    string displayName = GetDisplayName(path);
-                    var PopupItem = new PopupItem {
-                        Path = path,
-                        Name = System.IO.Path.GetFileNameWithoutExtension(path),
-                        ToolTip = $"{displayName}"
-                    };
-                    PopupItem.Icon = await IconCache.LoadImageFromPathAsync(await IconCache.GetIconPathAsync(path));
-
-                    PopupItems.Add(PopupItem);
-                }
-
-                gridView.ItemsSource = PopupItems;
-
-                gridView.ItemTemplate = (DataTemplate)XamlReader.Load(
-      $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
-       xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
-        <Grid Width=""" + BUTTON_SIZE + @""" Height=""" + BUTTON_SIZE + @""" VerticalAlignment=""Center"" HorizontalAlignment=""Center""
-              ToolTipService.ToolTip=""{Binding ToolTip}"">
-            <Grid VerticalAlignment=""Center"" HorizontalAlignment=""Center"">
-                <Image Source=""{Binding Icon}""
-                       Width=""" + ICON_SIZE + @"""
-                       Height=""" + ICON_SIZE + @"""
-                       Stretch=""Uniform""
-                       VerticalAlignment=""Center""
-                       HorizontalAlignment=""Center""
-                       Margin=""0"" />
-            </Grid>
-        </Grid>
-    </DataTemplate>");
-
-
-
-
-
-                gridView.ItemClick += (sender, e) => {
-                    if (e.ClickedItem is PopupItem PopupItem) {
-                        TryLaunchApp(PopupItem.Path);
-
+                        System.Diagnostics.Process.Start(startInfo);
                     }
-                };
+                    catch (Exception ex) {
+                    }
+                })).ToList();
 
-                GridPanel.Children.Add(gridView);
+                Task.WhenAll(tasks).Wait();
             }
 
-            if (!anyGroupDisplayed) {
-                TextBlock noGroupsText = new TextBlock {
-                    Text = $"No group found matching '{groupFilter}'",
-                    Margin = new Thickness(10),
-                    TextWrapping = TextWrapping.Wrap,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                };
-                GridPanel.Children.Add(noGroupsText);
+        }
 
-                this.AppWindow.Resize(new SizeInt32(250, 120));
-                PositionAboveCursor(this.AppWindow, 120);
+        private void EditGroup_Click(object sender, RoutedEventArgs e) {
+            EditGroupHelper editGroup = new EditGroupHelper("Edit Group", _groupId);
+            editGroup.Activate();
+        }
 
-
+        private void OpenItem_Click(object sender, RoutedEventArgs e) {
+            if (_clickedItem != null) {
+                TryLaunchApp(_clickedItem.Path);
             }
         }
 
+        private void RunAsAdminItem_Click(object sender, RoutedEventArgs e) {
+            if (_clickedItem != null) {
+                TryRunAsAdmin(_clickedItem.Path);
+            }
+        }
+
+        private void OpenFileLocation_Click(object sender, RoutedEventArgs e) {
+            if (_clickedItem != null) {
+                OpenFileLocation(_clickedItem.Path);
+            }
+        }
 
         private string GetDisplayName(string filePath) {
+            if (string.IsNullOrEmpty(filePath)) {
+                return "Unknown";
+            }
+
             string extension = Path.GetExtension(filePath).ToLower();
 
-            if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(extension)) {
-                Debug.WriteLine("File path or extension is null or empty.");
-                return "Unknown";
+            if (string.IsNullOrEmpty(extension)) {
+                return Path.GetFileName(filePath);
             }
 
             if (extension == ".exe") {
@@ -497,12 +615,9 @@ namespace AppGroup {
                     if (!string.IsNullOrEmpty(versionInfo.FileDescription)) {
                         return versionInfo.FileDescription;
                     }
-                    else {
-                        Debug.WriteLine("File description is empty.");
-                    }
                 }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Exception retrieving file description: {ex.Message}");
+                catch (Exception) {
+                    // Fall through to default case
                 }
             }
             else if (extension == ".lnk") {
@@ -513,259 +628,31 @@ namespace AppGroup {
                     if (!string.IsNullOrEmpty(targetPath)) {
                         return Path.GetFileNameWithoutExtension(targetPath);
                     }
-                    else {
-                        Debug.WriteLine("Shortcut target path is empty.");
-                    }
                 }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Exception retrieving shortcut target path: {ex.Message}");
+                catch (Exception) {
                 }
             }
 
-            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
-            if (string.IsNullOrEmpty(fileNameWithoutExtension)) {
-                Debug.WriteLine("File name without extension is empty.");
-                return "Unknown";
-            }
-
-            return fileNameWithoutExtension;
+            return Path.GetFileNameWithoutExtension(filePath);
         }
 
-        private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
-            try {
-               
+        private Tuple<float, int, int> GetDisplayInformation() {
+            var hwnd = WindowNative.GetWindowHandle(this);
 
-                if (groups == null || string.IsNullOrEmpty(groupFilter)) {
-                    Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
-                    return;
-                }
+            uint dpi = NativeMethods.GetDpiForWindow(hwnd);
+            float scaleFactor = (float)dpi / 96.0f;
 
-                var filteredGroup = groups.FirstOrDefault(g => g.Value.groupName.Equals(groupFilter, StringComparison.OrdinalIgnoreCase));
+            IntPtr monitor = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
 
-                if (filteredGroup.Key == null) {
-                    Debug.WriteLine($"Error: Group '{groupFilter}' not found in configuration");
-                    return;
-                }
+            NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX();
+            monitorInfo.cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFOEX));
+            NativeMethods.GetMonitorInfo(monitor, ref monitorInfo);
 
-                string[] newPathOrder = PopupItems.Select(file => file.Path).ToArray();
+            int screenWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+            int screenHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
 
-                int groupId;
-                if (!int.TryParse(filteredGroup.Key, out groupId)) {
-                    Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
-                    return;
-                }
-
-                string groupName = filteredGroup.Value.groupName;
-                bool groupHeader = filteredGroup.Value.groupHeader;
-                string groupIcon = filteredGroup.Value.groupIcon;
-                int groupCol = filteredGroup.Value.groupCol;
-
-                JsonConfigHelper.AddGroupToJson(
-                    JsonConfigHelper.GetDefaultConfigPath(),
-                    groupId,
-                    groupName,
-                    groupHeader,
-                    groupIcon,
-                    groupCol,
-                    newPathOrder
-                );
-
-                json = System.IO.File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
-
-                Debug.WriteLine($"Successfully updated order for group '{groupFilter}' with ID {groupId}");
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
-                ContentDialog dialog = new ContentDialog {
-                    Title = "Error",
-                    Content = $"Failed to save new item order: {ex.Message}",
-                    CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot
-                };
-                _ = dialog.ShowAsync();
-            }
-        }
-
-
-
-        private OverlappedPresenter GetAppWindowAndPresenter() {
-            var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WindowId myWndId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
-            var _apw = AppWindow.GetFromWindowId(myWndId);
-            return _apw.Presenter as OverlappedPresenter;
-        }
-
-        private bool _isClosingInProgress = false;
-
-        private void Window_Activated(object sender, WindowActivatedEventArgs e) {
-            if (e.WindowActivationState == WindowActivationState.Deactivated && !_isClosingInProgress) {
-                _isClosingInProgress = true;
-
-                try {
-                    this.Activated -= Window_Activated;
-
-                    if (gridView != null) {
-                        try {
-                            gridView.RightTapped -= GridView_RightTapped;
-                            gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
-                        }
-                        catch (Exception ex) {
-                            Debug.WriteLine($"Error detaching gridView events: {ex.Message}");
-                        }
-                    }
-
-                    DispatcherQueue.TryEnqueue(() => {
-                        try {
-                            this.Close();
-                        }
-                        catch (Exception ex) {
-                            Debug.WriteLine($"Error closing window: {ex.Message}");
-                        }
-                    });
-                }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Error in Window_Activated: {ex.Message}");
-                    try {
-                        this.Close();
-                    }
-                    catch {
-                    }
-                }
-            }
-        }
-
-        public static class NativeMethods {
-            [DllImport("user32.dll")]
-            public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-            public const int SW_HIDE = 0;
-            public const int SW_SHOW = 5;
-        }
-        private void AppButton_Click(object sender, RoutedEventArgs e, string appPath) {
-            try {
-                ProcessStartInfo psi = new ProcessStartInfo(appPath);
-                Process.Start(psi);
-                this.Close();
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Failed to launch {appPath}: {ex.Message}");
-                ContentDialog dialog = new ContentDialog {
-                    Title = "Error",
-                    Content = $"Failed to launch {appPath}: {ex.Message}",
-                    CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot
-                };
-                _ = dialog.ShowAsync();
-            }
-        }
-
-        private void PositionAboveCursor(AppWindow appWindow, int windowHeight) {
-            try {
-                // Get current cursor position
-                POINT cursorPos = GetCursorPos();
-                Debug.WriteLine($"Cursor position: {cursorPos.X}, {cursorPos.Y}");
-
-                int windowWidth = appWindow.Size.Width;
-                Debug.WriteLine($"Window size: {windowWidth}x{windowHeight}");
-
-                int x = cursorPos.X - (windowWidth / 2);
-                int y = cursorPos.Y - windowHeight - 20;
-                var hwnd = WindowNative.GetWindowHandle(this);
-                IntPtr monitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-
-                MONITORINFO monitorInfo = new MONITORINFO();
-                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
-                GetMonitorInfo(monitor, ref monitorInfo);
-                if (x < monitorInfo.rcWork.left)
-                    x = monitorInfo.rcWork.left;
-                if (x + windowWidth > monitorInfo.rcWork.right)
-                    x = monitorInfo.rcWork.right - windowWidth;
-                if (y < monitorInfo.rcWork.top)
-                    y = monitorInfo.rcWork.top;
-
-                Debug.WriteLine($"Moving window to: {x}, {y}");
-
-                appWindow.Move(new Windows.Graphics.PointInt32(x, y));
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error positioning window: {ex.Message}");
-                appWindow.Move(new Windows.Graphics.PointInt32(50, 50));
-            }
-        }
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
-        private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MONITORINFO {
-            public uint cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
-
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT {
-            public int left;
-            public int top;
-            public int right;
-            public int bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct MONITORINFOEX {
-            public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-            public string szDevice;
-        }
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
-
-        
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT { public int X; public int Y; }
-
-        // SHFILEINFO structure
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct SHFILEINFO {
-            public IntPtr hIcon;
-            public int iIcon;
-            public uint dwAttributes;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-            public string szDisplayName;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
-            public string szTypeName;
-        }
-
-        private static POINT GetCursorPos() {
-            GetCursorPos(out POINT point);
-            return point;
+            return new Tuple<float, int, int>(scaleFactor, screenWidth, screenHeight);
         }
     }
 
-  
 }

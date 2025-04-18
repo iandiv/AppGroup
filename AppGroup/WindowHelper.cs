@@ -9,6 +9,8 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using WinRT.Interop;
 using WinRT;
+using System.Diagnostics;
+using System.Drawing;
 namespace AppGroup {
     public class WindowHelper {
         private readonly Window _window;
@@ -78,7 +80,14 @@ namespace AppGroup {
                 }
             }
         }
-
+        public bool IsAlwaysOnTop {
+            get => _appWindow.Presenter is OverlappedPresenter presenter && presenter.IsMaximizable;
+            set {
+                if (_appWindow.Presenter is OverlappedPresenter presenter) {
+                    presenter.IsAlwaysOnTop = value;
+                }
+            }
+        }
         public bool IsResizable {
             get => _appWindow.Presenter is OverlappedPresenter presenter && presenter.IsResizable;
             set {
@@ -168,6 +177,29 @@ namespace AppGroup {
             UpdateTitleBarColors();
         }
 
+
+        public static float GetDpiScaleForMonitor(IntPtr hMonitor) {
+            try {
+                if (Environment.OSVersion.Version.Major > 6 ||
+                    (Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor >= 3)) {
+
+                    uint dpiX, dpiY;
+
+                    // Try to get DPI for the monitor
+                    if (NativeMethods.GetDpiForMonitor(hMonitor, NativeMethods.MDT_EFFECTIVE_DPI, out dpiX, out dpiY) == 0) {
+                        return dpiX / 96.0f;
+                    }
+                }
+
+                using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) {
+                    return g.DpiX / 96.0f;
+                }
+            }
+            catch {
+                return 1.0f;
+            }
+        }
+     
         private void RefreshThemeResources() {
             if (_window.Content is FrameworkElement root) {
                 root.Resources.MergedDictionaries.Clear();

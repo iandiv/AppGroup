@@ -25,14 +25,17 @@ namespace AppGroup {
 
 
         public static string FindOrigIcon(string icoFilePath) {
-            string[] possibleExtensions = { ".png", ".jpg", ".jpeg" };
+            if (string.IsNullOrEmpty(icoFilePath)) {
+                return icoFilePath;
+            }
 
+            string[] possibleExtensions = { ".png", ".jpg", ".jpeg" };
             string directory = Path.GetDirectoryName(icoFilePath);
             string filenameWithoutExtension = Path.GetFileNameWithoutExtension(icoFilePath);
 
             foreach (string ext in possibleExtensions) {
                 string potentialPath = Path.Combine(directory, filenameWithoutExtension + ext);
-                if (System.IO.File.Exists(potentialPath)) {
+                if (File.Exists(potentialPath)) {
                     return potentialPath;
                 }
             }
@@ -138,7 +141,7 @@ namespace AppGroup {
         /// <summary>
         /// Resizes and crops an image to a square with the specified size
         /// </summary>
-        private static Bitmap ResizeAndCropImageToSquare(Bitmap originalImage, int size, float zoomFactor = 1.1f) {
+        private static Bitmap ResizeAndCropImageToSquare(Bitmap originalImage, int size, float zoomFactor = 1.3f) {
             try {
                 // Create a new square bitmap
                 Bitmap resizedImage = new Bitmap(size, size);
@@ -232,9 +235,9 @@ namespace AppGroup {
                             return null;
                         }
 
-                        using (Bitmap resizedIcon = ResizeAndCropImageToSquare(iconBitmap, 200)) {
+                        //using (Bitmap resizedIcon = ResizeAndCropImageToSquare(iconBitmap, 200)) {
                             Directory.CreateDirectory(outputDirectory);
-                            string iconFileName = GenerateUniqueIconFileName(filePath, resizedIcon);
+                            string iconFileName = GenerateUniqueIconFileName(filePath, iconBitmap);
                             string iconFilePath = Path.Combine(outputDirectory, iconFileName);
 
                             if (File.Exists(iconFilePath)) {
@@ -243,12 +246,12 @@ namespace AppGroup {
 
                             using (var stream = new FileStream(iconFilePath, FileMode.Create)) {
                                 cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                                resizedIcon.Save(stream, ImageFormat.Png);
+                            iconBitmap.Save(stream, ImageFormat.Png);
                             }
 
                             Debug.WriteLine($"Icon saved to: {iconFilePath}");
                             return iconFilePath;
-                        }
+                        //}
                     }
                     catch (OperationCanceledException) {
                         Debug.WriteLine($"Icon extraction timed out for: {filePath}");
@@ -455,7 +458,7 @@ namespace AppGroup {
 
                 return await Task.Run(() => {
                     try {
-                        SHFILEINFO shfi = new SHFILEINFO();
+                        NativeMethods.SHFILEINFO shfi = new NativeMethods.SHFILEINFO();
                         uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON;
 
                         IntPtr result = NativeMethods.SHGetFileInfo(filePath, 0, ref shfi, (uint)Marshal.SizeOf(shfi), flags);
@@ -713,33 +716,5 @@ namespace AppGroup {
 
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct SHFILEINFO {
-        public IntPtr hIcon;
-        public int iIcon;
-        public uint dwAttributes;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string szDisplayName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
-        public string szTypeName;
-    }
-
-    public static class NativeMethods {
-        public const uint SHGFI_ICON = 0x000000100;
-        public const uint SHGFI_LARGEICON = 0x000000000;
-        public const uint SHGFI_SMALLICON = 0x000000001;
-
-        [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-        public static extern IntPtr ExtractAssociatedIcon(IntPtr hInst, StringBuilder lpIconPath, out ushort lpiIcon);
-        [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-        public static extern uint ExtractIconEx(string szFileName, int nIconIndex,
-       IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
-
-
-        [DllImport("shell32.dll")]
-        public static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool DestroyIcon(IntPtr handle);
-    }
+   
 }

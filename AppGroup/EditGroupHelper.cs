@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Text;
 using Microsoft.UI;
 using Windows.UI.WindowManagement;
+using Microsoft.UI.Xaml;
 
 namespace AppGroup {
     public class EditGroupHelper {
@@ -15,12 +16,7 @@ namespace AppGroup {
         private readonly string groupIdFilePath;
         private readonly string logFilePath;
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        
 
         public EditGroupHelper(string windowTitle, int groupId) {
             this.windowTitle = windowTitle;
@@ -36,29 +32,45 @@ namespace AppGroup {
 
             groupIdFilePath = Path.Combine(appDataPath, "gid");
 
-          
+
         }
 
         public bool IsExist() {
-            IntPtr hWnd = FindWindow(null, windowTitle);
+            IntPtr hWnd = NativeMethods.FindWindow(null, windowTitle);
             return hWnd != IntPtr.Zero;
         }
 
         public void Activate() {
-            IntPtr hWnd = FindWindow(null, windowTitle);
+            IntPtr hWnd = NativeMethods.FindWindow(null, windowTitle);
             if (hWnd != IntPtr.Zero) {
-                SetForegroundWindow(hWnd);
-              UpdateFile();
-                  
+                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
+                NativeMethods.SetForegroundWindow(hWnd);
+                UpdateFile();
+
             }
             else {
-              UpdateFile();
 
-                EditGroupWindow editGroupWindow = new EditGroupWindow(groupId);
+                string executablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.exe");
 
-              
-                editGroupWindow.Activate();
+                using (Process process = new Process()) {
+                    process.StartInfo = new ProcessStartInfo {
+                        FileName = executablePath,
+                        Arguments = "EditGroupWindow",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+
+                    process.Start();
+                }
+
+
+                UpdateFile();
+
             }
+
+
         }
 
         private bool UpdateFile() {
@@ -75,7 +87,7 @@ namespace AppGroup {
             }
         }
 
-    
+
 
     }
 }

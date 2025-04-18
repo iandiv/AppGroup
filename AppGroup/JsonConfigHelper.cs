@@ -238,7 +238,13 @@ namespace AppGroup
             }
 
             foreach (string subDir in Directory.GetDirectories(sourceDir)) {
-                string newSubDir = Path.Combine(destinationDir, Path.GetFileName(subDir));
+                string subDirName = Path.GetFileName(subDir);
+
+                if (subDirName.Contains(originalGroupName)) {
+                    subDirName = subDirName.Replace(originalGroupName, newGroupName);
+                }
+
+                string newSubDir = Path.Combine(destinationDir, subDirName);
                 CopyDirectory(subDir, newSubDir, originalGroupName, newGroupName);
 
                 FileAttributes attributes = new DirectoryInfo(subDir).Attributes;
@@ -251,19 +257,24 @@ namespace AppGroup
         private static void UpdateShortcutTarget(string shortcutPath, string originalGroupName, string newGroupName) {
             try {
                 WshShell wshShell = new WshShell();
-
                 IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
 
                 string targetPath = shortcut.TargetPath.Replace(originalGroupName, newGroupName);
                 shortcut.TargetPath = targetPath;
                 shortcut.Arguments = $"\"{newGroupName}\"";
                 shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
+
+                // Update the icon location if necessary
+                string iconPath = shortcut.IconLocation.Replace(originalGroupName, newGroupName);
+                shortcut.IconLocation = iconPath;
+
                 shortcut.Save();
             }
             catch (Exception ex) {
                 throw new Exception($"Error updating shortcut target: {ex.Message}", ex);
             }
         }
+
 
         public static void OpenGroupFolder(int groupId) {
             try {

@@ -128,8 +128,9 @@ namespace AppGroup {
             debounceTimer.Tick += FilterGroups;
 
             _supportDialogHelper = new SupportDialogHelper(this);
+            NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.Main" );
         }
-
+      
 
         private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e) {
             debounceTimer.Stop();
@@ -179,8 +180,16 @@ namespace AppGroup {
                 if (int.TryParse(property.Key, out int groupId)) {
                     var existingItem = GroupItems.FirstOrDefault(item => item.GroupId == groupId);
                     if (existingItem != null) {
-                        existingItem.GroupName = property.Value?["groupName"]?.GetValue<string>();
-                        existingItem.GroupIcon = IconHelper.FindOrigIcon(property.Value?["groupIcon"]?.GetValue<string>());
+                        // Force update these values even if the string hasn't changed
+                        string newGroupName = property.Value?["groupName"]?.GetValue<string>();
+                        string newGroupIcon = property.Value?["groupIcon"]?.GetValue<string>();
+
+                        // Update properties (this might appear unchanged if just the file contents changed)
+                        existingItem.GroupName = newGroupName;
+
+                        // Force the icon update by temporarily setting to null first
+                        existingItem.GroupIcon = null;
+                        existingItem.GroupIcon = IconHelper.FindOrigIcon(newGroupIcon);
 
                         var paths = property.Value?["path"]?.AsArray();
                         if (paths?.Count > 0) {

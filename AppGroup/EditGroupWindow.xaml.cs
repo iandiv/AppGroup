@@ -90,11 +90,9 @@ namespace AppGroup {
             _ = LoadGroupDataAsync(GroupId);
             Closed += MainWindow_Closed;
             ApplicationCount.Text = "Item";
-            SetCurrentProcessExplicitAppUserModelID("AppGroup.EditGroup");
+            NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.EditGroup");
         }
-        [DllImport("shell32.dll", SetLastError = true)]
-        static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
-
+       
         private async void OnGroupIdFileChanged(object sender, FileSystemEventArgs e) {
             try {
                 if (File.Exists(groupIdFilePath)) {
@@ -306,7 +304,7 @@ namespace AppGroup {
                                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                     Debug.WriteLine($"Icon : {filePath}");
                                     var icon = await IconCache.GetIconPathAsync(filePath);
-                                    await Task.Delay(5);
+                                    await Task.Delay(50);
 
                                     DispatcherQueue.TryEnqueue(() => {
                                         ExeFiles.Add(new ExeFileModel {
@@ -332,7 +330,7 @@ namespace AppGroup {
                                 if (groupIcon.Contains("grid")) {
                                     IconGridComboBox.SelectedItem = groupIcon.Contains("grid3") ? "3" : "2";
                                     regularIcon = false;
-                                    CreateGridIcon();
+                                    //CreateGridIcon();
                                     IconGridComboBox.Visibility = Visibility.Visible;
                                 }
                             });
@@ -519,7 +517,7 @@ namespace AppGroup {
 
         private void ExeListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
             if (args.DropResult == DataPackageOperation.Move && IconGridComboBox.SelectedItem != null && !regularIcon) {
-                CreateGridIcon();
+                //CreateGridIcon();
             }
         }
 
@@ -614,7 +612,7 @@ namespace AppGroup {
                 string groupFolder = Path.Combine(groupsFolder, newGroupName);
                 Directory.CreateDirectory(groupFolder);
 
-                string uniqueFolderName = Path.GetRandomFileName();
+                string uniqueFolderName = newGroupName;
                 string uniqueFolderPath = Path.Combine(groupFolder, uniqueFolderName);
                 Directory.CreateDirectory(uniqueFolderPath);
 

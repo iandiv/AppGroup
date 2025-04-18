@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35806.99 d17.13
+VisualStudioVersion = 17.13.35806.99
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppGroup", "AppGroup\AppGroup.csproj", "{6F1A69BC-EA40-4AC3-8452-9C3D1E3C989B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppGroupBackground", "AppGroupBackground\AppGroupBackground.csproj", "{2F515274-5D0B-4E75-8273-335AFD3E8374}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,18 @@ Global
 		{6F1A69BC-EA40-4AC3-8452-9C3D1E3C989B}.Release|x86.ActiveCfg = Release|x86
 		{6F1A69BC-EA40-4AC3-8452-9C3D1E3C989B}.Release|x86.Build.0 = Release|x86
 		{6F1A69BC-EA40-4AC3-8452-9C3D1E3C989B}.Release|x86.Deploy.0 = Release|x86
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|x64.Build.0 = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Debug|x86.Build.0 = Debug|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|ARM64.Build.0 = Release|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|x64.ActiveCfg = Release|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|x64.Build.0 = Release|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|x86.ActiveCfg = Release|Any CPU
+		{2F515274-5D0B-4E75-8273-335AFD3E8374}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

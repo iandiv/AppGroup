@@ -28,7 +28,7 @@
                 <Button Grid.Column="1" Padding="7" VerticalAlignment="Center" Click="EditGroup_Click" BorderThickness="0" Background="Transparent">
                     <FontIcon Glyph="&#xe70f;" FontSize="13"/>
                 </Button>
-                
+
             </Grid>
         </StackPanel>
 

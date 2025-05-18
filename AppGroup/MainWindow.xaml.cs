@@ -1,3 +1,4 @@
+
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
@@ -52,18 +53,15 @@ namespace AppGroup {
             }
         }
         private List<string> pathIcons;
-
-
         public List<string> PathIcons {
-            get => pathIcons; set {
+            get => pathIcons;
+            set {
                 if (pathIcons != value) {
                     pathIcons = value;
                     OnPropertyChanged(nameof(PathIcons));
                 }
             }
         }
-
-
 
         public string AdditionalIconsText {
             get {
@@ -82,6 +80,11 @@ namespace AppGroup {
                 }
             }
         }
+
+        // New properties for Tooltip and Args
+        public Dictionary<string, string> Tooltips { get; set; } = new Dictionary<string, string>();
+        public Dictionary<string, string> Args { get; set; } = new Dictionary<string, string>();
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected void OnPropertyChanged(string propertyName) {
@@ -89,9 +92,11 @@ namespace AppGroup {
         }
     }
 
+
     public sealed partial class MainWindow : WinUIEx.WindowEx {
         // Private fields
         private readonly Dictionary<int, EditGroupWindow> _openEditWindows = new Dictionary<int, EditGroupWindow>();
+        private BackupHelper _backupHelper;
         private ObservableCollection<GroupItem> GroupItems;
         private FileSystemWatcher _fileWatcher;
         private readonly object _loadLock = new object();
@@ -105,7 +110,7 @@ namespace AppGroup {
 
             this.InitializeComponent();
 
-
+            _backupHelper = new BackupHelper(this);
 
             GroupItems = new ObservableCollection<GroupItem>();
             GroupListView.ItemsSource = GroupItems;
@@ -128,9 +133,9 @@ namespace AppGroup {
             debounceTimer.Tick += FilterGroups;
 
             _supportDialogHelper = new SupportDialogHelper(this);
-            NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.Main" );
+            NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.Main");
         }
-      
+
 
         private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e) {
             debounceTimer.Stop();
@@ -149,8 +154,74 @@ namespace AppGroup {
                                           : "";
         }
 
-       
 
+
+
+        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        public async Task UpdateGroupItemAsync(string jsonFilePath) {
+            await _semaphore.WaitAsync();
+            try {
+                string jsonContent = await File.ReadAllTextAsync(jsonFilePath);
+                JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
+                var groupDictionary = jsonObject.AsObject();
+
+                var tasks = groupDictionary.Select(async property => {
+                    if (int.TryParse(property.Key, out int groupId)) {
+                        var existingItem = GroupItems.FirstOrDefault(item => item.GroupId == groupId);
+                        if (existingItem != null) {
+                            string newGroupName = property.Value?["groupName"]?.GetValue<string>();
+                            string newGroupIcon = property.Value?["groupIcon"]?.GetValue<string>();
+
+                            existingItem.GroupName = newGroupName;
+                            existingItem.GroupIcon = null;
+                            existingItem.GroupIcon = IconHelper.FindOrigIcon(newGroupIcon);
+
+                            var paths = property.Value?["path"]?.AsObject();
+                            if (paths?.Count > 0) {
+                                var iconTasks = paths
+                                    .Where(p => p.Value != null)
+                                    .Select(async path => {
+                                        string filePath = path.Key;
+                                        string tooltip = path.Value["tooltip"]?.GetValue<string>();
+                                        string args = path.Value["args"]?.GetValue<string>();
+
+                                        existingItem.Tooltips[filePath] = tooltip;
+                                        existingItem.Args[filePath] = args;
+
+                                        return await IconCache.GetIconPathAsync(filePath);
+                                    })
+                                    .ToList();
+
+                                var iconPaths = await Task.WhenAll(iconTasks);
+                                var validIconPaths = iconPaths.Where(p => !string.IsNullOrEmpty(p)).ToList();
+
+                                // Limit to 7 icons
+                                int maxIconsToShow = 7;
+                                existingItem.PathIcons = validIconPaths.Take(maxIconsToShow).ToList();
+                                existingItem.AdditionalIconsCount = Math.Max(0, validIconPaths.Count - maxIconsToShow);
+                            }
+                        }
+                        else {
+                            var newItem = await CreateGroupItemAsync(groupId, property.Value);
+                            GroupItems.Add(newItem);
+                        }
+                    }
+                }).ToList();
+
+                await Task.WhenAll(tasks);
+
+                // Update UI elements outside the loop to avoid redundant updates
+                GroupsCount.Text = GroupListView.Items.Count > 1
+                                    ? GroupListView.Items.Count.ToString() + " Groups"
+                                    : GroupListView.Items.Count == 1
+                                    ? "1 Group"
+                                    : "";
+                EmptyView.Visibility = GroupListView.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            finally {
+                _semaphore.Release();
+            }
+        }
 
         private void SetupFileWatcher() {
             string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
@@ -161,140 +232,42 @@ namespace AppGroup {
                 NotifyFilter = NotifyFilters.LastWrite
             };
 
-            _fileWatcher.Changed += async (s, e) =>
+            _fileWatcher.Changed +=  (s, e) =>
             {
-                DispatcherQueue.TryEnqueue(async () =>
+                 DispatcherQueue.TryEnqueue(async () =>
                 {
-                    await UpdateGroupItemAsync(jsonFilePath);
+                    if (!IsFileInUse(jsonFilePath)) {
+                        await UpdateGroupItemAsync(jsonFilePath);
+                    }
                 });
             };
+
             _fileWatcher.EnableRaisingEvents = true;
         }
 
-        private async Task UpdateGroupItemAsync(string jsonFilePath) {
-            string jsonContent = await File.ReadAllTextAsync(jsonFilePath);
-            JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
-            var groupDictionary = jsonObject.AsObject();
-
-            foreach (var property in groupDictionary) {
-                if (int.TryParse(property.Key, out int groupId)) {
-                    var existingItem = GroupItems.FirstOrDefault(item => item.GroupId == groupId);
-                    if (existingItem != null) {
-                        // Force update these values even if the string hasn't changed
-                        string newGroupName = property.Value?["groupName"]?.GetValue<string>();
-                        string newGroupIcon = property.Value?["groupIcon"]?.GetValue<string>();
-
-                        // Update properties (this might appear unchanged if just the file contents changed)
-                        existingItem.GroupName = newGroupName;
-
-                        // Force the icon update by temporarily setting to null first
-                        existingItem.GroupIcon = null;
-                        existingItem.GroupIcon = IconHelper.FindOrigIcon(newGroupIcon);
-
-                        var paths = property.Value?["path"]?.AsArray();
-                        if (paths?.Count > 0) {
-                            var iconTasks = paths
-                                .Where(p => p != null)
-                                .Select(async path => {
-                                    string filePath = path.GetValue<string>();
-                                    return await IconCache.GetIconPathAsync(filePath);
-                                })
-                                .ToList();
-
-                            var iconPaths = await Task.WhenAll(iconTasks);
-                            var validIconPaths = iconPaths.Where(p => !string.IsNullOrEmpty(p)).ToList();
-
-                            // Limit to 7 icons
-                            int maxIconsToShow = 7;
-                            existingItem.PathIcons = validIconPaths.Take(maxIconsToShow).ToList();
-                            existingItem.AdditionalIconsCount = Math.Max(0, validIconPaths.Count - maxIconsToShow);
-                        }
-
-                        GroupsCount.Text = GroupListView.Items.Count > 1
-                                            ? GroupListView.Items.Count.ToString() + " Groups"
-                                            : GroupListView.Items.Count == 1
-                                            ? "1 Group"
-                                            : "";
-                        if (GroupListView.Items.Count == 0) {
-                            EmptyView.Visibility = Visibility.Visible;
-                        }
-                        else {
-                            EmptyView.Visibility = Visibility.Collapsed;
-                        }
-                    }
-                    else {
-                        var newItem = await CreateGroupItemAsync(groupId, property.Value);
-                        GroupItems.Add(newItem);
-                    }
+        private bool IsFileInUse(string filePath) {
+            try {
+                using (FileStream fs = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) {
+                    fs.Close();
                 }
+                return false;
+            }
+            catch (IOException) {
+                return true;
             }
         }
+
         private async void Reload(object sender, RoutedEventArgs e) {
             _ = LoadGroupsAsync();
 
 
         }
 
+
         private readonly SemaphoreSlim _loadingSemaphore = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _loadCancellationSource = new CancellationTokenSource();
 
-        private async Task LoadGroupsAsync() {
-            if (!await _loadingSemaphore.WaitAsync(0)) {
-                return;
-            }
-
-            try {
-                using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_loadCancellationSource.Token);
-                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(5));
-
-                DispatcherQueue.TryEnqueue(() => {
-                    GroupItems.Clear();
-                });
-                string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
-
-                string jsonContent = await File.ReadAllTextAsync(jsonFilePath, cancellationTokenSource.Token)
-                    .ConfigureAwait(false);
-
-                JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
-                var groupDictionary = jsonObject.AsObject();
-
-                var processingStrategy = groupDictionary.Count >= 5
-                    ? ProcessGroupsInParallelAsync(groupDictionary, cancellationTokenSource.Token)
-                    : ProcessGroupsSequentiallyAsync(groupDictionary, cancellationTokenSource.Token);
-
-                var updatedGroupItems = await processingStrategy
-                    .ConfigureAwait(false);
-
-                DispatcherQueue.TryEnqueue(() => {
-                    GroupItems.Clear();
-                    foreach (var item in updatedGroupItems) {
-                        GroupItems.Add(item);
-
-                    }
-
-                    GroupsCount.Text = GroupListView.Items.Count > 1
-                                        ? GroupListView.Items.Count.ToString() + " Groups"
-                                        : GroupListView.Items.Count == 1
-                                        ? "1 Group"
-                                        : "";
-                    if (GroupListView.Items.Count == 0) {
-                        EmptyView.Visibility = Visibility.Visible;
-                    }
-                    else {
-                        EmptyView.Visibility = Visibility.Collapsed;
-                    }
-                });
-            }
-            catch (OperationCanceledException) {
-                Debug.WriteLine("Group loading timed out.");
-            }
-            catch (Exception ex) {
-                HandleLoadingError(ex);
-            }
-            finally {
-                _loadingSemaphore.Release();
-            }
-        }
+      
 
 
         private async Task<List<GroupItem>> ProcessGroupsInParallelAsync(
@@ -338,6 +311,7 @@ namespace AppGroup {
                 if (int.TryParse(property.Key, out int groupId)) {
                     try {
                         var groupItem = await CreateGroupItemAsync(groupId, property.Value);
+
                         newGroupItems.Add(groupItem);
                     }
                     catch (Exception ex) {
@@ -357,6 +331,72 @@ namespace AppGroup {
             DispatcherQueue.TryEnqueue(() => {
             });
         }
+        public async Task LoadGroupsAsync() {
+            if (!await _loadingSemaphore.WaitAsync(0)) {
+                return;
+            }
+
+            try {
+                using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_loadCancellationSource.Token);
+                cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(5));
+
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    GroupItems.Clear();
+                });
+
+                string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
+                string jsonContent = await File.ReadAllTextAsync(jsonFilePath, cancellationTokenSource.Token)
+                    .ConfigureAwait(false);
+
+                JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
+                var groupDictionary = jsonObject.AsObject();
+
+                var processingStrategy = groupDictionary.Count >= 5
+                    ? ProcessGroupsInParallelAsync(groupDictionary, cancellationTokenSource.Token)
+                    : ProcessGroupsSequentiallyAsync(groupDictionary, cancellationTokenSource.Token);
+
+                var updatedGroupItems = await processingStrategy
+                    .ConfigureAwait(false);
+
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    GroupItems.Clear();
+                    foreach (var item in updatedGroupItems) {
+                        // Check if the item already exists in GroupItems
+                        if (!GroupItems.Any(existingItem => existingItem.GroupId == item.GroupId)) {
+                            GroupItems.Add(item);
+                            if (GroupListView.Items.Count == 0) {
+                                EmptyView.Visibility = Visibility.Visible;
+                            }
+                            else {
+                                EmptyView.Visibility = Visibility.Collapsed;
+                            }
+                        }
+                       
+
+                    }
+                    GroupsCount.Text = GroupListView.Items.Count > 1
+                        ? GroupListView.Items.Count.ToString() + " Groups"
+                        : GroupListView.Items.Count == 1
+                            ? "1 Group"
+                            : "";
+                   
+
+                });
+            }
+            catch (OperationCanceledException) {
+                Debug.WriteLine("Group loading timed out.");
+            }
+            catch (Exception ex) {
+                HandleLoadingError(ex);
+            }
+            finally {
+                _loadingSemaphore.Release();
+            }
+        }
+
+     
 
         private async Task<GroupItem> CreateGroupItemAsync(int groupId, JsonNode groupNode) {
             string groupName = groupNode?["groupName"]?.GetValue<string>();
@@ -366,43 +406,84 @@ namespace AppGroup {
                 GroupId = groupId,
                 GroupName = groupName,
                 GroupIcon = groupIcon,
-                PathIcons = new List<string>()
+                PathIcons = new List<string>(),
+                Tooltips = new Dictionary<string, string>(),
+                Args = new Dictionary<string, string>()
             };
 
-            var paths = groupNode?["path"]?.AsArray();
+            var paths = groupNode?["path"]?.AsObject();
             if (paths?.Count > 0) {
                 string outputDirectory = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup",
                     "Icons"
                 );
+                Directory.CreateDirectory(outputDirectory);
 
                 var iconTasks = paths
-                    .Where(p => p != null)
+                    .Where(p => p.Value != null)
                     .Select(async path => {
-                        string filePath = path.GetValue<string>();
-                        return await IconCache.GetIconPathAsync(filePath);
+                        string filePath = path.Key;
+                        string tooltip = path.Value["tooltip"]?.GetValue<string>();
+                        string args = path.Value["args"]?.GetValue<string>();
+
+                        groupItem.Tooltips[filePath] = tooltip;
+                        groupItem.Args[filePath] = args;
+
+                        // Force icon regeneration if not exists
+                        string cachedIconPath = await IconCache.GetIconPathAsync(filePath);
+
+                        // Additional verification to ensure icon is actually generated
+                        if (string.IsNullOrEmpty(cachedIconPath) || !File.Exists(cachedIconPath)) {
+                            cachedIconPath = await ReGenerateIconAsync(filePath, outputDirectory);
+                        }
+
+                        return cachedIconPath;
                     })
                     .ToList();
 
                 var iconPaths = await Task.WhenAll(iconTasks);
-                var validIconPaths = iconPaths.Where(p => !string.IsNullOrEmpty(p)).ToList();
+                var validIconPaths = iconPaths.Where(p => !string.IsNullOrEmpty(p) && File.Exists(p)).ToList();
 
                 // Limit to 7 icons
                 int maxIconsToShow = 7;
                 groupItem.PathIcons.AddRange(validIconPaths.Take(maxIconsToShow));
                 groupItem.AdditionalIconsCount = Math.Max(0, validIconPaths.Count - maxIconsToShow);
-
-                // Batch UI update
-                DispatcherQueue.TryEnqueue(() => {
-                    // Update UI if needed
-                });
             }
 
             return groupItem;
         }
 
-     
+        private async Task<string> ReGenerateIconAsync(string filePath, string outputDirectory) {
+            try {
+                // Force regeneration of icon
+                var regeneratedIconPath = await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
+
+                if (regeneratedIconPath != null && File.Exists(regeneratedIconPath)) {
+                    // Compute cache key and update cache
+                    string cacheKey = IconCache.ComputeFileCacheKey(filePath);
+                    IconCache._iconCache[cacheKey] = regeneratedIconPath;
+                    IconCache.SaveIconCache();
+
+                    return regeneratedIconPath;
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Icon regeneration failed for {filePath}: {ex.Message}");
+            }
+
+            return null;
+        }
+
+      
+        
+        private async void ExportBackupButton_Click(object sender, RoutedEventArgs e) {
+            await _backupHelper.ExportBackupAsync();
+        }
+
+        private async void ImportBackupButton_Click(object sender, RoutedEventArgs e) {
+            await _backupHelper.ImportBackupAsync();
+        }
 
 
 
@@ -413,7 +494,7 @@ namespace AppGroup {
             editGroup.Activate();
         }
         private async void GitHubButton_Click(object sender, RoutedEventArgs e) {
-            var uri = new Uri("https://github.com/iandiv"); 
+            var uri = new Uri("https://github.com/iandiv");
             await Windows.System.Launcher.LaunchUriAsync(uri);
         }
         private async void CoffeeButton_Click(object sender, RoutedEventArgs e) {
@@ -422,8 +503,9 @@ namespace AppGroup {
         }
         private void EditButton_Click(object sender, RoutedEventArgs e) {
             if (sender is Button button && button.DataContext is GroupItem selectedGroup) {
-                
+
                 EditGroupHelper editGroup = new EditGroupHelper("Edit Group", selectedGroup.GroupId);
+
                 editGroup.Activate();
             }
         }
@@ -439,21 +521,18 @@ namespace AppGroup {
                 };
 
                 var result = await deleteDialog.ShowAsync();
-
                 if (result == ContentDialogResult.Primary) {
                     string filePath = JsonConfigHelper.GetDefaultConfigPath();
                     JsonConfigHelper.DeleteGroupFromJson(filePath, selectedGroup.GroupId);
-                    _ = LoadGroupsAsync();
-
+                    await LoadGroupsAsync();
                 }
             }
         }
-
-        private void DuplicateButton_Click(object sender, RoutedEventArgs e) {
+        private async void DuplicateButton_Click(object sender, RoutedEventArgs e) {
             if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is GroupItem selectedGroup) {
                 string filePath = JsonConfigHelper.GetDefaultConfigPath();
                 JsonConfigHelper.DuplicateGroupInJson(filePath, selectedGroup.GroupId);
-                _ = LoadGroupsAsync();
+                await LoadGroupsAsync();
             }
         }
         private void OpenLocationButton_Click(object sender, RoutedEventArgs e) {

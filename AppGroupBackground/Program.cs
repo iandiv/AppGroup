@@ -1,165 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using AppGroupBackground;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BackgroundClient {
     internal class Program {
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        private const int SW_HIDE = 0;
-        private const int SW_SHOW = 5;
-        private const int SW_RESTORE = 9;
-
+        // Use NativeMethods class for P/Invoke definitions
         private static Dictionary<string, GroupData> activeGroups;
         private static CancellationTokenSource cancellationTokenSource;
 
         // Constants for the system tray
-        private const int WM_APP = 0x8000;
-        private const int WM_TRAYICON = WM_APP + 1;
-        private const int WM_LBUTTONDBLCLK = 0x0203;
-        private const int WM_RBUTTONUP = 0x0205;
-        private const int WM_COMMAND = 0x0111;
-        private const int NIM_ADD = 0x00000000;
-        private const int NIM_MODIFY = 0x00000001;
-        private const int NIM_DELETE = 0x00000002;
-        private const int NIF_MESSAGE = 0x00000001;
-        private const int NIF_ICON = 0x00000002;
-        private const int NIF_TIP = 0x00000004;
-        private const int TPM_RIGHTBUTTON = 0x0002;
-
-        // ID values for the menu items
-        private const int ID_SHOW = 1000;
-        private const int ID_EXIT = 1001;
-
-        // Tray icon data
         private static IntPtr windowHandle;
         private static IntPtr hIcon;
         private static IntPtr hMenu;
 
         // Add this to hide the console window
-        [DllImport("kernel32.dll")]
-        static extern IntPtr GetConsoleWindow();
-
-        [DllImport("user32.dll")]
-        static extern IntPtr CreateWindowEx(uint dwExStyle, string lpClassName, string lpWindowName,
-            uint dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu,
-            IntPtr hInstance, IntPtr lpParam);
-
-        [DllImport("user32.dll")]
-        static extern bool DestroyWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        static extern IntPtr DefWindowProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        static extern bool GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
-
-        [DllImport("user32.dll")]
-        static extern bool TranslateMessage([In] ref MSG lpMsg);
-
-        [DllImport("user32.dll")]
-        static extern IntPtr DispatchMessage([In] ref MSG lpMsg);
-
-        [DllImport("shell32.dll")]
-        static extern bool Shell_NotifyIcon(int dwMessage, [In] ref NOTIFYICONDATA pnid);
-
-        [DllImport("user32.dll")]
-        static extern bool GetCursorPos(out POINT lpPoint);
-
-        [DllImport("user32.dll")]
-        public static extern IntPtr CreatePopupMenu();
-
-        [DllImport("user32.dll")]
-        public static extern bool AppendMenu(IntPtr hMenu, uint uFlags, uint uIDNewItem, string lpNewItem);
-
-        [DllImport("user32.dll")]
-        public static extern bool DestroyMenu(IntPtr hMenu);
-
-        [DllImport("user32.dll")]
-        public static extern int TrackPopupMenuEx(IntPtr hMenu, uint fuFlags, int x, int y, IntPtr hwnd, IntPtr lptpm);
-
-        [DllImport("user32.dll")]
-        static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpwcx);
-
-        [DllImport("user32.dll")]
-        static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
-
-        [DllImport("kernel32.dll")]
-        static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        // For loading custom icon
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        static extern IntPtr LoadImage(IntPtr hinst, string lpszName, uint uType, int cxDesired, int cyDesired, uint fuLoad);
-
-        private const uint IMAGE_ICON = 1;
-        private const uint LR_LOADFROMFILE = 0x00000010;
-
-        // Delegate for window procedure
-        private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        private static WndProcDelegate wndProcDelegate;
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct NOTIFYICONDATA {
-            public int cbSize;
-            public IntPtr hWnd;
-            public int uID;
-            public int uFlags;
-            public int uCallbackMessage;
-            public IntPtr hIcon;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-            public string szTip;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct POINT {
-            public int X;
-            public int Y;
-        }
-
-        public struct MSG {
-            public IntPtr hwnd;
-            public uint message;
-            public IntPtr wParam;
-            public IntPtr lParam;
-            public uint time;
-            public POINT pt;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct WNDCLASSEX {
-            public uint cbSize;
-            public uint style;
-            public IntPtr lpfnWndProc;
-            public int cbClsExtra;
-            public int cbWndExtra;
-            public IntPtr hInstance;
-            public IntPtr hIcon;
-            public IntPtr hCursor;
-            public IntPtr hbrBackground;
-            public string lpszMenuName;
-            public string lpszClassName;
-            public IntPtr hIconSm;
-        }
         private static FileSystemWatcher fileWatcher;
         private static object _fileChangeLock = new object();
         private static DateTime _lastFileChangeTime = DateTime.MinValue;
         private static readonly TimeSpan _debounceInterval = TimeSpan.FromSeconds(1);
         private static bool _fileChangeHandlingInProgress = false;
         private static HashSet<string> _previousGroupNames = new HashSet<string>();
+
         static void Main(string[] args) {
             // Create mutex to ensure only one instance runs
             bool createdNew;
@@ -169,11 +33,10 @@ namespace BackgroundClient {
                 }
 
                 // Hide console window
-                IntPtr consoleWindow = GetConsoleWindow();
+                IntPtr consoleWindow = NativeMethods.GetConsoleWindow();
                 if (consoleWindow != IntPtr.Zero) {
-                    ShowWindow(consoleWindow, SW_HIDE);
+                    NativeMethods.ShowWindow(consoleWindow, NativeMethods.SW_HIDE);
                 }
-
 
                 // Initialize cancellation token source
                 cancellationTokenSource = new CancellationTokenSource();
@@ -189,7 +52,135 @@ namespace BackgroundClient {
             }
         }
 
+        #region System Tray Methods
+        private static void InitializeSystemTray() {
+            // Create a hidden window for message processing
+            NativeMethods.WndProcDelegate wndProcDelegate = new NativeMethods.WndProcDelegate(WndProc);
 
+            var wndClass = new NativeMethods.WNDCLASSEX {
+                cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.WNDCLASSEX)),
+                style = 0,
+                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(wndProcDelegate),
+                cbClsExtra = 0,
+                cbWndExtra = 0,
+                hInstance = NativeMethods.GetModuleHandle(null),
+                hIcon = IntPtr.Zero,
+                hCursor = NativeMethods.LoadCursor(IntPtr.Zero, 32512), // IDC_ARROW
+                hbrBackground = IntPtr.Zero,
+                lpszMenuName = null,
+                lpszClassName = "BackgroundClientTrayWndClass",
+                hIconSm = IntPtr.Zero
+            };
+
+            NativeMethods.RegisterClassEx(ref wndClass);
+
+            windowHandle = NativeMethods.CreateWindowEx(
+                0,
+                "BackgroundClientTrayWndClass",
+                "BackgroundClient Tray Window",
+                0,
+                0, 0, 0, 0,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                NativeMethods.GetModuleHandle(null),
+                IntPtr.Zero);
+
+            // Load custom icon from file
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.ico");
+            if (File.Exists(iconPath)) {
+                hIcon = NativeMethods.LoadImage(IntPtr.Zero, iconPath, NativeMethods.IMAGE_ICON, 16, 16, NativeMethods.LR_LOADFROMFILE);
+                if (hIcon == IntPtr.Zero) {
+                    // Fallback to system icon if loading fails
+                    hIcon = NativeMethods.LoadImage(IntPtr.Zero, "#32516", NativeMethods.IMAGE_ICON, 16, 16, 0); // IDI_APPLICATION
+                }
+            }
+            else {
+                // Fallback to system icon if file not found
+                hIcon = NativeMethods.LoadImage(IntPtr.Zero, "#32516", NativeMethods.IMAGE_ICON, 16, 16, 0); // IDI_APPLICATION
+                Debug.WriteLine($"Icon file not found at: {iconPath}, using system icon");
+            }
+
+            // Create the tray icon
+            var notifyIconData = new NativeMethods.NOTIFYICONDATA {
+                cbSize = Marshal.SizeOf(typeof(NativeMethods.NOTIFYICONDATA)),
+                hWnd = windowHandle,
+                uID = 1,
+                uFlags = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP,
+                uCallbackMessage = NativeMethods.WM_TRAYICON,
+                hIcon = hIcon,
+                szTip = "App Group"
+            };
+
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_ADD, ref notifyIconData);
+
+            // Create popup menu
+            hMenu = NativeMethods.CreatePopupMenu();
+            NativeMethods.AppendMenu(hMenu, 0, NativeMethods.ID_SHOW, "Show");
+            NativeMethods.AppendMenu(hMenu, 0, NativeMethods.ID_EXIT, "Exit");
+        }
+
+        private static void RunMessageLoop() {
+            NativeMethods.MSG msg;
+            while (NativeMethods.GetMessage(out msg, IntPtr.Zero, 0, 0)) {
+                NativeMethods.TranslateMessage(ref msg);
+                NativeMethods.DispatchMessage(ref msg);
+            }
+        }
+
+        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam) {
+            if (msg == NativeMethods.WM_TRAYICON && wParam.ToInt32() == 1) {
+                if (lParam.ToInt32() == NativeMethods.WM_LBUTTONDBLCLK) {
+                    // Double click - show AppGroup
+                    ShowAppGroup();
+                    return IntPtr.Zero;
+                }
+                else if (lParam.ToInt32() == NativeMethods.WM_RBUTTONUP) {
+                    // Right click - show context menu
+                    ShowContextMenu();
+                    return IntPtr.Zero;
+                }
+            }
+
+            // Handle menu commands
+            if (msg == NativeMethods.WM_COMMAND) {
+                int menuId = wParam.ToInt32() & 0xFFFF; // Extract the lower 16 bits which contain the menu ID
+                Debug.WriteLine($"Received WM_COMMAND with ID: {menuId}");
+
+                if (menuId == NativeMethods.ID_SHOW) {
+                    ShowAppGroup();
+                    return IntPtr.Zero;
+                }
+                else if (menuId == NativeMethods.ID_EXIT) {
+                    KillAppGroup();
+                    return IntPtr.Zero;
+                }
+            }
+
+            return NativeMethods.DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+
+        private static void ShowContextMenu() {
+            NativeMethods.POINT pt;
+            NativeMethods.GetCursorPos(out pt);
+
+            // Need to bring the message window to the foreground otherwise the menu won't disappear properly
+            NativeMethods.SetForegroundWindow(windowHandle);
+
+            // Use TrackPopupMenuEx instead of TrackPopupMenu for better handling
+            NativeMethods.TrackPopupMenuEx(
+                hMenu,
+                NativeMethods.TPM_RIGHTBUTTON,
+                pt.X,
+                pt.Y,
+                windowHandle,
+                IntPtr.Zero);
+
+            // Send a dummy message to dismiss the menu when clicking elsewhere
+            NativeMethods.PostMessage(windowHandle, 0, IntPtr.Zero, IntPtr.Zero);
+        }
+        #endregion
+
+        #region File Watcher Methods
         private static void SetupFileWatcher() {
             string jsonFilePath = GetDefaultConfigPath();
             if (File.Exists(jsonFilePath)) {
@@ -224,8 +215,7 @@ namespace BackgroundClient {
 
                     if (!_fileChangeHandlingInProgress) {
                         _fileChangeHandlingInProgress = true;
-                        Task.Run(async () =>
-                        {
+                        Task.Run(async () => {
                             await DebouncedHandleFileChange();
                         });
                     }
@@ -235,8 +225,7 @@ namespace BackgroundClient {
                 _lastFileChangeTime = now;
                 _fileChangeHandlingInProgress = true;
                 Debug.WriteLine($"File change detected, handling immediately: {e.FullPath}");
-                Task.Run(async () =>
-                {
+                Task.Run(async () => {
                     await DebouncedHandleFileChange();
                 });
             }
@@ -292,8 +281,9 @@ namespace BackgroundClient {
 
             return groupNames;
         }
+        #endregion
 
-
+        #region Group Window Methods
         private static void KillAllGroupWindows() {
             try {
                 Debug.WriteLine("Killing all group windows before reload");
@@ -301,13 +291,13 @@ namespace BackgroundClient {
                 // First, kill groups from the currently loaded activeGroups
                 if (activeGroups != null) {
                     foreach (var group in activeGroups.Values) {
-                        IntPtr hWnd = FindWindow(null, group.groupName);
+                        IntPtr hWnd = NativeMethods.FindWindow(null, group.groupName);
                         if (hWnd != IntPtr.Zero) {
                             Debug.WriteLine($"Found window for group '{group.groupName}', killing process");
 
                             // Get the process ID from the window handle
                             uint processId;
-                            GetWindowThreadProcessId(hWnd, out processId);
+                            NativeMethods.GetWindowThreadProcessId(hWnd, out processId);
 
                             if (processId > 0) {
                                 try {
@@ -337,150 +327,178 @@ namespace BackgroundClient {
             }
         }
 
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-        private const int WM_CLOSE = 0x0010;
+        private static void PreloadPopupWindows() {
+            try {
+                // Load and parse the JSON file
+                string jsonFilePath = GetDefaultConfigPath();
+                if (File.Exists(jsonFilePath)) {
+                    string jsonContent = File.ReadAllText(jsonFilePath);
+                    activeGroups = JsonSerializer.Deserialize<Dictionary<string, GroupData>>(jsonContent);
 
-        private static void InitializeSystemTray() {
-            // Create a hidden window for message processing
-            wndProcDelegate = new WndProcDelegate(WndProc);
+                    if (activeGroups != null) {
+                        var tasks = new List<Task>();
+                        foreach (var group in activeGroups.Values) {
+                            // Check if this group is already running before launching
+                            IntPtr hWnd = NativeMethods.FindWindow(null, group.groupName);
+                            if (hWnd != IntPtr.Zero) {
+                                Debug.WriteLine($"Group '{group.groupName}' already running, skipping preload.");
+                                continue;
+                            }
 
-            var wndClass = new WNDCLASSEX {
-                cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX)),
-                style = 0,
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(wndProcDelegate),
-                cbClsExtra = 0,
-                cbWndExtra = 0,
-                hInstance = GetModuleHandle(null),
-                hIcon = IntPtr.Zero,
-                hCursor = LoadCursor(IntPtr.Zero, 32512), // IDC_ARROW
-                hbrBackground = IntPtr.Zero,
-                lpszMenuName = null,
-                lpszClassName = "BackgroundClientTrayWndClass",
-                hIconSm = IntPtr.Zero
-            };
+                            tasks.Add(Task.Run(() => LaunchAppGroupInSeparateProcess(group.groupName)));
+                        }
 
-            RegisterClassEx(ref wndClass);
-
-            windowHandle = CreateWindowEx(
-                0,
-                "BackgroundClientTrayWndClass",
-                "BackgroundClient Tray Window",
-                0,
-                0, 0, 0, 0,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                GetModuleHandle(null),
-                IntPtr.Zero);
-
-            // Load custom icon from file
-            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.ico");
-            if (File.Exists(iconPath)) {
-                hIcon = LoadImage(IntPtr.Zero, iconPath, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
-                if (hIcon == IntPtr.Zero) {
-                    // Fallback to system icon if loading fails
-                    hIcon = LoadImage(IntPtr.Zero, "#32516", IMAGE_ICON, 16, 16, 0); // IDI_APPLICATION
+                        // Wait for all tasks to complete
+                        Task.WhenAll(tasks).Wait();
+                    }
+                }
+                else {
+                    Debug.WriteLine($"JSON file not found at path: {jsonFilePath}");
                 }
             }
-            else {
-                // Fallback to system icon if file not found
-                hIcon = LoadImage(IntPtr.Zero, "#32516", IMAGE_ICON, 16, 16, 0); // IDI_APPLICATION
-                Debug.WriteLine($"Icon file not found at: {iconPath}, using system icon");
-            }
-
-            // Create the tray icon
-            var notifyIconData = new NOTIFYICONDATA {
-                cbSize = Marshal.SizeOf(typeof(NOTIFYICONDATA)),
-                hWnd = windowHandle,
-                uID = 1,
-                uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
-                uCallbackMessage = WM_TRAYICON,
-                hIcon = hIcon,
-                szTip = "App Group"
-            };
-
-            Shell_NotifyIcon(NIM_ADD, ref notifyIconData);
-
-            // Create popup menu
-            hMenu = CreatePopupMenu();
-            AppendMenu(hMenu, 0, ID_SHOW, "Show");
-            AppendMenu(hMenu, 0, ID_EXIT, "Exit");
-        }
-
-        private static void RunMessageLoop() {
-            MSG msg;
-            while (GetMessage(out msg, IntPtr.Zero, 0, 0)) {
-                TranslateMessage(ref msg);
-                DispatchMessage(ref msg);
+            catch (Exception ex) {
+                Debug.WriteLine($"Exception in PreloadPopupWindows: {ex.Message}");
             }
         }
 
-        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam) {
-            if (msg == WM_TRAYICON && wParam.ToInt32() == 1) {
-                if (lParam.ToInt32() == WM_LBUTTONDBLCLK) {
-                    // Double click - show AppGroup
-                    ShowAppGroup();
-                    return IntPtr.Zero;
+        private static async Task MonitorGroupWindows(CancellationToken cancellationToken) {
+            // Wait a bit for initial launching to complete
+            await Task.Delay(5000, cancellationToken);
+
+            // Dictionary to track process IDs for each group
+            Dictionary<string, int> groupProcessIds = new Dictionary<string, int>();
+            // Dictionary to track launch attempts to prevent continuous launch loops
+            Dictionary<string, DateTime> lastLaunchAttempts = new Dictionary<string, DateTime>();
+            // Minimum time between launch attempts (15 seconds)
+            TimeSpan minTimeBetweenLaunches = TimeSpan.FromSeconds(15);
+
+            while (!cancellationToken.IsCancellationRequested) {
+                try {
+                    if (activeGroups != null) {
+                        var tasks = new List<Task>();
+                        foreach (var group in activeGroups.Values) {
+                            bool isRunning = false;
+
+                            // First check: Look for window by exact name
+                            IntPtr hWnd = NativeMethods.FindWindow(null, group.groupName);
+                            if (hWnd != IntPtr.Zero) {
+                                isRunning = true;
+                            }
+                            // Second check: Look for windows that contain the group name
+                            else if (IsWindowWithPartialTitleRunning(group.groupName)) {
+                                isRunning = true;
+                            }
+                            // Third check: Check if we have a process ID and if it's still running
+                            else if (groupProcessIds.TryGetValue(group.groupName, out int processId)) {
+                                try {
+                                    var process = Process.GetProcessById(processId);
+                                    if (!process.HasExited) {
+                                        isRunning = true;
+                                    }
+                                }
+                                catch (ArgumentException) {
+                                    // Process no longer exists
+                                    groupProcessIds.Remove(group.groupName);
+                                }
+                            }
+
+                            if (!isRunning) {
+                                // Check if we've attempted to launch recently to avoid rapid relaunching
+                                bool canLaunch = true;
+                                if (lastLaunchAttempts.TryGetValue(group.groupName, out DateTime lastLaunch)) {
+                                    if (DateTime.Now - lastLaunch < minTimeBetweenLaunches) {
+                                        canLaunch = false;
+                                        Debug.WriteLine($"Skipping launch for '{group.groupName}' - too soon since last attempt");
+                                    }
+                                }
+
+                                if (canLaunch) {
+                                    Debug.WriteLine($"Group '{group.groupName}' not running, relaunching...");
+                                    lastLaunchAttempts[group.groupName] = DateTime.Now;
+
+                                    tasks.Add(Task.Run(() => {
+                                        int? newProcessId = LaunchAppGroupInSeparateProcess(group.groupName);
+                                        if (newProcessId.HasValue) {
+                                            groupProcessIds[group.groupName] = newProcessId.Value;
+                                        }
+                                    }));
+                                }
+                            }
+                        }
+                        await Task.WhenAll(tasks);
+                    }
+                    await Task.Delay(3000, cancellationToken);
                 }
-                else if (lParam.ToInt32() == WM_RBUTTONUP) {
-                    // Right click - show context menu
-                    ShowContextMenu();
-                    return IntPtr.Zero;
+                catch (OperationCanceledException) {
+                    break;
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Exception in MonitorGroupWindows: {ex.Message}");
+                    await Task.Delay(2000, cancellationToken);
                 }
             }
+        }
 
-            // Handle menu commands
-            if (msg == WM_COMMAND) {
-                int menuId = wParam.ToInt32() & 0xFFFF; // Extract the lower 16 bits which contain the menu ID
-                Debug.WriteLine($"Received WM_COMMAND with ID: {menuId}");
+        // Helper method to check if any window contains the group name in its title
+        private static bool IsWindowWithPartialTitleRunning(string partialTitle) {
+            bool found = false;
+            NativeMethods.EnumWindows((hWnd, lParam) => {
+                int textLength = NativeMethods.GetWindowTextLength(hWnd);
+                if (textLength > 0) {
+                    StringBuilder sb = new StringBuilder(textLength + 1);
+                    NativeMethods.GetWindowText(hWnd, sb, sb.Capacity);
+                    string windowTitle = sb.ToString();
+                    if (windowTitle.Contains(partialTitle)) {
+                        found = true;
+                        return false; // Stop enumeration
+                    }
+                }
+                return true; // Continue enumeration
+            }, IntPtr.Zero);
+            return found;
+        }
 
-                if (menuId == ID_SHOW) {
-                    ShowAppGroup();
-                    return IntPtr.Zero;
+        // Modified to return the process ID if launched successfully
+        private static int? LaunchAppGroupInSeparateProcess(string groupName) {
+            try {
+                string executableDir = AppDomain.CurrentDomain.BaseDirectory;
+                string shortcutPath = Path.Combine(executableDir, "Groups", groupName, $"{groupName}.lnk");
+
+                // Check if the shortcut exists
+                if (File.Exists(shortcutPath)) {
+                    // Use ProcessStartInfo with UseShellExecute=true to handle .lnk files
+                    // This is safer than using ShellExecute directly
+                    ProcessStartInfo psi = new ProcessStartInfo {
+                        FileName = shortcutPath,
+                        Arguments = "--silent",
+                        UseShellExecute = true,  // Required for .lnk files
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+
+                    Process process = Process.Start(psi);
+                    Debug.WriteLine($"Launched shortcut for group: {groupName} with --silent (PID: {process.Id})");
+                    return process.Id;
                 }
-                else if (menuId == ID_EXIT) {
-                    KillAppGroup();
-                    return IntPtr.Zero;
-                }
+                return null;
             }
-
-            return DefWindowProc(hWnd, msg, wParam, lParam);
+            catch (Exception ex) {
+                Debug.WriteLine($"Error launching application for group {groupName}: {ex.Message}");
+                return null;
+            }
         }
+        #endregion
 
-        private static void ShowContextMenu() {
-            POINT pt;
-            GetCursorPos(out pt);
-
-            // Need to bring the message window to the foreground otherwise the menu won't disappear properly
-            SetForegroundWindow(windowHandle);
-
-            // Use TrackPopupMenuEx instead of TrackPopupMenu for better handling
-            TrackPopupMenuEx(
-                hMenu,
-                TPM_RIGHTBUTTON,
-                pt.X,
-                pt.Y,
-                windowHandle,
-                IntPtr.Zero);
-
-            // Send a dummy message to dismiss the menu when clicking elsewhere
-            PostMessage(windowHandle, 0, IntPtr.Zero, IntPtr.Zero);
-        }
-
-        [DllImport("user32.dll")]
-        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-        // This is a critical method - improved to ensure we don't launch multiple instances
+        #region AppGroup Methods
         private static void ShowAppGroup() {
             try {
                 // First check if AppGroup is already running by window title
-                IntPtr appGroupWindow = FindWindow(null, "AppGroup");
+                IntPtr appGroupWindow = NativeMethods.FindWindow(null, "AppGroup");
 
                 if (appGroupWindow != IntPtr.Zero) {
                     // If window exists, make sure it's visible and bring it to front
                     Debug.WriteLine("AppGroup.exe window found, bringing to front");
-                    ShowWindow(appGroupWindow, SW_RESTORE);
-                    SetForegroundWindow(appGroupWindow);
+                    NativeMethods.ShowWindow(appGroupWindow, NativeMethods.SW_RESTORE);
+                    NativeMethods.SetForegroundWindow(appGroupWindow);
                     return; // Exit early - no need to launch a new instance
                 }
 
@@ -491,8 +509,8 @@ namespace BackgroundClient {
                     foreach (var process in existingProcesses) {
                         // Try to bring its main window to front if it has one
                         if (process.MainWindowHandle != IntPtr.Zero) {
-                            ShowWindow(process.MainWindowHandle, SW_RESTORE);
-                            SetForegroundWindow(process.MainWindowHandle);
+                            NativeMethods.ShowWindow(process.MainWindowHandle, NativeMethods.SW_RESTORE);
+                            NativeMethods.SetForegroundWindow(process.MainWindowHandle);
                             return; // Exit if we successfully showed a window
                         }
                     }
@@ -549,17 +567,17 @@ namespace BackgroundClient {
 
         private static void ExitApplication() {
             // Remove tray icon
-            var notifyIconData = new NOTIFYICONDATA {
-                cbSize = Marshal.SizeOf(typeof(NOTIFYICONDATA)),
+            var notifyIconData = new NativeMethods.NOTIFYICONDATA {
+                cbSize = Marshal.SizeOf(typeof(NativeMethods.NOTIFYICONDATA)),
                 hWnd = windowHandle,
                 uID = 1
             };
 
-            Shell_NotifyIcon(NIM_DELETE, ref notifyIconData);
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_DELETE, ref notifyIconData);
 
             // Cleanup resources
-            DestroyMenu(hMenu);
-            DestroyWindow(windowHandle);
+            NativeMethods.DestroyMenu(hMenu);
+            NativeMethods.DestroyWindow(windowHandle);
 
             // Cancel monitoring tasks
             cancellationTokenSource?.Cancel();
@@ -578,120 +596,19 @@ namespace BackgroundClient {
             cancellationTokenSource?.Cancel();
 
             // Remove tray icon
-            var notifyIconData = new NOTIFYICONDATA {
-                cbSize = Marshal.SizeOf(typeof(NOTIFYICONDATA)),
+            var notifyIconData = new NativeMethods.NOTIFYICONDATA {
+                cbSize = Marshal.SizeOf(typeof(NativeMethods.NOTIFYICONDATA)),
                 hWnd = windowHandle,
                 uID = 1
             };
 
-            Shell_NotifyIcon(NIM_DELETE, ref notifyIconData);
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_DELETE, ref notifyIconData);
 
             return false;
         }
+        #endregion
 
-        private static void PreloadPopupWindows() {
-            try {
-                // Load and parse the JSON file
-                string jsonFilePath = GetDefaultConfigPath();
-                if (File.Exists(jsonFilePath)) {
-                    string jsonContent = File.ReadAllText(jsonFilePath);
-                    activeGroups = JsonSerializer.Deserialize<Dictionary<string, GroupData>>(jsonContent);
-
-                    if (activeGroups != null) {
-                        var tasks = new List<Task>();
-                        foreach (var group in activeGroups.Values) {
-                            // Check if this group is already running before launching
-                            IntPtr hWnd = FindWindow(null, group.groupName);
-                            if (hWnd != IntPtr.Zero) {
-                                Debug.WriteLine($"Group '{group.groupName}' already running, skipping preload.");
-                                continue;
-                            }
-
-                            tasks.Add(Task.Run(() => LaunchAppGroupInSeparateProcess(group.groupName)));
-                        }
-
-                        // Wait for all tasks to complete
-                        Task.WhenAll(tasks).Wait();
-                    }
-                }
-                else {
-                    Debug.WriteLine($"JSON file not found at path: {jsonFilePath}");
-                }
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Exception in PreloadPopupWindows: {ex.Message}");
-            }
-        }
-
-        private static async Task MonitorGroupWindows(CancellationToken cancellationToken) {
-            // Wait a bit for initial launching to complete
-            await Task.Delay(5000, cancellationToken);
-
-            while (!cancellationToken.IsCancellationRequested) {
-                try {
-                    if (activeGroups != null) {
-                        var tasks = new List<Task>();
-                        foreach (var group in activeGroups.Values) {
-                            IntPtr hWnd = FindWindow(null, group.groupName);
-                            if (hWnd == IntPtr.Zero) {
-                                Debug.WriteLine($"Group '{group.groupName}' not running, relaunching...");
-                                tasks.Add(Task.Run(() => LaunchAppGroupInSeparateProcess(group.groupName)));
-                            }
-                        }
-
-                        await Task.WhenAll(tasks);
-                    }
-
-                    await Task.Delay(2000, cancellationToken);
-                }
-                catch (OperationCanceledException) {
-                    break;
-                }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Exception in MonitorGroupWindows: {ex.Message}");
-                    await Task.Delay(1000, cancellationToken);
-                }
-            }
-        }
-
-        // Shell execute for launching processes
-        [DllImport("shell32.dll")]
-        static extern IntPtr ShellExecute(
-            IntPtr hwnd,
-            string lpOperation,
-            string lpFile,
-            string lpParameters,
-            string lpDirectory,
-            int nShowCmd);
-
-        private static void LaunchAppGroupInSeparateProcess(string groupName) {
-            try {
-              
-
-                string executableDir = AppDomain.CurrentDomain.BaseDirectory;
-                string shortcutPath = Path.Combine(executableDir, "Groups", groupName, $"{groupName}.lnk");
-
-                // Check if the shortcut exists
-                if (File.Exists(shortcutPath)) {
-                    ShellExecute(
-                        IntPtr.Zero,
-                        "open",
-                        shortcutPath,
-                        " --silent",
-                        null,
-                        SW_HIDE);
-
-                    Debug.WriteLine($"Launched shortcut for group: {groupName} with --silent");
-                }
-                else {
-                    Debug.WriteLine($"Shortcut not found at: {shortcutPath}");
-                }
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error launching shortcut for group {groupName}: {ex.Message}");
-            }
-        }
-
+        #region Helper Methods
         private static string GetDefaultConfigPath() {
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string appGroupPath = Path.Combine(appDataPath, "AppGroup");
@@ -708,6 +625,7 @@ namespace BackgroundClient {
 
             return configFilePath;
         }
+        #endregion
     }
 
     public class GroupData {

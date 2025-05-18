@@ -7,11 +7,30 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using File = System.IO.File;
 
 namespace AppGroup
 {
     public class JsonConfigHelper
     {
+
+        public static int FindKeyByGroupName(string groupName) {
+            string json = File.ReadAllText(GetDefaultConfigPath());
+            var jsonDocument = JsonDocument.Parse(json);
+
+            foreach (var property in jsonDocument.RootElement.EnumerateObject()) {
+                if (property.Value.TryGetProperty("groupName", out JsonElement groupNameElement)) {
+                    if (groupNameElement.GetString() == groupName) {
+                        if (int.TryParse(property.Name, out int key)) {
+                            return key;
+                        }
+                    }
+                }
+            }
+
+            throw new Exception($"No key found for groupName '{groupName}'");
+        }
+
         public static string ReadJsonFromFile(string filePath)
         {
             try
@@ -74,11 +93,8 @@ namespace AppGroup
 
             return Path.Combine(appDataPath, fileName);
         }
-
-        public static void AddGroupToJson(string filePath, int groupId, string groupName,bool groupHeader, string groupIcon, int groupCol, string[] paths)
-        {
-            try
-            {
+        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, Dictionary<string, (string tooltip, string args)> paths) {
+            try {
                 string directory = Path.GetDirectoryName(filePath);
                 if (!Directory.Exists(directory)) {
                     Directory.CreateDirectory(directory);
@@ -90,16 +106,20 @@ namespace AppGroup
                 string jsonContent = ReadJsonFromFile(filePath);
                 JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
 
-                JsonArray jsonPaths = new JsonArray();
-                foreach (var path in paths)
-                {
-                    jsonPaths.Add(path);
+                JsonObject jsonPaths = new JsonObject();
+                foreach (var path in paths) {
+                    JsonObject pathDetails = new JsonObject
+                    {
+                { "tooltip", path.Value.tooltip },
+                { "args", path.Value.args }
+            };
+                    jsonPaths[path.Key] = pathDetails;
                 }
 
                 JsonObject newGroup = new JsonObject
-        {
+                {
             { "groupName", groupName },
-             { "groupHeader", groupHeader },
+            { "groupHeader", groupHeader },
             { "groupCol", groupCol },
             { "groupIcon", groupIcon },
             { "path", jsonPaths }
@@ -109,11 +129,12 @@ namespace AppGroup
 
                 System.IO.File.WriteAllText(filePath, JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true }));
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 throw new Exception($"Error adding group to JSON file: {ex.Message}", ex);
             }
         }
+
+      
 
         public static void DeleteGroupFromJson(string filePath, int groupId) {
             try {
@@ -214,6 +235,49 @@ namespace AppGroup
             return uniqueName;
         }
 
+        public static async Task LaunchAll(string groupName) {
+            try {
+                string filePath = GetDefaultConfigPath();
+                string jsonContent = await ReadJsonFromFileAsync(filePath);
+                JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
+
+                foreach (var group in jsonObject.AsObject()) {
+                    if (group.Value["groupName"]?.GetValue<string>() == groupName) {
+                        JsonObject paths = group.Value["path"]?.AsObject();
+
+                        if (paths != null) {
+                            var allTasks = new List<Task>();
+
+                            foreach (var pathEntry in paths) {
+                                string path = pathEntry.Key;
+                                string args = pathEntry.Value?["args"]?.GetValue<string>() ?? string.Empty;
+
+                                allTasks.Add(Task.Run(() =>
+                                {
+                                    try {
+                                        ProcessStartInfo startInfo = new ProcessStartInfo(path) {
+                                            Arguments = args,
+                                            UseShellExecute = true
+                                        };
+                                        Process.Start(startInfo);
+                                    }
+                                    catch (Exception ex) {
+                                        Debug.WriteLine($"Error launching process: {ex.Message}");
+                                    }
+                                }));
+                            }
+
+                            await Task.WhenAll(allTasks);
+                        }
+
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error launching all paths under group '{groupName}': {ex.Message}");
+            }
+        }
 
         private static void CopyDirectory(string sourceDir, string destinationDir, string originalGroupName, string newGroupName) {
             Directory.CreateDirectory(destinationDir);
@@ -252,6 +316,25 @@ namespace AppGroup
             }
         }
 
+        public static void UpdateShortcutIcon(string shortcutPath, string originalGroupName, string newGroupName) {
+            try {
+                WshShell wshShell = new WshShell();
+                IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+
+                // Get the old icon location
+                string oldIconLocation = shortcut.IconLocation;
+
+                // Update the icon location
+                string newIconLocation = oldIconLocation.Replace(originalGroupName, newGroupName);
+                shortcut.IconLocation = newIconLocation;
+
+                shortcut.Save();
+            }
+            catch (Exception ex) {
+                throw new Exception($"Error updating shortcut icon: {ex.Message}", ex);
+            }
+        }
+
 
 
         private static void UpdateShortcutTarget(string shortcutPath, string originalGroupName, string newGroupName) {
@@ -273,6 +356,41 @@ namespace AppGroup
             catch (Exception ex) {
                 throw new Exception($"Error updating shortcut target: {ex.Message}", ex);
             }
+        }
+        public static bool GroupExistsInJson(string groupName) {
+            string jsonPath = GetDefaultConfigPath();
+            if (File.Exists(jsonPath)) {
+                string jsonContent = File.ReadAllText(jsonPath);
+                using (JsonDocument document = JsonDocument.Parse(jsonContent)) {
+                    JsonElement root = document.RootElement;
+
+                    foreach (JsonProperty property in root.EnumerateObject()) {
+                        if (property.Value.TryGetProperty("groupName", out JsonElement groupNameElement) &&
+                            groupNameElement.GetString() == groupName) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        public static bool GroupIdExists(int groupId) {
+            string jsonPath = GetDefaultConfigPath();
+
+            if (File.Exists(jsonPath)) {
+                string jsonContent = File.ReadAllText(jsonPath);
+                using (JsonDocument document = JsonDocument.Parse(jsonContent)) {
+                    JsonElement root = document.RootElement;
+
+                    foreach (JsonProperty property in root.EnumerateObject()) {
+                        if (property.Value.TryGetProperty("groupId", out JsonElement groupIdElement) &&
+                            groupIdElement.GetInt32() == groupId) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
 

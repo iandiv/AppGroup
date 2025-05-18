@@ -22,13 +22,17 @@ using File = System.IO.File;
 using System.Text.RegularExpressions;
 using WinUIEx.Messaging;
 using System.Drawing;
+using Microsoft.UI.Xaml.Media;
 
 namespace AppGroup {
     public class ExeFileModel {
         public string FileName { get; set; }
         public string FilePath { get; set; }
         public string Icon { get; set; }
+        public string Tooltip { get; set; }
+        public string Args { get; set; }
     }
+
 
     public sealed partial class EditGroupWindow : WinUIEx.WindowEx {
         public int GroupId { get; private set; }
@@ -234,22 +238,21 @@ namespace AppGroup {
                 GroupHeader.IsEnabled = true;
             }
         }
-
         private async Task LoadGroupDataAsync(int groupId) {
-            await Task.Run(async () => {
+            await Task.Run(async () =>
+            {
                 string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
                 if (File.Exists(jsonFilePath)) {
                     string jsonContent = await File.ReadAllTextAsync(jsonFilePath);
                     JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
 
                     if (jsonObject.AsObject().TryGetPropertyValue(groupId.ToString(), out JsonNode groupNode)) {
-                        // Existing code to handle the case when groupId is found
                         groupName = groupNode["groupName"]?.GetValue<string>();
                         int groupCol = groupNode["groupCol"]?.GetValue<int>() ?? 0;
                         string groupIcon = IconHelper.FindOrigIcon(groupNode["groupIcon"]?.GetValue<string>());
                         bool groupHeader = groupNode["groupHeader"]?.GetValue<bool>() ?? false;
 
-                        JsonArray paths = groupNode["path"]?.AsArray();
+                        JsonObject paths = groupNode["path"]?.AsObject();
 
                         string tempSubfolderPath = Path.Combine(Path.GetTempPath(), "AppGroup");
                         if (!Directory.Exists(tempSubfolderPath)) {
@@ -266,7 +269,8 @@ namespace AppGroup {
 
                         Console.WriteLine("Temporary file path: " + tempIcon);
 
-                        DispatcherQueue.TryEnqueue(() => {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
                             GroupHeader.IsOn = groupHeader;
                             if (!string.IsNullOrEmpty(groupName)) {
                                 GroupNameTextBox.Text = groupName;
@@ -275,7 +279,8 @@ namespace AppGroup {
 
                         if (groupCol > 0) {
                             if (paths != null) {
-                                DispatcherQueue.TryEnqueue(() => {
+                                DispatcherQueue.TryEnqueue(() =>
+                                {
                                     for (int i = 1; i <= paths.Count; i++) {
                                         GroupColComboBox.Items.Add(i.ToString());
                                     }
@@ -285,7 +290,8 @@ namespace AppGroup {
                         }
 
                         if (!string.IsNullOrEmpty(groupIcon)) {
-                            DispatcherQueue.TryEnqueue(() => {
+                            DispatcherQueue.TryEnqueue(() =>
+                            {
                                 selectedIconPath = tempIcon;
                                 BitmapImage bitmapImage = new BitmapImage(new Uri(tempIcon));
                                 IconPreviewImage.Source = bitmapImage;
@@ -300,23 +306,27 @@ namespace AppGroup {
 
                         if (paths != null) {
                             foreach (var path in paths) {
-                                string filePath = path?.GetValue<string>();
+                                string filePath = path.Key;
                                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                     Debug.WriteLine($"Icon : {filePath}");
                                     var icon = await IconCache.GetIconPathAsync(filePath);
                                     await Task.Delay(50);
 
-                                    DispatcherQueue.TryEnqueue(() => {
+                                    DispatcherQueue.TryEnqueue(() =>
+                                    {
                                         ExeFiles.Add(new ExeFileModel {
                                             FileName = Path.GetFileName(filePath),
                                             Icon = icon,
-                                            FilePath = filePath
+                                            FilePath = filePath,
+                                            Tooltip = path.Value["tooltip"]?.GetValue<string>(),
+                                            Args = path.Value["args"]?.GetValue<string>()
                                         });
                                     });
                                 }
                             }
 
-                            DispatcherQueue.TryEnqueue(() => {
+                            DispatcherQueue.TryEnqueue(() =>
+                            {
                                 IconGridComboBox.Items.Clear();
                                 if (ExeFiles.Count >= 9) {
                                     IconGridComboBox.Items.Add("2");
@@ -330,14 +340,14 @@ namespace AppGroup {
                                 if (groupIcon.Contains("grid")) {
                                     IconGridComboBox.SelectedItem = groupIcon.Contains("grid3") ? "3" : "2";
                                     regularIcon = false;
-                                    //CreateGridIcon();
                                     IconGridComboBox.Visibility = Visibility.Visible;
                                 }
                             });
                         }
                     }
                     else {
-                        DispatcherQueue.TryEnqueue(() => {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
                             groupName = "";
                             GroupHeader.IsOn = false;
                             GroupNameTextBox.Text = string.Empty;
@@ -354,6 +364,126 @@ namespace AppGroup {
                 }
             });
         }
+
+        //private async Task LoadGroupDataAsync(int groupId) {
+        //    await Task.Run(async () => {
+        //        string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
+        //        if (File.Exists(jsonFilePath)) {
+        //            string jsonContent = await File.ReadAllTextAsync(jsonFilePath);
+        //            JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
+
+        //            if (jsonObject.AsObject().TryGetPropertyValue(groupId.ToString(), out JsonNode groupNode)) {
+        //                // Existing code to handle the case when groupId is found
+        //                groupName = groupNode["groupName"]?.GetValue<string>();
+        //                int groupCol = groupNode["groupCol"]?.GetValue<int>() ?? 0;
+        //                string groupIcon = IconHelper.FindOrigIcon(groupNode["groupIcon"]?.GetValue<string>());
+        //                bool groupHeader = groupNode["groupHeader"]?.GetValue<bool>() ?? false;
+
+        //                JsonArray paths = groupNode["path"]?.AsArray();
+
+        //                string tempSubfolderPath = Path.Combine(Path.GetTempPath(), "AppGroup");
+        //                if (!Directory.Exists(tempSubfolderPath)) {
+        //                    Directory.CreateDirectory(tempSubfolderPath);
+        //                }
+        //                string uniqueFolderName = new DirectoryInfo(Path.GetDirectoryName(groupIcon)).Name;
+        //                string uniqueFolderPath = Path.Combine(tempSubfolderPath, uniqueFolderName);
+        //                if (!Directory.Exists(uniqueFolderPath)) {
+        //                    Directory.CreateDirectory(uniqueFolderPath);
+        //                }
+        //                string tempIcon = Path.Combine(uniqueFolderPath, Path.GetFileName(groupIcon));
+
+        //                await Task.Run(() => File.Copy(groupIcon, tempIcon, overwrite: true));
+
+        //                Console.WriteLine("Temporary file path: " + tempIcon);
+
+        //                DispatcherQueue.TryEnqueue(() => {
+        //                    GroupHeader.IsOn = groupHeader;
+        //                    if (!string.IsNullOrEmpty(groupName)) {
+        //                        GroupNameTextBox.Text = groupName;
+        //                    }
+        //                });
+
+        //                if (groupCol > 0) {
+        //                    if (paths != null) {
+        //                        DispatcherQueue.TryEnqueue(() => {
+        //                            for (int i = 1; i <= paths.Count; i++) {
+        //                                GroupColComboBox.Items.Add(i.ToString());
+        //                            }
+        //                            GroupColComboBox.SelectedItem = groupCol.ToString();
+        //                        });
+        //                    }
+        //                }
+
+        //                if (!string.IsNullOrEmpty(groupIcon)) {
+        //                    DispatcherQueue.TryEnqueue(() => {
+        //                        selectedIconPath = tempIcon;
+        //                        BitmapImage bitmapImage = new BitmapImage(new Uri(tempIcon));
+        //                        IconPreviewImage.Source = bitmapImage;
+        //                        IconPreviewBorder.Visibility = Visibility.Visible;
+        //                        ApplicationCount.Text = paths.Count > 1
+        //                            ? paths.Count.ToString() + " Items"
+        //                            : paths.Count == 1
+        //                            ? "1 Item"
+        //                            : "";
+        //                    });
+        //                }
+
+        //                if (paths != null) {
+        //                    foreach (var path in paths) {
+        //                        string filePath = path?.GetValue<string>();
+        //                        if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                            Debug.WriteLine($"Icon : {filePath}");
+        //                            var icon = await IconCache.GetIconPathAsync(filePath);
+        //                            await Task.Delay(50);
+
+        //                            DispatcherQueue.TryEnqueue(() => {
+        //                                ExeFiles.Add(new ExeFileModel {
+        //                                    FileName = Path.GetFileName(filePath),
+        //                                    Icon = icon,
+        //                                    FilePath = filePath
+        //                                });
+        //                            });
+        //                        }
+        //                    }
+
+        //                    DispatcherQueue.TryEnqueue(() => {
+        //                        IconGridComboBox.Items.Clear();
+        //                        if (ExeFiles.Count >= 9) {
+        //                            IconGridComboBox.Items.Add("2");
+        //                            IconGridComboBox.Items.Add("3");
+        //                            IconGridComboBox.SelectedItem = "3";
+        //                        }
+        //                        else {
+        //                            IconGridComboBox.Items.Add("2");
+        //                            IconGridComboBox.SelectedItem = "2";
+        //                        }
+        //                        if (groupIcon.Contains("grid")) {
+        //                            IconGridComboBox.SelectedItem = groupIcon.Contains("grid3") ? "3" : "2";
+        //                            regularIcon = false;
+        //                            //CreateGridIcon();
+        //                            IconGridComboBox.Visibility = Visibility.Visible;
+        //                        }
+        //                    });
+        //                }
+        //            }
+        //            else {
+        //                DispatcherQueue.TryEnqueue(() => {
+        //                    groupName = "";
+        //                    GroupHeader.IsOn = false;
+        //                    GroupNameTextBox.Text = string.Empty;
+        //                    GroupColComboBox.Items.Clear();
+        //                    selectedIconPath = string.Empty;
+        //                    IconPreviewImage.Source = new BitmapImage(new Uri("ms-appx:///default_preview.png"));
+
+        //                    ApplicationCount.Text = string.Empty;
+        //                    ExeFiles.Clear();
+        //                    IconGridComboBox.Items.Clear();
+        //                    IconGridComboBox.Visibility = Visibility.Collapsed;
+        //                });
+        //            }
+        //        }
+        //    });
+        //}
 
         private async void CreateGridIcon() {
             var selectedItem = IconGridComboBox.SelectedItem;
@@ -390,7 +520,9 @@ namespace AppGroup {
         private void CloseDialog(object sender, RoutedEventArgs e) {
             CustomDialog.Hide();
         }
-
+        private void CloseEditDialog(object sender, RoutedEventArgs e) {
+            EditItemDialog.Hide();
+        }
         private void GridClick(object sender, RoutedEventArgs e) {
             if (ExeListView.Items.Count == 0) {
                 regularIcon = false;
@@ -416,15 +548,27 @@ namespace AppGroup {
                 InitializeWithWindow.Initialize(openPicker, hwnd);
                 openPicker.FileTypeFilter.Add(".jpeg");
                 openPicker.FileTypeFilter.Add(".jpg");
+                openPicker.FileTypeFilter.Add(".exe");
                 openPicker.FileTypeFilter.Add(".png");
                 openPicker.FileTypeFilter.Add(".ico");
                 StorageFile file = await openPicker.PickSingleFileAsync();
 
+                //if file is exe use    var icon = await IconCache.GetIconPathAsync(file.Path);
                 if (file != null) {
                     selectedIconPath = file.Path;
                     BitmapImage bitmapImage = new BitmapImage();
-                    using (var stream = await file.OpenReadAsync()) {
-                        await bitmapImage.SetSourceAsync(stream);
+                    if (file.FileType == ".exe") {
+                        var iconPath = await IconCache.GetIconPathAsync(file.Path);
+                        if (!string.IsNullOrEmpty(iconPath)) {
+                            using (var stream = File.OpenRead(iconPath)) {
+                                await bitmapImage.SetSourceAsync(stream.AsRandomAccessStream());
+                            }
+                        }
+                    }
+                    else {
+                        using (var stream = await file.OpenReadAsync()) {
+                            await bitmapImage.SetSourceAsync(stream);
+                        }
                     }
 
                     IconPreviewImage.Source = bitmapImage;
@@ -459,7 +603,7 @@ namespace AppGroup {
 
             foreach (var file in files) {
                 var icon = await IconCache.GetIconPathAsync(file.Path);
-                ExeFiles.Add(new ExeFileModel { FileName = file.Name, Icon = icon, FilePath = file.Path });
+                ExeFiles.Add(new ExeFileModel { FileName = file.Name, Icon = icon, FilePath = file.Path, Tooltip = "", Args = "" });
             }
 
             ExeListView.ItemsSource = ExeFiles;
@@ -509,6 +653,67 @@ namespace AppGroup {
                 }
             }
         }
+        //private async void BrowseFiles() {
+        //    var openPicker = new FileOpenPicker();
+        //    openPicker.SuggestedStartLocation = PickerLocationId.Desktop;
+        //    openPicker.FileTypeFilter.Add(".exe");
+        //    openPicker.FileTypeFilter.Add(".lnk");
+
+        //    var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        //    InitializeWithWindow.Initialize(openPicker, hwnd);
+
+        //    var files = await openPicker.PickMultipleFilesAsync();
+        //    if (files == null || files.Count == 0) return;
+
+        //    foreach (var file in files) {
+        //        var icon = await IconCache.GetIconPathAsync(file.Path);
+        //        ExeFiles.Add(new ExeFileModel { FileName = file.Name, Icon = icon, FilePath = file.Path, Tooltip = "", Args = "" });
+        //    }
+
+        //    ExeListView.ItemsSource = ExeFiles;
+        //    lastSelectedItem = GroupColComboBox.SelectedItem as string;
+        //    ApplicationCount.Text = ExeListView.Items.Count > 1
+        //                      ? ExeListView.Items.Count.ToString() + " Items"
+        //                      : ExeListView.Items.Count == 1
+        //                      ? "1 Item"
+        //                      : "";
+
+        //    IconGridComboBox.Items.Clear();
+        //    if (ExeFiles.Count >= 9) {
+        //        IconGridComboBox.Items.Add("2");
+        //        IconGridComboBox.Items.Add("3");
+
+        //        IconGridComboBox.SelectedItem = "3";
+        //    }
+        //    else {
+        //        IconGridComboBox.Items.Add("2");
+        //        IconGridComboBox.SelectedItem = "2";
+        //    }
+
+        //    GroupColComboBox.Items.Clear();
+        //    for (int i = 1; i <= ExeFiles.Count; i++) {
+        //        GroupColComboBox.Items.Add(i.ToString());
+        //    }
+
+        //    if (ExeFiles.Count > 3) {
+        //        if (lastSelectedItem != null) {
+        //            GroupColComboBox.SelectedItem = lastSelectedItem;
+        //        }
+        //        else {
+        //            GroupColComboBox.SelectedItem = "3";
+        //        }
+        //    }
+        //    else {
+        //        GroupColComboBox.SelectedItem = ExeFiles.Count.ToString();
+        //    }
+
+        //    if (!regularIcon) {
+        //        IconGridComboBox.Visibility = Visibility.Visible;
+        //        if (CustomDialog.XamlRoot != null) {
+        //            CustomDialog.Hide();
+        //        }
+        //    }
+        //}
 
         private void ExeListView_SelectionChanged(object sender, SelectionChangedEventArgs e) {
 
@@ -518,6 +723,33 @@ namespace AppGroup {
         private void ExeListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
             if (args.DropResult == DataPackageOperation.Move && IconGridComboBox.SelectedItem != null && !regularIcon) {
                 //CreateGridIcon();
+            }
+        }
+        private ExeFileModel CurrentItem { get; set; }
+        private async void EditItem_Click(object sender, RoutedEventArgs e) {
+            if (sender is Button button && button.Tag is ExeFileModel item) {
+
+                CurrentItem = item;
+               
+                EditTitle.Text = item.FileName;
+                TooltipTextBox.Text = item.Tooltip;
+                ArgsTextBox.Text = item.Args;
+
+                ContentDialogResult result = await EditItemDialog.ShowAsync();
+                //if (result == ContentDialogResult.Primary) {
+                //    item.Tooltip = TooltipTextBox.Text;
+                //    item.Args = ArgsTextBox.Text;
+                //}
+            }
+        }
+        private void EditItemSave_Click(object sender, RoutedEventArgs e) {
+            if (CurrentItem != null) {
+                // Update the item properties
+                CurrentItem.Tooltip = TooltipTextBox.Text;
+                CurrentItem.Args = ArgsTextBox.Text;
+
+                // Close the dialog
+                EditItemDialog.Hide();
             }
         }
 
@@ -582,7 +814,6 @@ namespace AppGroup {
                 }
             }
         }
-
         private async void CreateShortcut_Click(object sender, RoutedEventArgs e) {
             try {
                 string newGroupName = GroupNameTextBox.Text?.Trim();
@@ -600,14 +831,13 @@ namespace AppGroup {
                 string groupsFolder = Path.Combine(exeDirectory, "Groups");
                 Directory.CreateDirectory(groupsFolder);
 
-                string oldGroupName = GetOldGroupName(); // Implement this method to get the old group name
+                string oldGroupName = GetOldGroupName();
                 string oldGroupFolder = Path.Combine(groupsFolder, oldGroupName);
 
                 if (!string.IsNullOrEmpty(oldGroupName) && Directory.Exists(oldGroupFolder) && oldGroupName != newGroupName) {
                     Directory.Delete(oldGroupFolder, true);
                     await ShowDialog("Important", "Renaming a group requires re-pinning to the taskbar.");
                 }
-
 
                 string groupFolder = Path.Combine(groupsFolder, newGroupName);
                 Directory.CreateDirectory(groupFolder);
@@ -616,92 +846,448 @@ namespace AppGroup {
                 string uniqueFolderPath = Path.Combine(groupFolder, uniqueFolderName);
                 Directory.CreateDirectory(uniqueFolderPath);
 
-                // Set the folder attributes to hidden
                 File.SetAttributes(uniqueFolderPath, File.GetAttributes(uniqueFolderPath) | System.IO.FileAttributes.Hidden);
                 string shortcutPath = Path.Combine(groupFolder, $"{newGroupName}.lnk");
                 string targetPath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(exeDirectory, "AppGroup.exe");
 
                 string iconBaseName = $"{newGroupName}_{(regularIcon ? "regular" : (IconGridComboBox.SelectedItem?.ToString() == "3" ? "grid3" : "grid"))}";
                 string icoFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
-
-                bool iconSuccess = true;
-
-                if (Path.GetExtension(selectedIconPath).ToLower() == ".ico") {
-                    File.Copy(selectedIconPath, icoFilePath, true);
-                }
-                else {
-                    iconSuccess = IconHelper.ConvertToIco(selectedIconPath, icoFilePath);
-                }
-
-                if (!iconSuccess) {
-                    await ShowDialog("Error", "Failed to convert image to ICO format.");
-                    return;
-                }
+                string copiedImagePath; // Define the variable
 
                 string originalImageExtension = Path.GetExtension(selectedIconPath);
-                copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}{originalImageExtension}");
-                File.Copy(selectedIconPath, copiedImagePath, true);
 
-                //if (!File.Exists(shortcutPath) || await ConfirmOverwrite(shortcutPath) */) {
-                    IWshShell wshShell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+                if (originalImageExtension.Equals(".ico", StringComparison.OrdinalIgnoreCase)) {
+                    // If it's already an ICO, just copy it directly
+                    File.Copy(selectedIconPath, icoFilePath, true);
+                }
+                else if (originalImageExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase)) {
+                    // For EXE files, use GetIconPathAsync to extract the icon (which returns a PNG)
+                    string extractedPngPath = await IconCache.GetIconPathAsync(selectedIconPath);
+                    if (!string.IsNullOrEmpty(extractedPngPath)) {
+                        // Save the extracted PNG to the destination folder
+                        string pngFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.png");
+                        File.Copy(extractedPngPath, pngFilePath, true);
 
-                    shortcut.TargetPath = targetPath;
-                    shortcut.Arguments = $"\"{newGroupName}\"";
-                    shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
-                    shortcut.IconLocation = icoFilePath;
-                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                    shortcut.Save();
-
-
-
-
-
-                    bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
-                    if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
-                        string[] paths = ExeFiles.Select(file => file.FilePath).ToArray();
-
-                        JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
-
-                        if (tempIcon != null) {
-                            try {
-                                File.Delete(tempIcon);
-                                Console.WriteLine("TempIcon deleted successfully.");
-                            }
-                            catch (Exception ex) {
-                                await ShowDialog("Error", $"An error occurred: {ex.Message}");
-                            }
+                        // Convert the PNG to ICO
+                        bool iconSuccess = await IconHelper.ConvertToIco(pngFilePath, icoFilePath);
+                        if (!iconSuccess) {
+                            await ShowDialog("Error", "Failed to convert extracted PNG to ICO format.");
+                            return;
                         }
-
-                        string[] oldFolders = Directory.GetDirectories(groupFolder);
-                        foreach (string oldFolder in oldFolders) {
-                            if (oldFolder != uniqueFolderPath) {
-                                Directory.Delete(oldFolder, true);
-                            }
-                        }
-
-                        //var dialog = new ContentDialog {
-                        //    Title = "Success",
-                        //    Content = "Shortcut created successfully.",
-                        //    CloseButtonText = "OK",
-                        //    PrimaryButtonText = "Open File Location",
-                        //    XamlRoot = this.Content.XamlRoot // Ensure this is set in a UI context
-                        //};
-
-                        //dialog.PrimaryButtonClick += (s, e) => JsonConfigHelper.OpenGroupFolder(GroupId);
-
-                        //await dialog.ShowAsync();
-                        Close();
                     }
                     else {
-                        await ShowDialog("Error", "Please select a valid group column value.");
+                        await ShowDialog("Error", "Failed to extract icon from EXE file.");
+                        return;
                     }
-                //}
+                }
+                else {
+                    // For all other image types (PNG, JPG, etc.), convert to ICO
+                    bool iconSuccess = await IconHelper.ConvertToIco(selectedIconPath, icoFilePath);
+                    if (!iconSuccess) {
+                        await ShowDialog("Error", "Failed to convert image to ICO format.");
+                        return;
+                    }
+                }
+
+                // Copy the original image for reference/future use (except for EXE files, which we've already handled)
+                if (!originalImageExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase)) {
+                    copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}{originalImageExtension}");
+                    File.Copy(selectedIconPath, copiedImagePath, true);
+                }
+
+                IWshShell wshShell = new WshShell();
+                IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+
+                shortcut.TargetPath = targetPath;
+                shortcut.Arguments = $"\"{newGroupName}\"";
+                shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
+                shortcut.IconLocation = icoFilePath;
+                shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+                shortcut.Save();
+
+                bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
+                if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
+                    Dictionary<string, (string tooltip, string args)> paths = ExeFiles.ToDictionary(
+                        file => file.FilePath,
+                        file => (file.Tooltip, file.Args)
+                    );
+
+                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
+
+                    if (tempIcon != null) {
+                        try {
+                            File.Delete(tempIcon);
+                            Console.WriteLine("TempIcon deleted successfully.");
+                        }
+                        catch (Exception ex) {
+                            await ShowDialog("Error", $"An error occurred: {ex.Message}");
+                        }
+                    }
+
+                    string[] oldFolders = Directory.GetDirectories(groupFolder);
+                    foreach (string oldFolder in oldFolders) {
+                        if (oldFolder != uniqueFolderPath) {
+                            Directory.Delete(oldFolder, true);
+                        }
+                    }
+                    IntPtr hWnd = NativeMethods.FindWindow(null, "App Group");
+                    if (hWnd != IntPtr.Zero) {
+
+                        NativeMethods.SetForegroundWindow(hWnd);
+                    }
+                        Close();
+                }
+                else {
+                    await ShowDialog("Error", "Please select a valid group column value.");
+                }
             }
             catch (Exception ex) {
                 await ShowDialog("Error", $"An error occurred: {ex.Message}");
             }
         }
+        //private async void CreateShortcut_Click(object sender, RoutedEventArgs e) {
+        //    try {
+        //        string newGroupName = GroupNameTextBox.Text?.Trim();
+        //        if (string.IsNullOrEmpty(newGroupName)) {
+        //            await ShowDialog("Error", "Please enter a group name.");
+        //            return;
+        //        }
+
+        //        if (string.IsNullOrEmpty(selectedIconPath)) {
+        //            await ShowDialog("Error", "Please select an icon.");
+        //            return;
+        //        }
+
+        //        string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
+        //        string groupsFolder = Path.Combine(exeDirectory, "Groups");
+        //        Directory.CreateDirectory(groupsFolder);
+
+        //        string oldGroupName = GetOldGroupName();
+        //        string oldGroupFolder = Path.Combine(groupsFolder, oldGroupName);
+
+        //        if (!string.IsNullOrEmpty(oldGroupName) && Directory.Exists(oldGroupFolder) && oldGroupName != newGroupName) {
+        //            Directory.Delete(oldGroupFolder, true);
+        //            await ShowDialog("Important", "Renaming a group requires re-pinning to the taskbar.");
+        //        }
+
+        //        string groupFolder = Path.Combine(groupsFolder, newGroupName);
+        //        Directory.CreateDirectory(groupFolder);
+
+        //        string uniqueFolderName = newGroupName;
+        //        string uniqueFolderPath = Path.Combine(groupFolder, uniqueFolderName);
+        //        Directory.CreateDirectory(uniqueFolderPath);
+
+        //        File.SetAttributes(uniqueFolderPath, File.GetAttributes(uniqueFolderPath) | System.IO.FileAttributes.Hidden);
+        //        string shortcutPath = Path.Combine(groupFolder, $"{newGroupName}.lnk");
+        //        string targetPath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(exeDirectory, "AppGroup.exe");
+
+        //        string iconBaseName = $"{newGroupName}_{(regularIcon ? "regular" : (IconGridComboBox.SelectedItem?.ToString() == "3" ? "grid3" : "grid"))}";
+        //        string icoFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
+
+        //        bool iconSuccess = true;
+
+        //        if (Path.GetExtension(selectedIconPath).ToLower() == ".ico") {
+        //            File.Copy(selectedIconPath, icoFilePath, true);
+        //        }
+        //        else {
+        //            iconSuccess = await IconHelper.ConvertToIco(selectedIconPath, icoFilePath);
+        //        }
+
+        //        if (!iconSuccess) {
+        //            await ShowDialog("Error", "Failed to convert image to ICO format.");
+        //            return;
+        //        }
+
+        //        string originalImageExtension = Path.GetExtension(selectedIconPath);
+        //        if (originalImageExtension.Equals(".exe", StringComparison.OrdinalIgnoreCase)) {
+        //            // For EXE files, use GetIconPathAsync to extract the icon
+        //            string extractedIconPath = await IconCache.GetIconPathAsync(selectedIconPath);
+        //            if (!string.IsNullOrEmpty(extractedIconPath)) {
+        //                // Copy the extracted icon to the destination folder
+        //                copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
+        //                File.Copy(extractedIconPath, copiedImagePath, true);
+        //            }
+        //            else {
+        //                await ShowDialog("Error", "Failed to convert EXE to ICO format.");
+
+        //            }
+        //        }
+        //        else {
+        //            // For non-EXE files, copy the file directly as before
+        //            copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}{originalImageExtension}");
+        //            File.Copy(selectedIconPath, copiedImagePath, true);
+        //        }
+        //        IWshShell wshShell = new WshShell();
+        //        IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+
+        //        shortcut.TargetPath = targetPath;
+        //        shortcut.Arguments = $"\"{newGroupName}\"";
+        //        shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
+        //        shortcut.IconLocation = icoFilePath;
+        //        shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+        //        shortcut.Save();
+
+        //        bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
+        //        if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
+        //            Dictionary<string, (string tooltip, string args)> paths = ExeFiles.ToDictionary(
+        //                file => file.FilePath,
+        //                file => (file.Tooltip, file.Args)
+        //            );
+
+        //            JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
+
+        //            if (tempIcon != null) {
+        //                try {
+        //                    File.Delete(tempIcon);
+        //                    Console.WriteLine("TempIcon deleted successfully.");
+        //                }
+        //                catch (Exception ex) {
+        //                    await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //                }
+        //            }
+
+        //            string[] oldFolders = Directory.GetDirectories(groupFolder);
+        //            foreach (string oldFolder in oldFolders) {
+        //                if (oldFolder != uniqueFolderPath) {
+        //                    Directory.Delete(oldFolder, true);
+        //                }
+        //            }
+
+        //            Close();
+        //        }
+        //        else {
+        //            await ShowDialog("Error", "Please select a valid group column value.");
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //    }
+        //}
+
+
+        //private async void CreateShortcut_Click(object sender, RoutedEventArgs e) {
+        //    try {
+        //        string newGroupName = GroupNameTextBox.Text?.Trim();
+        //        if (string.IsNullOrEmpty(newGroupName)) {
+        //            await ShowDialog("Error", "Please enter a group name.");
+        //            return;
+        //        }
+
+        //        if (string.IsNullOrEmpty(selectedIconPath)) {
+        //            await ShowDialog("Error", "Please select an icon.");
+        //            return;
+        //        }
+
+        //        string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
+        //        string groupsFolder = Path.Combine(exeDirectory, "Groups");
+        //        Directory.CreateDirectory(groupsFolder);
+
+        //        string oldGroupName = GetOldGroupName();
+        //        string oldGroupFolder = Path.Combine(groupsFolder, oldGroupName);
+
+        //        if (!string.IsNullOrEmpty(oldGroupName) && Directory.Exists(oldGroupFolder) && oldGroupName != newGroupName) {
+        //            Directory.Delete(oldGroupFolder, true);
+        //            await ShowDialog("Important", "Renaming a group requires re-pinning to the taskbar.");
+        //        }
+
+        //        string groupFolder = Path.Combine(groupsFolder, newGroupName);
+        //        Directory.CreateDirectory(groupFolder);
+
+        //        string uniqueFolderName = newGroupName;
+        //        string uniqueFolderPath = Path.Combine(groupFolder, uniqueFolderName);
+        //        Directory.CreateDirectory(uniqueFolderPath);
+
+        //        File.SetAttributes(uniqueFolderPath, File.GetAttributes(uniqueFolderPath) | System.IO.FileAttributes.Hidden);
+        //        string shortcutPath = Path.Combine(groupFolder, $"{newGroupName}.lnk");
+        //        string targetPath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(exeDirectory, "AppGroup.exe");
+
+        //        string iconBaseName = $"{newGroupName}_{(regularIcon ? "regular" : (IconGridComboBox.SelectedItem?.ToString() == "3" ? "grid3" : "grid"))}";
+        //        string icoFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
+
+        //        bool iconSuccess = true;
+
+        //        if (Path.GetExtension(selectedIconPath).ToLower() == ".ico") {
+        //            File.Copy(selectedIconPath, icoFilePath, true);
+        //        }
+        //        else {
+        //            iconSuccess = IconHelper.ConvertToIco(selectedIconPath, icoFilePath);
+        //        }
+
+        //        if (!iconSuccess) {
+        //            await ShowDialog("Error", "Failed to convert image to ICO format.");
+        //            return;
+        //        }
+
+        //        string originalImageExtension = Path.GetExtension(selectedIconPath);
+        //        copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}{originalImageExtension}");
+        //        File.Copy(selectedIconPath, copiedImagePath, true);
+
+        //        IWshShell wshShell = new WshShell();
+        //        IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+
+        //        shortcut.TargetPath = targetPath;
+        //        shortcut.Arguments = $"\"{newGroupName}\"";
+        //        shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
+        //        shortcut.IconLocation = icoFilePath;
+        //        shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+        //        shortcut.Save();
+
+        //        bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
+        //        if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
+        //            Dictionary<string, (string tooltip, string args)> paths = ExeFiles.ToDictionary(
+        //                file => file.FilePath,
+        //                file => (file.Tooltip, file.Args)
+        //            );
+
+        //            JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
+
+        //            if (tempIcon != null) {
+        //                try {
+        //                    File.Delete(tempIcon);
+        //                    Console.WriteLine("TempIcon deleted successfully.");
+        //                }
+        //                catch (Exception ex) {
+        //                    await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //                }
+        //            }
+
+        //            string[] oldFolders = Directory.GetDirectories(groupFolder);
+        //            foreach (string oldFolder in oldFolders) {
+        //                if (oldFolder != uniqueFolderPath) {
+        //                    Directory.Delete(oldFolder, true);
+        //                }
+        //            }
+
+        //            Close();
+        //        }
+        //        else {
+        //            await ShowDialog("Error", "Please select a valid group column value.");
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //    }
+        //}
+
+        //private async void CreateShortcut_Click(object sender, RoutedEventArgs e) {
+        //    try {
+        //        string newGroupName = GroupNameTextBox.Text?.Trim();
+        //        if (string.IsNullOrEmpty(newGroupName)) {
+        //            await ShowDialog("Error", "Please enter a group name.");
+        //            return;
+        //        }
+
+        //        if (string.IsNullOrEmpty(selectedIconPath)) {
+        //            await ShowDialog("Error", "Please select an icon.");
+        //            return;
+        //        }
+
+        //        string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
+        //        string groupsFolder = Path.Combine(exeDirectory, "Groups");
+        //        Directory.CreateDirectory(groupsFolder);
+
+        //        string oldGroupName = GetOldGroupName(); // Implement this method to get the old group name
+        //        string oldGroupFolder = Path.Combine(groupsFolder, oldGroupName);
+
+        //        if (!string.IsNullOrEmpty(oldGroupName) && Directory.Exists(oldGroupFolder) && oldGroupName != newGroupName) {
+        //            Directory.Delete(oldGroupFolder, true);
+        //            await ShowDialog("Important", "Renaming a group requires re-pinning to the taskbar.");
+        //        }
+
+
+        //        string groupFolder = Path.Combine(groupsFolder, newGroupName);
+        //        Directory.CreateDirectory(groupFolder);
+
+        //        string uniqueFolderName = newGroupName;
+        //        string uniqueFolderPath = Path.Combine(groupFolder, uniqueFolderName);
+        //        Directory.CreateDirectory(uniqueFolderPath);
+
+        //        // Set the folder attributes to hidden
+        //        File.SetAttributes(uniqueFolderPath, File.GetAttributes(uniqueFolderPath) | System.IO.FileAttributes.Hidden);
+        //        string shortcutPath = Path.Combine(groupFolder, $"{newGroupName}.lnk");
+        //        string targetPath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(exeDirectory, "AppGroup.exe");
+
+        //        string iconBaseName = $"{newGroupName}_{(regularIcon ? "regular" : (IconGridComboBox.SelectedItem?.ToString() == "3" ? "grid3" : "grid"))}";
+        //        string icoFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
+
+        //        bool iconSuccess = true;
+
+        //        if (Path.GetExtension(selectedIconPath).ToLower() == ".ico") {
+        //            File.Copy(selectedIconPath, icoFilePath, true);
+        //        }
+        //        else {
+        //            iconSuccess = IconHelper.ConvertToIco(selectedIconPath, icoFilePath);
+        //        }
+
+        //        if (!iconSuccess) {
+        //            await ShowDialog("Error", "Failed to convert image to ICO format.");
+        //            return;
+        //        }
+
+        //        string originalImageExtension = Path.GetExtension(selectedIconPath);
+        //        copiedImagePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}{originalImageExtension}");
+        //        File.Copy(selectedIconPath, copiedImagePath, true);
+
+        //        //if (!File.Exists(shortcutPath) || await ConfirmOverwrite(shortcutPath) */) {
+        //            IWshShell wshShell = new WshShell();
+        //            IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+
+        //            shortcut.TargetPath = targetPath;
+        //            shortcut.Arguments = $"\"{newGroupName}\"";
+        //            shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
+        //            shortcut.IconLocation = icoFilePath;
+        //            shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+        //            shortcut.Save();
+
+
+
+
+
+        //            bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
+        //            if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
+        //                string[] paths = ExeFiles.Select(file => file.FilePath).ToArray();
+
+        //                JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
+
+        //                if (tempIcon != null) {
+        //                    try {
+        //                        File.Delete(tempIcon);
+        //                        Console.WriteLine("TempIcon deleted successfully.");
+        //                    }
+        //                    catch (Exception ex) {
+        //                        await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //                    }
+        //                }
+
+        //                string[] oldFolders = Directory.GetDirectories(groupFolder);
+        //                foreach (string oldFolder in oldFolders) {
+        //                    if (oldFolder != uniqueFolderPath) {
+        //                        Directory.Delete(oldFolder, true);
+        //                    }
+        //                }
+
+        //                //var dialog = new ContentDialog {
+        //                //    Title = "Success",
+        //                //    Content = "Shortcut created successfully.",
+        //                //    CloseButtonText = "OK",
+        //                //    PrimaryButtonText = "Open File Location",
+        //                //    XamlRoot = this.Content.XamlRoot // Ensure this is set in a UI context
+        //                //};
+
+        //                //dialog.PrimaryButtonClick += (s, e) => JsonConfigHelper.OpenGroupFolder(GroupId);
+
+        //                //await dialog.ShowAsync();
+        //                Close();
+        //            }
+        //            else {
+        //                await ShowDialog("Error", "Please select a valid group column value.");
+        //            }
+        //        //}
+        //    }
+        //    catch (Exception ex) {
+        //        await ShowDialog("Error", $"An error occurred: {ex.Message}");
+        //    }
+        //}
 
         // Implement this method to get the old group name
         private string GetOldGroupName() {

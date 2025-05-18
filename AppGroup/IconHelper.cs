@@ -511,8 +511,7 @@ namespace AppGroup {
             }
         }
 
-
-        public static bool ConvertToIco(string sourcePath, string icoFilePath) {
+        public static async Task<bool> ConvertToIco(string sourcePath, string icoFilePath) {
             if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(icoFilePath)) {
                 Debug.WriteLine("Invalid source or destination path.");
                 return false;
@@ -524,6 +523,18 @@ namespace AppGroup {
             }
 
             try {
+                string tempIconPath = null;
+
+                // If the source file is an .exe, extract the icon first
+                if (Path.GetExtension(sourcePath).Equals(".exe", StringComparison.OrdinalIgnoreCase)) {
+                    tempIconPath = await IconCache.GetIconPathAsync(sourcePath);
+                    if (string.IsNullOrEmpty(tempIconPath)) {
+                        Debug.WriteLine("Failed to extract icon from .exe file.");
+                        return false;
+                    }
+                    sourcePath = tempIconPath;
+                }
+
                 using (System.Drawing.Image originalImage = System.Drawing.Image.FromFile(sourcePath)) {
                     Size[] sizes = new Size[] { new Size(256, 256), new Size(128, 128), new Size(64, 64), new Size(32, 32), new Size(16, 16) };
 
@@ -570,6 +581,12 @@ namespace AppGroup {
                         bw.Flush();
                     }
                 }
+
+                // Clean up the temporary icon file if it was created
+                if (!string.IsNullOrEmpty(tempIconPath) && File.Exists(tempIconPath)) {
+                    File.Delete(tempIconPath);
+                }
+
                 return true;
             }
             catch (Exception ex) {
@@ -577,6 +594,73 @@ namespace AppGroup {
                 return false;
             }
         }
+
+      
+        //public static bool ConvertToIco(string sourcePath, string icoFilePath) {
+        //    if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(icoFilePath)) {
+        //        Debug.WriteLine("Invalid source or destination path.");
+        //        return false;
+        //    }
+
+        //    if (!File.Exists(sourcePath)) {
+        //        Debug.WriteLine($"Source file not found: {sourcePath}");
+        //        return false;
+        //    }
+
+        //    try {
+        //        using (System.Drawing.Image originalImage = System.Drawing.Image.FromFile(sourcePath)) {
+        //            Size[] sizes = new Size[] { new Size(256, 256), new Size(128, 128), new Size(64, 64), new Size(32, 32), new Size(16, 16) };
+
+        //            using (FileStream fs = new FileStream(icoFilePath, FileMode.Create)) {
+        //                BinaryWriter bw = new BinaryWriter(fs);
+        //                bw.Write((short)0);
+        //                bw.Write((short)1);
+        //                bw.Write((short)sizes.Length);
+
+        //                int headerSize = 6 + (16 * sizes.Length);
+        //                int dataOffset = headerSize;
+        //                List<byte[]> imageDataList = new List<byte[]>();
+
+        //                foreach (Size size in sizes) {
+        //                    using (Bitmap bitmap = new Bitmap(originalImage, size)) {
+        //                        using (MemoryStream ms = new MemoryStream()) {
+        //                            bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+        //                            byte[] imageData = ms.ToArray();
+        //                            imageDataList.Add(imageData);
+        //                        }
+        //                    }
+        //                }
+
+        //                for (int i = 0; i < sizes.Length; i++) {
+        //                    Size size = sizes[i];
+        //                    byte[] imageData = imageDataList[i];
+
+        //                    bw.Write((byte)size.Width);
+        //                    bw.Write((byte)size.Height);
+        //                    bw.Write((byte)0);
+        //                    bw.Write((byte)0);
+        //                    bw.Write((short)1);
+        //                    bw.Write((short)32);
+        //                    bw.Write((int)imageData.Length);
+        //                    bw.Write((int)dataOffset);
+
+        //                    dataOffset += imageData.Length;
+        //                }
+
+        //                foreach (byte[] imageData in imageDataList) {
+        //                    bw.Write(imageData);
+        //                }
+
+        //                bw.Flush();
+        //            }
+        //        }
+        //        return true;
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error converting to ICO: {ex.Message}");
+        //        return false;
+        //    }
+        //}
 
         public async Task<string> CreateGridIconAsync(
   List<ExeFileModel> selectedItems,

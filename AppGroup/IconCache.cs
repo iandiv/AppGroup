@@ -11,7 +11,7 @@ namespace AppGroup
 {
 
     public static class IconCache {
-        private static readonly Dictionary<string, string> _iconCache = new Dictionary<string, string>();
+        public static  Dictionary<string, string> _iconCache = new Dictionary<string, string>();
         private static readonly string CacheFilePath = GetCacheFilePath();
 
         static IconCache() {
@@ -91,7 +91,7 @@ namespace AppGroup
 
             return null;
         }
-        private static void SaveIconCache() {
+        public static void SaveIconCache() {
             try {
                 string json = JsonSerializer.Serialize(_iconCache, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(CacheFilePath, json);
@@ -102,7 +102,7 @@ namespace AppGroup
             }
         }
 
-        private static string ComputeFileCacheKey(string filePath) {
+        public static string ComputeFileCacheKey(string filePath) {
             var fileInfo = new FileInfo(filePath);
             return $"{filePath}_{fileInfo.LastWriteTimeUtc}_{fileInfo.Length}";
         }

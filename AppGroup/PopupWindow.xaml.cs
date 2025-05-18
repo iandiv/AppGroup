@@ -21,6 +21,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Printing;
 using System.IO;
 using System.Linq;
+using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -28,6 +29,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Graphics;
+using Windows.UI.ViewManagement;
 using WinRT.Interop;
 using WinUIEx;
 using File = System.IO.File;
@@ -35,18 +37,19 @@ using File = System.IO.File;
 namespace AppGroup {
 
     public class GroupData {
-        public List<string> path { get; set; }
+        public Dictionary<string, Dictionary<string, string>> path { get; set; }
         public string groupIcon { get; set; }
         public string groupName { get; set; }
         public bool groupHeader { get; set; }
         public int groupCol { get; set; }
         public int groupId { get; set; }
     }
+
     public class PopupItem : INotifyPropertyChanged {
         public string Path { get; set; }
         public string Name { get; set; }
         public string ToolTip { get; set; }
-        //public BitmapImage Icon { get; set; }
+        public string Args { get; set; }
         private BitmapImage _icon;
         public BitmapImage Icon {
             get => _icon;
@@ -106,11 +109,39 @@ namespace AppGroup {
             // Initialize templates
             InitializeTemplates();
 
+
+
             // Load on activation
             this.Activated += Window_Activated;
         }
+        private void UiSettings_ColorValuesChanged(UISettings sender, object args) {
+            // Update the MainGrid background color based on the current settings
+            UpdateMainGridBackground(sender);
+        }
 
-        // Initialize UI templates - improves performance by caching these
+        private void UpdateMainGridBackground(UISettings uiSettings) {
+            // Check if the accent color is being shown on Start and taskbar
+
+            if (IsAccentColorOnStartTaskbarEnabled()) {
+                MainGrid.Background = Application.Current.Resources["AccentAcrylicInAppFillColorBaseBrush"] as Microsoft.UI.Xaml.Media.AcrylicBrush;
+            }
+            else {
+                MainGrid.Background = null;
+            }
+        }
+
+        private bool IsAccentColorOnStartTaskbarEnabled() {
+            using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")) {
+                if (key != null) {
+                    object value = key.GetValue("ColorPrevalence");
+                    if (value != null && (int)value == 1) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         private void InitializeTemplates() {
             // Create item template once
             _itemTemplate = (DataTemplate)XamlReader.Load(
@@ -299,20 +330,66 @@ namespace AppGroup {
         }
 
         // Load grid items efficiently
-        private void LoadGridItems(List<string> paths) {
-            foreach (string path in paths) {
-                string displayName = GetDisplayName(path);
+        //private void LoadGridItems(List<string> paths) {
+        //    foreach (string path in paths) {
+        //        string displayName = GetDisplayName(path);
+        //        var popupItem = new PopupItem {
+        //            Path = path,
+        //            Name = Path.GetFileNameWithoutExtension(path),
+        //            ToolTip = displayName,
+        //            Icon = null
+        //        };
+        //        PopupItems.Add(popupItem);
+
+        //        _ = LoadIconAsync(popupItem, path);
+        //    }
+        //}
+        //private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
+        //    foreach (var pathEntry in pathsWithProperties) {
+        //        string path = pathEntry.Key;
+        //        var properties = pathEntry.Value;
+
+        //        // Get displayName from properties if available, otherwise use default method
+        //        string tooltip = properties.ContainsKey("tooltip")
+        //            ? properties["tooltip"]
+        //            : GetDisplayName(path);
+
+        //        var popupItem = new PopupItem {
+        //            Path = path,
+        //            Name = Path.GetFileNameWithoutExtension(path), // Use the custom displayName instead of extracting from path
+        //            ToolTip = tooltip, // You might want to keep the full path as tooltip or use a different property
+        //            Icon = null,
+        //            Args = properties.ContainsKey("Args") ? properties["Args"] : "" // Add the Args property
+        //        };
+
+        //        PopupItems.Add(popupItem);
+        //        _ = LoadIconAsync(popupItem, path);
+        //    }
+        //}
+
+        private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
+            foreach (var pathEntry in pathsWithProperties) {
+                string path = pathEntry.Key;
+                var properties = pathEntry.Value;
+
+                // Get displayName from properties if available, otherwise use default method
+                string tooltip = properties.ContainsKey("tooltip") && !string.IsNullOrEmpty(properties["tooltip"])
+                    ? properties["tooltip"]
+                    : GetDisplayName(path);
+
                 var popupItem = new PopupItem {
                     Path = path,
                     Name = Path.GetFileNameWithoutExtension(path),
-                    ToolTip = displayName,
-                    Icon = null 
+                    ToolTip = tooltip,
+                    Icon = null,
+                    Args = properties.ContainsKey("args") ? properties["args"] : "" // Add the Args property
                 };
-                PopupItems.Add(popupItem);
 
+                PopupItems.Add(popupItem);
                 _ = LoadIconAsync(popupItem, path);
             }
         }
+
 
         private async Task LoadIconAsync(PopupItem item, string path) {
             try {
@@ -334,7 +411,7 @@ namespace AppGroup {
 
         private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
             if (e.ClickedItem is PopupItem popupItem) {
-                TryLaunchApp(popupItem.Path);
+                TryLaunchApp(popupItem.Path, popupItem.Args);
             }
         }
 
@@ -348,6 +425,7 @@ namespace AppGroup {
             }
         }
 
+       
         private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
             try {
                 if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
@@ -362,7 +440,13 @@ namespace AppGroup {
                     return;
                 }
 
-                string[] newPathOrder = PopupItems.Select(file => file.Path).ToArray();
+                // Create a new dictionary to hold the reordered paths with their properties
+                Dictionary<string, (string tooltip, string args)> newPathOrder = new Dictionary<string, (string tooltip, string args)>();
+
+                foreach (var item in PopupItems) {
+                    // Add each path with its properties to the new dictionary
+                    newPathOrder[item.Path] = (item.ToolTip, item.Args);
+                }
 
                 if (!int.TryParse(filteredGroup.Key, out int groupId)) {
                     Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
@@ -389,71 +473,62 @@ namespace AppGroup {
 
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
-                
 
 
 
-                if (_gridView != null) {
-                    _gridView.RightTapped -= GridView_RightTapped;
-                    _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
-                    _gridView.ItemClick -= GridView_ItemClick;
-                }
+                this.DispatcherQueue.TryEnqueue(() => {
+                    if (_gridView != null) {
+                        _gridView.RightTapped -= GridView_RightTapped;
+                        _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
+                        _gridView.ItemClick -= GridView_ItemClick;
+                    }
 
-                foreach (var item in PopupItems) {
-                    item.Icon = null;
-                }
+                    foreach (var item in PopupItems) {
+                        item.Icon = null;
+                    }
 
-                PopupItems.Clear();
-                GridPanel.Children.Clear();
+                    PopupItems.Clear();
+                    GridPanel.Children.Clear();
 
-                _groups = null;
-                _json = "";
-                _clickedItem = null;
-                _gridView = null;
+                    _groups = null;
+                    _json = "";
+                    _clickedItem = null;
+                    _gridView = null;
+
+                });
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
                 NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+                this.DispatcherQueue.TryEnqueue(() => {
+                    if (!_anyGroupDisplayed) {
+                        this.Close();
 
-                if (!_anyGroupDisplayed) {
-                  this.Close();
+                    }
+                    else {
+                        this.Hide();
 
-                }
-                else {
-                    this.Hide();
-
-                }
+                    }
+                });
 
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated) {
+                // Get the UISettings instance
+                var uiSettings = new UISettings();
+
+                // Subscribe to the ColorValuesChanged event
+                uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged;
+
+                // Initial update to set the background color based on the current settings
+                UpdateMainGridBackground(uiSettings);
                 LoadConfiguration();
             }
         }
 
-        private void ForceTerminate() {
-            // Get current process ID
-            int pid = Process.GetCurrentProcess().Id;
 
-            // Launch external process to kill this app
-            var startInfo = new ProcessStartInfo {
-                FileName = "cmd.exe",
-                Arguments = $"/c start /b taskkill /F /PID {pid} >nul 2>&1",
-                CreateNoWindow = true,
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-
-            try {
-                Process.Start(startInfo);
-            }
-            catch {
-                // Last resort - this will be abrupt but effective
-                Environment.FailFast(null);
-            }
-        }
-        // Action methods
-        private void TryLaunchApp(string path) {
+        private void TryLaunchApp(string path,string args) {
             try {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = path,
+                    Arguments = args,
                     UseShellExecute = true
                 };
                 Process.Start(psi);
@@ -464,10 +539,12 @@ namespace AppGroup {
             }
         }
 
-        private void TryRunAsAdmin(string path) {
+
+        private void TryRunAsAdmin(string path, string args) {
             try {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = path,
+                    Arguments = args,
                     Verb = "runas",
                     UseShellExecute = true
                 };
@@ -552,28 +629,21 @@ namespace AppGroup {
             return flyout;
         }
 
-        private void launchAllGroup_Click(object sender, RoutedEventArgs e) {
-            List<string> pathItems;
+        private async void launchAllGroup_Click(object sender, RoutedEventArgs e) {
+            if (!string.IsNullOrEmpty(_groupFilter)) {
+                // Find the group with the matching name
+                var matchingGroup = _groups.Values.FirstOrDefault(g =>
+                    g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
-            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
-                pathItems = filteredGroup.Value.path;
-
-                var tasks = pathItems.Select(path => Task.Run(() => {
-                    try {
-                        ProcessStartInfo startInfo = new ProcessStartInfo(path);
-                        startInfo.UseShellExecute = true;
-
-                        System.Diagnostics.Process.Start(startInfo);
-                    }
-                    catch (Exception ex) {
-                    }
-                })).ToList();
-
-                Task.WhenAll(tasks).Wait();
+                // Check if we found a matching group
+                if (matchingGroup != null) {
+                    // Call the LaunchAll function with the matching group name
+                    await JsonConfigHelper.LaunchAll(matchingGroup.groupName);
+                }
             }
-
         }
+
+
 
         private void EditGroup_Click(object sender, RoutedEventArgs e) {
             EditGroupHelper editGroup = new EditGroupHelper("Edit Group", _groupId);
@@ -582,13 +652,13 @@ namespace AppGroup {
 
         private void OpenItem_Click(object sender, RoutedEventArgs e) {
             if (_clickedItem != null) {
-                TryLaunchApp(_clickedItem.Path);
+                TryLaunchApp(_clickedItem.Path, _clickedItem.Args);
             }
         }
 
         private void RunAsAdminItem_Click(object sender, RoutedEventArgs e) {
             if (_clickedItem != null) {
-                TryRunAsAdmin(_clickedItem.Path);
+                TryRunAsAdmin(_clickedItem.Path, _clickedItem.Args);
             }
         }
 

@@ -12,7 +12,7 @@
         <winuiex:TransparentTintBackdrop />
         <!--<MicaBackdrop />-->
     </Window.SystemBackdrop>
-    <Grid x:Name="MainGrid">
+    <Grid x:Name="MainGrid" >
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>

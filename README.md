@@ -58,7 +58,7 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 
 ### Others  
 - **Persistent In-Memory Caching** for faster performance
-- **Supports different taskbar positions**: **Top**,**Bottom**, **Left**, **Right**  
+- **Supports different taskbar positions**: **Top**, **Bottom**, **Left**, **Right**  
 
 
 ## Installation  

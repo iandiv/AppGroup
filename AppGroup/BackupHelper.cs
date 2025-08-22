@@ -52,7 +52,10 @@ namespace AppGroup {
                 // Paths
                 string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string configPath = Path.Combine(localAppDataPath, "AppGroup", "appgroups.json");
-                string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
+                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string groupsPath = Path.Combine(appDataPath, "Groups");
+               
+                //string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
                 string tempZipPath = Path.Combine(Path.GetTempPath(), $"AppGroup_Backup_{Guid.NewGuid()}.zip");
 
                 // Create temporary zip file
@@ -122,7 +125,10 @@ namespace AppGroup {
                 string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string appGroupLocalPath = Path.Combine(localAppDataPath, "AppGroup");
                 string configPath = Path.Combine(appGroupLocalPath, "appgroups.json");
-                string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
+                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string groupsPath = Path.Combine(appDataPath, "Groups");
+
+                //string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
                 string iconsPath = Path.Combine(appGroupLocalPath, "Icons");
 
                 // Temporary variables to store configuration and path validation
@@ -317,7 +323,7 @@ namespace AppGroup {
                             }
                             else if (entry.FullName.StartsWith("Groups/")) {
                                 // Groups files go to executable directory
-                                destinationPath = Path.Combine(AppContext.BaseDirectory, entry.FullName);
+                                destinationPath = Path.Combine(appDataPath, entry.FullName);
 
                                 // Ensure directory exists for this entry
                                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));

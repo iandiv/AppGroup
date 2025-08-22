@@ -9,7 +9,7 @@
     Title="App Group">
 
     <Window.SystemBackdrop>
-      
+
         <MicaBackdrop />
     </Window.SystemBackdrop>
     <Grid Background="{ThemeResource DesktopAcrylicTransparentBrush}">
@@ -25,7 +25,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    
+
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="5"  VerticalAlignment="Center">
                     <TextBlock FontSize="25" Margin="0,0,0,0" FontWeight="SemiBold" >App Group</TextBlock>
@@ -51,10 +51,10 @@
 
                     <TextBox Grid.Column="0"   x:Name="SearchTextBox" Height="35" VerticalContentAlignment="Center" HorizontalAlignment="Stretch" PlaceholderText="Search groups..." Padding="40,7,0,0" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" TextChanged="SearchTextBox_TextChanged" VerticalAlignment="Center"/>
                     <FontIcon Glyph="&#xe71e;" FontSize="16" Margin="10,0,0,0"  HorizontalAlignment="Left" />
-                  
+
                 </Grid>
             </Grid>
-           
+
 
         </StackPanel>
         <StackPanel Grid.Row="1" Padding="35,20,35,0" >
@@ -62,10 +62,10 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                 
+
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="GroupsCount" Grid.Column="0" FontWeight="SemiBold" HorizontalAlignment="Stretch" VerticalAlignment="Center" >Groups</TextBlock>
-
+      
                 <!--<Button Grid.Column="1" Margin="10,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right" Click="ExportBackupButton_Click">
                     <FontIcon Glyph="&#xede1;"  FontSize="15"  />
 
@@ -81,41 +81,53 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Margin="0,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right" Click="Reload">
-                    <FontIcon Glyph="&#xe72c;"  FontSize="17"  />
+                        <FontIcon Glyph="&#xe72c;"  FontSize="17"  />
 
-                </Button>
+                    </Button>
                     <Button Grid.Column="1" Padding="10"  Background="Transparent"  BorderThickness="0"    Click="AddGroup">
-                    <FontIcon Glyph="&#xe710;"  FontSize="17"  />
-                </Button>
-                <Button Grid.Column="2" Margin="0,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right">
-                    <Grid>
-                        <FontIcon Glyph="&#xe712;" FontSize="17">
-                            <FontIcon.RenderTransform>
-                                <RotateTransform Angle="90" CenterX="9.5" CenterY="8.5"/>
-                            </FontIcon.RenderTransform>
-                        </FontIcon>
-                    </Grid>
+                        <FontIcon Glyph="&#xe710;"  FontSize="17"  />
+                    </Button>
+                    <Button Grid.Column="2" Margin="0,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right">
+                        <Grid>
+                            <FontIcon Glyph="&#xe712;" FontSize="17">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform Angle="90" CenterX="9.5" CenterY="8.5"/>
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Grid>
 
 
-                    <Button.Flyout>
-                        <MenuFlyout>
-                            <MenuFlyoutItem Text="Import"  Icon="Download"  Click="ImportBackupButton_Click"/>
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem Text="Import"  Icon="Download"  Click="ImportBackupButton_Click"/>
 
 
-                            <MenuFlyoutItem Text="Export" Icon="Upload" Click="ExportBackupButton_Click"/>
+                                <MenuFlyoutItem Text="Export" Icon="Upload" Click="ExportBackupButton_Click"/>
+                                <MenuFlyoutSeparator/>
+                                <MenuFlyoutItem Text="Settings"  Icon="Setting"  Click="SettingsButton_Click"/>
 
+                                <MenuFlyoutSeparator/>
 
+                                <MenuFlyoutItem Text="Force Taskbar Update"  Icon="Sync"  Click="ForceTaskbarUpdate_Click"/>
 
-                        </MenuFlyout>
-                    </Button.Flyout>
+                            </MenuFlyout>
+                        </Button.Flyout>
 
-                </Button>
+                    </Button>
                 </Grid>
             </Grid>
         </StackPanel>
         <ScrollViewer Grid.Row="2" Padding="20,0,20,0" CornerRadius="5">
             <StackPanel Margin="0,0,0,30" >
-                <ListView x:Name="GroupListView"  SelectionMode="None" CornerRadius="10"   SelectionChanged="GroupListView_SelectionChanged" >
+                <ListView x:Name="GroupListView"  
+                           CanDragItems="True"
+                  AllowDrop="True"
+                  CanReorderItems="True"
+                                DragItemsStarting="GroupListView_DragItemsStarting"
+                  DragItemsCompleted="GroupListView_DragItemsCompleted"
+                          SelectionMode="None"
+                          CornerRadius="10" 
+                          SelectionChanged="GroupListView_SelectionChanged" >
                     <ListView.Resources>
                         <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
                     </ListView.Resources>
@@ -124,7 +136,7 @@
                             <VirtualizingStackPanel/>
                         </ItemsPanelTemplate>
                     </ListView.ItemsPanel>
-                    
+
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="0,1,0,0" HorizontalAlignment="Stretch" CornerRadius="5"  Padding="10" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}">
@@ -166,7 +178,7 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
-                               
+
 
                                 <Button Grid.Column="1" Margin="10,0,0,0" Padding="10" BorderThickness="0" Background="Transparent" HorizontalAlignment="Right" Click="EditButton_Click">
                                     <FontIcon Glyph="&#xe70f;"  FontSize="15"   />
@@ -182,7 +194,8 @@
                                             <MenuFlyoutItem Text="Duplicate" Icon="Copy" Click="DuplicateButton_Click"/>
 
                                             <MenuFlyoutItem Text="Delete"  Icon="Delete"  Click="DeleteButton_Click"/>
-                                           
+
+
 
                                         </MenuFlyout>
                                     </Button.Flyout>
@@ -193,15 +206,15 @@
                     </ListView.ItemTemplate>
                 </ListView>
                 <Grid VerticalAlignment="Stretch" Height="350" x:Name="EmptyView" Visibility="Visible">
-                 
+
                     <StackPanel Orientation="Vertical"  VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Image Source="/AppGroup.png" Height="80" />
+                        <Image Source="/AppGroup.png" Height="80" />
                         <StackPanel Spacing="10">
                             <TextBlock HorizontalAlignment="Center"  FontSize="20" FontWeight="Bold">No Groups Found!</TextBlock>
                             <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="Normal">Click + to create a Group</TextBlock>
-                          
+
                         </StackPanel>
-                        
+
                     </StackPanel>
                 </Grid>
 

@@ -27,9 +27,11 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.Background;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI.ViewManagement;
+using Windows.UI.WindowManagement;
 using WinRT.Interop;
 using WinUIEx;
 using File = System.IO.File;
@@ -50,6 +52,9 @@ namespace AppGroup {
         public string Name { get; set; }
         public string ToolTip { get; set; }
         public string Args { get; set; }
+        public string IconPath { get; set; } // Custom icon path from JSON
+        public string CustomIconPath { get; set; } // Additional property to distinguish between default and custom
+
         private BitmapImage _icon;
         public BitmapImage Icon {
             get => _icon;
@@ -62,7 +67,6 @@ namespace AppGroup {
         }
         public event PropertyChangedEventHandler PropertyChanged;
     }
-
     public sealed partial class PopupWindow : Window {
         // Constants for UI elements
         private const int BUTTON_SIZE = 40;
@@ -89,12 +93,23 @@ namespace AppGroup {
         private ItemsPanelTemplate _panelTemplate;
         private nint hWnd;
 
+
+        private string _originalIconPath;
+        private string _iconWithBackgroundPath;
+        private string iconGroup;
+        // Add these fields to your class
+        private static string _cachedAppFolderPath;
+        private static string _cachedLastOpenPath;
+        private UISettings _uiSettings; // Cache UISettings instance
+        private bool _isUISettingsSubscribed = false;
+        private readonly List<Task> _backgroundTasks = new List<Task>();
+        private readonly List<Task> _iconLoadingTasks = new List<Task>();
         // Constructor
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
 
             _groupFilter = groupFilter;
-            this.Title = groupFilter;
+            this.Title = "Popup Window";
 
             // Setup window
             _windowHelper = new WindowHelper(this);
@@ -107,9 +122,13 @@ namespace AppGroup {
             _windowHelper.IsAlwaysOnTop = true;
 
             // Initialize templates
+
             InitializeTemplates();
 
+            SetWindowIcon();
 
+            //InitializeSystemTray();
+            this.AppWindow.IsShownInSwitchers = false;
 
             // Load on activation
             this.Activated += Window_Activated;
@@ -176,7 +195,8 @@ namespace AppGroup {
         }
 
         // Load configuration with better error handling and caching
-        private void LoadConfiguration() {
+        private async void LoadConfiguration() {
+            // Update taskbar icon with white background when window shows
             try {
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
                 _json = JsonConfigHelper.ReadJsonFromFile(configPath);
@@ -209,6 +229,7 @@ namespace AppGroup {
 
         // Non-async window initialization for faster loading
         private void InitializeWindow() {
+           
             int maxPathItems = 1;
             int maxColumns = 1;
             string groupIcon = "AppGroup.ico";
@@ -221,8 +242,8 @@ namespace AppGroup {
                 maxPathItems = filteredGroup.Value.path.Count;
                 maxColumns = filteredGroup.Value.groupCol;
                 groupHeader = filteredGroup.Value.groupHeader;
-                groupIcon = filteredGroup.Value.groupIcon;
-
+                //groupIcon = filteredGroup.Value.groupIcon;
+                iconGroup = filteredGroup.Value.groupIcon;
                 if (!int.TryParse(filteredGroup.Key, out _groupId)) {
                     Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
                     return;
@@ -251,8 +272,10 @@ namespace AppGroup {
                 scaledHeight += 40;
             }
 
-            // Set window icon - simplified from previous version
-            this.AppWindow.SetIcon(groupIcon);
+            //var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
+
+            //this.AppWindow.SetIcon(iconPath);
+
             MainGrid.Margin = new Thickness(0, 0, -5, -15);
 
             int finalWidth = scaledWidth + 30;
@@ -261,6 +284,30 @@ namespace AppGroup {
             hWnd = WindowNative.GetWindowHandle(this);
             NativeMethods.PositionWindowAboveTaskbar(hWnd);
 
+        
+        }
+
+
+        private void SetWindowIcon() {
+            try {
+                // Get the window handle
+                IntPtr hWnd = WindowNative.GetWindowHandle(this);
+
+                // Try to load icon from embedded resource first
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
+
+                if (File.Exists(iconPath)) {
+                    // Load and set the icon using Win32 APIs
+                    IntPtr hIcon = NativeMethods.LoadIcon(iconPath);
+                    if (hIcon != IntPtr.Zero) {
+                        NativeMethods.SendMessage(hWnd, NativeMethods.WM_SETICON, NativeMethods.ICON_SMALL, hIcon);
+                        NativeMethods.SendMessage(hWnd, NativeMethods.WM_SETICON, NativeMethods.ICON_BIG, hIcon);
+                    }
+                }
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"Failed to set window icon: {ex.Message}");
+            }
         }
 
         private void CreateDynamicContent() {
@@ -329,43 +376,205 @@ namespace AppGroup {
             }
         }
 
-        // Load grid items efficiently
-        //private void LoadGridItems(List<string> paths) {
-        //    foreach (string path in paths) {
-        //        string displayName = GetDisplayName(path);
-        //        var popupItem = new PopupItem {
-        //            Path = path,
-        //            Name = Path.GetFileNameWithoutExtension(path),
-        //            ToolTip = displayName,
-        //            Icon = null
-        //        };
-        //        PopupItems.Add(popupItem);
+        // Add these fields to your PopupWindow class
+        //private string _originalIconPath;
+        private string _currentGridIconPath;
+        private bool _isGridIcon = false;
 
-        //        _ = LoadIconAsync(popupItem, path);
-        //    }
-        //}
-        //private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
-        //    foreach (var pathEntry in pathsWithProperties) {
-        //        string path = pathEntry.Key;
-        //        var properties = pathEntry.Value;
+        // Add this method to PopupWindow class
+        private async Task CreateGridIconFromReorder() {
+            try {
+                if (PopupItems == null || !PopupItems.Any()) {
+                    Debug.WriteLine("No items available for grid icon creation");
+                    return;
+                }
 
-        //        // Get displayName from properties if available, otherwise use default method
-        //        string tooltip = properties.ContainsKey("tooltip")
-        //            ? properties["tooltip"]
-        //            : GetDisplayName(path);
+                // Get the group information
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                if (filteredGroup.Key == null) {
+                    Debug.WriteLine($"Error: Group '{_groupFilter}' not found");
+                    return;
+                }
 
-        //        var popupItem = new PopupItem {
-        //            Path = path,
-        //            Name = Path.GetFileNameWithoutExtension(path), // Use the custom displayName instead of extracting from path
-        //            ToolTip = tooltip, // You might want to keep the full path as tooltip or use a different property
-        //            Icon = null,
-        //            Args = properties.ContainsKey("Args") ? properties["Args"] : "" // Add the Args property
-        //        };
+                // Determine if this is a grid icon based on the current icon path
+                string currentIcon = filteredGroup.Value.groupIcon;
+                bool isCurrentlyGridIcon = currentIcon.Contains("grid");
 
-        //        PopupItems.Add(popupItem);
-        //        _ = LoadIconAsync(popupItem, path);
-        //    }
-        //}
+                if (!isCurrentlyGridIcon) {
+                    Debug.WriteLine("Current icon is not a grid icon, skipping grid recreation");
+                    return;
+                }
+
+                // Determine grid size from current icon name
+                int gridSize = currentIcon.Contains("grid3") ? 3 : 2;
+
+                // Take items up to grid size limit
+                var gridItems = PopupItems.Take(gridSize * gridSize).Select(item => new ExeFileModel {
+                    FileName = item.Name,
+                    FilePath = item.Path,
+                    Icon = item.Icon?.UriSource?.LocalPath ?? "", // Get the actual icon path
+                    Tooltip = item.ToolTip,
+                    Args = item.Args,
+                    IconPath = item.CustomIconPath
+                }).ToList();
+
+                // Create the grid icon
+                IconHelper iconHelper = new IconHelper();
+                string newGridIconPath = await iconHelper.CreateGridIconForPopupAsync(
+                    gridItems,
+                    gridSize,
+                    _groupFilter
+                );
+
+                if (!string.IsNullOrEmpty(newGridIconPath)) {
+                    _currentGridIconPath = newGridIconPath;
+
+                    // Update the shortcut and JSON configuration
+                    await UpdateShortcutAndConfig(newGridIconPath, gridSize);
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error creating grid icon: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateShortcutAndConfig(string newIconPath, int gridSize) {
+            try {
+                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string groupsFolder = Path.Combine(appDataPath, "Groups");
+
+                string groupFolder = Path.Combine(groupsFolder, _groupFilter);
+                if (!Directory.Exists(groupFolder)) {
+                    Debug.WriteLine($"Group folder not found: {groupFolder}");
+                    return;
+                }
+
+                // Update the shortcut icon
+                string shortcutPath = Path.Combine(groupFolder, $"{_groupFilter}.lnk");
+                if (File.Exists(shortcutPath)) {
+                    IWshShell wshShell = new WshShell();
+                    IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
+                    shortcut.IconLocation = newIconPath;
+                    shortcut.Save();
+
+                    Debug.WriteLine($"Updated shortcut icon: {shortcutPath}");
+                }
+
+                // Update the JSON configuration with new icon path and reordered items
+                await UpdateJsonConfiguration(newIconPath, gridSize);
+
+                // Update taskbar if pinned
+                bool isPinned = await TaskbarManager.IsShortcutPinnedToTaskbar(_groupFilter);
+                if (isPinned) {
+                    await TaskbarManager.UpdateTaskbarShortcutIcon(_groupFilter, newIconPath);
+                    TaskbarManager.TryRefreshTaskbarWithoutRestartAsync();
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error updating shortcut and config: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateJsonConfiguration(string newIconPath, int gridSize) {
+            try {
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                if (filteredGroup.Key == null) return;
+
+                if (!int.TryParse(filteredGroup.Key, out int groupId)) {
+                    Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
+                    return;
+                }
+
+                // Create the reordered paths dictionary with custom icons preserved
+                Dictionary<string, (string tooltip, string args, string icon)> reorderedPaths =
+                    new Dictionary<string, (string tooltip, string args, string icon)>();
+
+                foreach (var item in PopupItems) {
+                    string customIcon = !string.IsNullOrEmpty(item.CustomIconPath) ? item.CustomIconPath : "";
+                    reorderedPaths[item.Path] = (item.ToolTip, item.Args, customIcon);
+                }
+
+                // Update JSON with new icon path and reordered items
+                JsonConfigHelper.AddGroupToJson(
+                    JsonConfigHelper.GetDefaultConfigPath(),
+                    groupId,
+                    filteredGroup.Value.groupName,
+                    filteredGroup.Value.groupHeader,
+                    newIconPath, // Use the new grid icon path
+                    filteredGroup.Value.groupCol,
+                    reorderedPaths
+                );
+
+                // Reload the JSON to reflect changes
+                string configPath = JsonConfigHelper.GetDefaultConfigPath();
+                _json = JsonConfigHelper.ReadJsonFromFile(configPath);
+                _groups = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, GroupData>>(_json, JsonOptions);
+
+                Debug.WriteLine($"Updated JSON configuration with new icon: {newIconPath}");
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error updating JSON configuration: {ex.Message}");
+            }
+        }
+
+        // Update the existing GridView_DragItemsCompleted method in PopupWindow
+        private async void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
+            try {
+                if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
+                    Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
+                    return;
+                }
+
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+
+                if (filteredGroup.Key == null) {
+                    Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
+                    return;
+                }
+
+                // Create a new dictionary to hold the reordered paths with their properties INCLUDING custom icons
+                Dictionary<string, (string tooltip, string args, string icon)> newPathOrder = new Dictionary<string, (string tooltip, string args, string icon)>();
+                foreach (var item in PopupItems) {
+                    // Include the custom icon path when reordering
+                    string customIcon = !string.IsNullOrEmpty(item.CustomIconPath) ? item.CustomIconPath : "";
+                    newPathOrder[item.Path] = (item.ToolTip, item.Args, customIcon);
+                }
+
+                if (!int.TryParse(filteredGroup.Key, out int groupId)) {
+                    Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
+                    return;
+                }
+
+                // Check if current icon is a grid icon and regenerate if needed
+                string currentIcon = filteredGroup.Value.groupIcon;
+                bool isGridIcon = currentIcon.Contains("grid");
+
+                if (isGridIcon) {
+                    // Regenerate the grid icon with new order
+                    await CreateGridIconFromReorder();
+                }
+                else {
+                    // Just update the JSON with reordered items (no icon change needed)
+                    JsonConfigHelper.AddGroupToJson(
+                        JsonConfigHelper.GetDefaultConfigPath(),
+                        groupId,
+                        filteredGroup.Value.groupName,
+                        filteredGroup.Value.groupHeader,
+                        filteredGroup.Value.groupIcon,
+                        filteredGroup.Value.groupCol,
+                        newPathOrder
+                    );
+                }
+
+                _json = File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
+                Debug.WriteLine("Successfully updated configuration after drag reorder");
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
+                ShowErrorDialog($"Failed to save new item order: {ex.Message}");
+            }
+        }
 
         private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
             foreach (var pathEntry in pathsWithProperties) {
@@ -377,12 +586,19 @@ namespace AppGroup {
                     ? properties["tooltip"]
                     : GetDisplayName(path);
 
+                // Get custom icon path from JSON if available
+                string customIconPath = properties.ContainsKey("icon") && !string.IsNullOrEmpty(properties["icon"])
+                    ? properties["icon"]
+                    : null;
+
                 var popupItem = new PopupItem {
                     Path = path,
                     Name = Path.GetFileNameWithoutExtension(path),
                     ToolTip = tooltip,
                     Icon = null,
-                    Args = properties.ContainsKey("args") ? properties["args"] : "" // Add the Args property
+                    Args = properties.ContainsKey("args") ? properties["args"] : "",
+                    IconPath = customIconPath, // Store the custom icon path
+                    CustomIconPath = customIconPath // Additional tracking
                 };
 
                 PopupItems.Add(popupItem);
@@ -393,7 +609,17 @@ namespace AppGroup {
 
         private async Task LoadIconAsync(PopupItem item, string path) {
             try {
-                string iconPath = await IconCache.GetIconPathAsync(path);
+                string iconPath;
+
+                // Use custom icon if available and file exists
+                if (!string.IsNullOrEmpty(item.CustomIconPath) && File.Exists(item.CustomIconPath)) {
+                    iconPath = item.CustomIconPath;
+                }
+                else {
+                    // Fall back to cached icon
+                    iconPath = await IconCache.GetIconPathAsync(path);
+                }
+
                 BitmapImage icon = await IconCache.LoadImageFromPathAsync(iconPath);
 
                 // Update on UI thread
@@ -408,7 +634,6 @@ namespace AppGroup {
                 });
             }
         }
-
         private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
             if (e.ClickedItem is PopupItem popupItem) {
                 TryLaunchApp(popupItem.Path, popupItem.Args);
@@ -425,104 +650,224 @@ namespace AppGroup {
             }
         }
 
+
+        //private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
+        //    try {
+        //        if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
+        //            Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
+        //            return;
+        //        }
+
+        //        var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+
+        //        if (filteredGroup.Key == null) {
+        //            Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
+        //            return;
+        //        }
+
+        //        // Create a new dictionary to hold the reordered paths with their properties INCLUDING custom icons
+        //        Dictionary<string, (string tooltip, string args, string icon)> newPathOrder = new Dictionary<string, (string tooltip, string args, string icon)>();
+        //        foreach (var item in PopupItems) {
+        //            // Include the custom icon path when reordering
+        //            string customIcon = !string.IsNullOrEmpty(item.CustomIconPath) ? item.CustomIconPath : "";
+        //            newPathOrder[item.Path] = (item.ToolTip, item.Args, customIcon);
+        //        }
+
+        //        if (!int.TryParse(filteredGroup.Key, out int groupId)) {
+        //            Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
+        //            return;
+        //        }
+
+        //        JsonConfigHelper.AddGroupToJson(
+        //            JsonConfigHelper.GetDefaultConfigPath(),
+        //            groupId,
+        //            filteredGroup.Value.groupName,
+        //            filteredGroup.Value.groupHeader,
+        //            filteredGroup.Value.groupIcon,
+        //            filteredGroup.Value.groupCol,
+        //            newPathOrder
+        //        );
+
+        //        _json = File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
+        //        ShowErrorDialog($"Failed to save new item order: {ex.Message}");
+        //    }
+        //}
+
+
        
-        private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
-            try {
-                if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
-                    Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
-                    return;
-                }
-
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
-
-                if (filteredGroup.Key == null) {
-                    Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
-                    return;
-                }
-
-                // Create a new dictionary to hold the reordered paths with their properties
-                Dictionary<string, (string tooltip, string args)> newPathOrder = new Dictionary<string, (string tooltip, string args)>();
-
-                foreach (var item in PopupItems) {
-                    // Add each path with its properties to the new dictionary
-                    newPathOrder[item.Path] = (item.ToolTip, item.Args);
-                }
-
-                if (!int.TryParse(filteredGroup.Key, out int groupId)) {
-                    Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
-                    return;
-                }
-
-                JsonConfigHelper.AddGroupToJson(
-                    JsonConfigHelper.GetDefaultConfigPath(),
-                    groupId,
-                    filteredGroup.Value.groupName,
-                    filteredGroup.Value.groupHeader,
-                    filteredGroup.Value.groupIcon,
-                    filteredGroup.Value.groupCol,
-                    newPathOrder
-                );
-
-                _json = File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
-                ShowErrorDialog($"Failed to save new item order: {ex.Message}");
-            }
-        }
-
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
+                var settings = await SettingsHelper.LoadSettingsAsync();
 
+                // FIRST: Cleanup UISettings to prevent event handler accumulation
+                CleanupUISettings();
 
-
-                this.DispatcherQueue.TryEnqueue(() => {
-                    if (_gridView != null) {
-                        _gridView.RightTapped -= GridView_RightTapped;
-                        _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
-                        _gridView.ItemClick -= GridView_ItemClick;
-                    }
-
-                    foreach (var item in PopupItems) {
-                        item.Icon = null;
-                    }
-
-                    PopupItems.Clear();
-                    GridPanel.Children.Clear();
-
-                    _groups = null;
-                    _json = "";
-                    _clickedItem = null;
-                    _gridView = null;
-
-                });
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
-                NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
-                this.DispatcherQueue.TryEnqueue(() => {
-                    if (!_anyGroupDisplayed) {
-                        this.Close();
-
-                    }
-                    else {
+                if (!string.IsNullOrEmpty(_originalIconPath) && !string.IsNullOrEmpty(_groupFilter)) {
+                    // Hide window immediately
+                    this.DispatcherQueue.TryEnqueue(() => {
                         this.Hide();
+                    });
 
+                    if (settings.UseGrayscaleIcon) {
+                        var task = Task.Run(async () => {
+                            try {
+                                await TaskbarManager.UpdateTaskbarShortcutIcon(_groupFilter, iconGroup);
+                                if (!string.IsNullOrEmpty(_iconWithBackgroundPath)) {
+                                    IconHelper.RemoveBackgroundIcon(_iconWithBackgroundPath);
+                                    _iconWithBackgroundPath = null;
+                                }
+                            }
+                            catch (Exception ex) {
+                                Debug.WriteLine($"Background cleanup error: {ex.Message}");
+                            }
+                        });
+                        _backgroundTasks.Add(task);
                     }
-                });
 
+                    // UI cleanup
+                    this.DispatcherQueue.TryEnqueue(() => {
+                        try {
+                            if (_gridView != null) {
+                                _gridView.RightTapped -= GridView_RightTapped;
+                                _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
+                                _gridView.ItemClick -= GridView_ItemClick;
+                            }
+
+                            // Improved image cleanup
+                            foreach (var item in PopupItems) {
+                                if (item.Icon != null) {
+                                    item.Icon.UriSource = null;
+                                    item.Icon = null;
+                                }
+                            }
+                            PopupItems.Clear();
+                            GridPanel.Children.Clear();
+
+                            // Cleanup task lists
+                            foreach (var task in _backgroundTasks.ToList()) {
+                                if (task.IsCompleted) {
+                                    task.Dispose();
+                                    _backgroundTasks.Remove(task);
+                                }
+                            }
+                            foreach (var task in _iconLoadingTasks.ToList()) {
+                                if (task.IsCompleted) {
+                                    task.Dispose();
+                                    _iconLoadingTasks.Remove(task);
+                                }
+                            }
+
+                            _groups = null;
+                            _json = "";
+                            _clickedItem = null;
+                            _gridView = null;
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"UI cleanup error: {ex.Message}");
+                        }
+                    });
+
+                    _ = Task.Run(() => {
+                        GC.Collect(0, GCCollectionMode.Optimized); 
+                    });
+                }
             }
-            else if (e.WindowActivationState == WindowActivationState.CodeActivated) {
-                // Get the UISettings instance
-                var uiSettings = new UISettings();
+            else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
+                // Cache file paths to avoid repeated Path.Combine operations
 
-                // Subscribe to the ColorValuesChanged event
-                uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged;
+                if (_cachedAppFolderPath == null) {
+                    string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    _cachedAppFolderPath = Path.Combine(appDataPath, "AppGroup");
+                    _cachedLastOpenPath = Path.Combine(_cachedAppFolderPath, "lastOpen");
+                }
+
+                // Read group filter from file each time window is activated
+                try {
+                    if (File.Exists(_cachedLastOpenPath)) {
+                        string fileGroupFilter = File.ReadAllText(_cachedLastOpenPath).Trim();
+                        if (!string.IsNullOrEmpty(fileGroupFilter)) {
+                            _groupFilter = fileGroupFilter;
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Error reading group name from file: {ex.Message}");
+                }
+
+                // Subscribe to UISettings only once
+                if (!_isUISettingsSubscribed) {
+                    _uiSettings ??= new UISettings();
+                    _uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged;
+                    _isUISettingsSubscribed = true;
+                }
 
                 // Initial update to set the background color based on the current settings
-                UpdateMainGridBackground(uiSettings);
-                LoadConfiguration();
+                UpdateMainGridBackground(_uiSettings);
+
+                // Do heavy operations in background after window is shown
+              
+
+                // Load configuration asynchronously to not block UI
+                _ = this.DispatcherQueue.TryEnqueue(() => {
+                    try {
+                        LoadConfiguration();
+                          _ = Task.Run(async () => {
+                                try {
+                                    await UpdateTaskbarIcon(_groupFilter);
+                                }
+                                catch (Exception ex) {
+                                    Debug.WriteLine($"Background taskbar update error: {ex.Message}");
+                                }
+                         });
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"Configuration loading error: {ex.Message}");
+                    }
+                });
             }
         }
 
+        // Add this cleanup method to your class
+        private void CleanupUISettings() {
+            if (_isUISettingsSubscribed && _uiSettings != null) {
+                _uiSettings.ColorValuesChanged -= UiSettings_ColorValuesChanged;
+                _isUISettingsSubscribed = false;
+            }
+        }
+        private async Task UpdateTaskbarIcon(string groupName) {
+            var settings = await SettingsHelper.LoadSettingsAsync();
+
+            try {
+                // Determine the icon path based on your structure
+                string basePath = Path.Combine("Groups", groupName, groupName);
+                string iconPath;
+                string groupIcon = IconHelper.FindOrigIcon(iconGroup);
+
+                // Load settings to check grayscale preference
+             
+
+                _originalIconPath = groupIcon;
+
+              
+
+                if (!string.IsNullOrEmpty(_originalIconPath) && File.Exists(_originalIconPath)) {
+                    if (settings.UseGrayscaleIcon) {
+                    _iconWithBackgroundPath = await IconHelper.CreateBlackWhiteIconAsync(_originalIconPath);
+
+                        await TaskbarManager.UpdateTaskbarShortcutIcon(groupName, _iconWithBackgroundPath);
+                    }
+                 
+                }
+            }
+            catch (Exception ex) {
+                Console.WriteLine($"Error updating taskbar icon with background: {ex.Message}");
+            }
+        }
+
+     
 
         private void TryLaunchApp(string path,string args) {
             try {
@@ -691,16 +1036,17 @@ namespace AppGroup {
                 }
             }
             else if (extension == ".lnk") {
-                try {
-                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
-                    dynamic shortcut = shell.CreateShortcut(filePath);
-                    string targetPath = shortcut.TargetPath;
-                    if (!string.IsNullOrEmpty(targetPath)) {
-                        return Path.GetFileNameWithoutExtension(targetPath);
-                    }
-                }
-                catch (Exception) {
-                }
+                Path.GetFileNameWithoutExtension(filePath);
+                //try {
+                //    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                //    dynamic shortcut = shell.CreateShortcut(filePath);
+                //    string targetPath = shortcut.TargetPath;
+                //    if (!string.IsNullOrEmpty(targetPath)) {
+                //        return Path.GetFileNameWithoutExtension(targetPath);
+                //    }
+                //}
+                //catch (Exception) {
+                //}
             }
 
             return Path.GetFileNameWithoutExtension(filePath);
@@ -723,6 +1069,8 @@ namespace AppGroup {
 
             return new Tuple<float, int, int>(scaleFactor, screenWidth, screenHeight);
         }
-    }
+
+
+          }
 
 }

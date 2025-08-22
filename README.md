@@ -62,11 +62,23 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 
 
 ## Installation  
+AppGroup is available in **four variants**:  
 
-1. [Download the latest version](https://github.com/iandiv/AppGroup/releases) from the **Releases** page.  
-2. Extract the downloaded `.zip` file.  
-3. Run **AppGroup.exe** — no setup needed!
+### 🔹 Installer Versions  
+- **Setup** – Standard installer (requires .NET 8 Runtime installed on your system).  
+- **Setup (Bundled)** – Comes with the required .NET 8 Runtime already included. Best if you don’t want to install .NET separately.  
 
+### 🔹 Portable Versions  
+- **Portable** – No installation needed (requires .NET 8 Runtime installed on your system).  
+- **Portable (Bundled)** – Self-contained portable version with .NET 8 Runtime included. Just extract and run.  
+
+### How to Install  
+1. [Download the latest release](https://github.com/iandiv/AppGroup/releases).  
+2. Choose your preferred variant:  
+   - **Setup** → Run the `.exe` installer.  
+   - **Portable** → Extract the `.zip` file and run **AppGroup.exe**.  
+
+ **Recommendation:** If you’re not sure which one to pick, download the **Setup (Bundled)** version for the easiest experience.  
 
 ## Screenshots
 
@@ -97,7 +109,11 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
        - **Regular** - Choose an icon from a directory  
        - **Grid** - Create grid icon from selected applications  
 
-4. **Pin a Group to the Taskbar**  
+4. **Pin a Group to the Taskbar**
+   - Drag the group directly to the taskbar
+     
+   **OR**
+   
    - Open **Groups Folder** and find the group folder  
    - Inside, you'll find a **shortcut file**  
    - **Right-click → Pin to Taskbar**  
@@ -114,6 +130,8 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
 
 ## Support  
 AppGroup is actively maintained, and your support helps keep it improving. If you find this tool helpful, consider donating to support its development. Your contribution ensures new updates and improvements:  
+
+
 
 **[🍵 Donate on Ko-fi ](https://ko-fi.com/iandiv/tip)**  
 

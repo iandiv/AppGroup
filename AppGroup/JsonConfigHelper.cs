@@ -13,7 +13,26 @@ namespace AppGroup
 {
     public class JsonConfigHelper
     {
+       
+        public static string FindGroupNameByKey(int key) {
+            try {
+                string json = File.ReadAllText(GetDefaultConfigPath());
+                var jsonDocument = JsonDocument.Parse(json);
 
+                string keyString = key.ToString();
+                if (jsonDocument.RootElement.TryGetProperty(keyString, out JsonElement groupElement)) {
+                    if (groupElement.TryGetProperty("groupName", out JsonElement groupNameElement)) {
+                        return groupNameElement.GetString() ?? string.Empty;
+                    }
+                }
+
+                throw new Exception($"No group found for key '{key}'");
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"Error finding group name by key {key}: {ex.Message}");
+                return string.Empty;
+            }
+        }
         public static int FindKeyByGroupName(string groupName) {
             string json = File.ReadAllText(GetDefaultConfigPath());
             var jsonDocument = JsonDocument.Parse(json);
@@ -93,29 +112,27 @@ namespace AppGroup
 
             return Path.Combine(appDataPath, fileName);
         }
-        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, Dictionary<string, (string tooltip, string args)> paths) {
+        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, Dictionary<string, (string tooltip, string args, string icon)> paths) {
             try {
                 string directory = Path.GetDirectoryName(filePath);
                 if (!Directory.Exists(directory)) {
                     Directory.CreateDirectory(directory);
                 }
-
                 if (!System.IO.File.Exists(filePath)) {
                     System.IO.File.WriteAllText(filePath, "{}");
                 }
                 string jsonContent = ReadJsonFromFile(filePath);
                 JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
-
                 JsonObject jsonPaths = new JsonObject();
                 foreach (var path in paths) {
                     JsonObject pathDetails = new JsonObject
                     {
                 { "tooltip", path.Value.tooltip },
-                { "args", path.Value.args }
+                { "args", path.Value.args },
+                { "icon", path.Value.icon }
             };
                     jsonPaths[path.Key] = pathDetails;
                 }
-
                 JsonObject newGroup = new JsonObject
                 {
             { "groupName", groupName },
@@ -124,9 +141,7 @@ namespace AppGroup
             { "groupIcon", groupIcon },
             { "path", jsonPaths }
         };
-
                 jsonObject[groupId.ToString()] = newGroup;
-
                 System.IO.File.WriteAllText(filePath, JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch (Exception ex) {
@@ -134,7 +149,6 @@ namespace AppGroup
             }
         }
 
-      
 
         public static void DeleteGroupFromJson(string filePath, int groupId) {
             try {
@@ -156,7 +170,11 @@ namespace AppGroup
                 System.IO.File.WriteAllText(filePath, JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true }));
 
                 string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
-                string groupsFolder = Path.Combine(exeDirectory, "Groups");
+
+                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string groupsFolder = Path.Combine(appDataPath, "Groups");
+                //string groupsFolder = Path.Combine(exeDirectory, "Groups");
                 string groupFolderPath = Path.Combine(groupsFolder, groupName);
 
                 if (Directory.Exists(groupFolderPath)) {
@@ -195,7 +213,10 @@ namespace AppGroup
                     System.IO.File.WriteAllText(filePath, JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true }));
 
                     string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
-                    string groupsFolder = Path.Combine(exeDirectory, "Groups");
+                    string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                    string groupsFolder = Path.Combine(appDataPath, "Groups");
+                    //string groupsFolder = Path.Combine(exeDirectory, "Groups");
                     string originalGroupFolderPath = Path.Combine(groupsFolder, originalGroupName);
                     string newGroupFolderPath = Path.Combine(groupsFolder, newGroupName);
 
@@ -405,8 +426,12 @@ namespace AppGroup
 
                     if (!string.IsNullOrEmpty(groupName)) {
                         string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
-                        string groupsFolder = Path.Combine(exeDirectory, "Groups");
+                        string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                        string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                        string groupsFolder = Path.Combine(appDataPath, "Groups");
                         string groupFolderPath = Path.Combine(groupsFolder, groupName);
+                        //string groupsFolder = Path.Combine(exeDirectory, "Groups");
+                        //string groupFolderPath = Path.Combine(groupsFolder, groupName);
 
                         if (Directory.Exists(groupFolderPath)) {
                             Process.Start(new ProcessStartInfo {

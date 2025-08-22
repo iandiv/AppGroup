@@ -36,21 +36,42 @@
                 </Grid>
                 <StackPanel Spacing="0" Padding="15,0,15,15">
                     <StackPanel Spacing="3">
-                        <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                            <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12" >Tooltip</TextBlock>
-                            <TextBox x:Name="TooltipTextBox" FontWeight="SemiBold" PlaceholderText="Enter Tooltip"  BorderBrush="Transparent" Background="Transparent"/>
-                        </StackPanel>
+                        <!--<Image Source="{Binding DisplayIcon}" Width="25" Height="25"/>-->
+                        <StackPanel CornerRadius="5" Padding="10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!--<TextBox x:Name="IconPathTextBox" FontWeight="SemiBold" PlaceholderText="Default icon will be used" BorderBrush="Transparent" Background="Transparent" IsReadOnly="True"/>-->
+                                <StackPanel Grid.Column="0" Spacing="5">
+                                    <Button x:Name="BrowseItemIconButton" Padding="5" Click="BrowseItemIcon_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <Image x:Name="ItemIconPreview" Width="50" Height="50" Stretch="UniformToFill"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="ResetItemIconButton" Click="ResetItemIcon_Click" 
+                            HorizontalAlignment="Center">
+                                        <TextBlock Text="Reset" FontSize="12" Opacity="0.7"/>
+                                    </Button>
+                                </StackPanel>
 
-                        <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                            <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Argument</TextBlock>
-                            <TextBox x:Name="ArgsTextBox" FontWeight="SemiBold" PlaceholderText="Enter Arguments"  BorderBrush="Transparent"  Background="Transparent"/>
+                                <StackPanel Grid.Column="1">
+                                    <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Tooltip</TextBlock>
+                                        <TextBox x:Name="TooltipTextBox" FontWeight="SemiBold" PlaceholderText="Enter Tooltip" BorderBrush="Transparent" Background="Transparent"/>
+                                    </StackPanel>
+                                    <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Argument</TextBlock>
+                                        <TextBox x:Name="ArgsTextBox" FontWeight="SemiBold" PlaceholderText="Enter Arguments" BorderBrush="Transparent" Background="Transparent"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
-          
                     </StackPanel>
-
                     <!-- Use a Grid to align the button to the right -->
                     <Grid Margin="0,10,0,0">
-                        <Button HorizontalAlignment="Right" Click="EditItemSave_Click"  Style="{StaticResource AccentButtonStyle}">Save</Button>
+                        <Button HorizontalAlignment="Right" Click="EditItemSave_Click" Style="{StaticResource AccentButtonStyle}">Save</Button>
                     </Grid>
                 </StackPanel>
             </StackPanel>
@@ -148,10 +169,12 @@
                         </Button>
                     </StackPanel>
                 </Grid>
-                <InfoBar Margin="10,0,10,0" IsOpen="False" Severity="Warning" x:Name="RenameInfoBar" Message="Renaming a group requires re-pinning to the taskbar."/>
+                <InfoBar Margin="10,0,10,0" IsOpen="False" Severity="Warning" x:Name="RenameInfoBar" Message="Renaming a group requires 'Force Taskbar Update' or re-pinning to the taskbar."/>
             </StackPanel>
 
-            <ScrollViewer Grid.Row="1" Padding="10,10,10,0" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="1" Padding="10,10,10,0" VerticalScrollBarVisibility="Auto"
+                          
+                          >
                 <StackPanel Margin="0,0,0,20">
                     <StackPanel Spacing="5" CornerRadius="5" Padding="0,0,0,0"  Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center">
                         <Grid HorizontalAlignment="Stretch">
@@ -206,7 +229,11 @@
                             </Grid>
                         </StackPanel>
                         <StackPanel Margin="10,0,10,10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
-                            <ListView x:Name="ExeListView" Height="230" Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
+                            <ListView x:Name="ExeListView"
+                                      
+                                      
+                                      
+                                      Height="230" Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
                                 <ListView.Resources>
                                     <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
                                 </ListView.Resources>

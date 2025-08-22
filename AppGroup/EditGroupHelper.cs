@@ -22,15 +22,15 @@ namespace AppGroup {
             this.windowTitle = windowTitle;
             this.groupId = groupId;
             // Define the local application data path
-            string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+            //string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            //string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
 
-            // Ensure the directory exists
-            if (!Directory.Exists(appDataPath)) {
-                Directory.CreateDirectory(appDataPath);
-            }
+            //// Ensure the directory exists
+            //if (!Directory.Exists(appDataPath)) {
+            //    Directory.CreateDirectory(appDataPath);
+            //}
 
-            groupIdFilePath = Path.Combine(appDataPath, "gid");
+            //groupIdFilePath = Path.Combine(appDataPath, "gid");
 
 
         }
@@ -45,28 +45,29 @@ namespace AppGroup {
             if (hWnd != IntPtr.Zero) {
                 NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
                 NativeMethods.SetForegroundWindow(hWnd);
-                UpdateFile();
+                //UpdateFile();
 
             }
             else {
+                 //editWindow = new EditGroupWindow(groupId);
+                //editWindow.InitializeComponent();
+                //string executablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.exe");
 
-                string executablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.exe");
+                //using (Process process = new Process()) {
+                //    process.StartInfo = new ProcessStartInfo {
+                //        FileName = executablePath,
+                //        Arguments = "EditGroupWindow",
+                //        UseShellExecute = false,
+                //        RedirectStandardOutput = true,
+                //        RedirectStandardError = true,
+                //        CreateNoWindow = true
+                //    };
 
-                using (Process process = new Process()) {
-                    process.StartInfo = new ProcessStartInfo {
-                        FileName = executablePath,
-                        Arguments = "EditGroupWindow",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true
-                    };
-
-                    process.Start();
-                }
+                //    process.Start();
+                //}
 
 
-                UpdateFile();
+                //UpdateFile();
 
             }
 

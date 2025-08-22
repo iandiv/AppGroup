@@ -9,10 +9,12 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 ## Table of Contents  
 
 
-  - [Key Features](#key-features)
-    - [Group Management](#group-management)
-    - [Customization](#customization)
-    - [Others](#others)
+  - [Key Features](#key-features)  
+    - [Group Management](#group-management)  
+    - [Appearance & Customization](#appearance--customization)  
+    - [App & Shortcut Support](#app--shortcut-support)  
+    - [Import/Export](#importexport)  
+    - [Others](#others)  
   - [Installation](#installation)
   - [Screenshots](#screenshots)
   - [Video Demo](#video-demo)
@@ -24,23 +26,40 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 
 
 
+
+
+---
+
 ## Key Features  
 
 ### Group Management  
-- **Create, edit, delete, and duplicate groups** in one click  
+- **Create, edit, delete** , and **duplicate**  groups
+- **"Edit this Group"** option in jumplist  
+- **"Launch All"** option in jumplist  
+
+### Appearance & Customization  
 - **Custom icons**: Use a **Single icon** or a **Grid icon**  
+- **Accent-colored backgrounds** for groups  
 - **Show or hide group names** for a clean look  
-
-### Customization 
-- **Drag & Drop** to reorder apps instantly  
-- **Adjust grid columns**  
 - **Dark Mode & Light Mode** experience  
+- **Adjust grid columns**  
+- **Drag & Drop** to reorder apps instantly  
+- **Supports .exe files** as custom icons  
+- **Custom tooltips and launch arguments**  
 
-### Others 
+### App & Shortcut Support  
 - **Supports UWP & PWA apps** via shortcuts  
+- **Support .lnk shortcuts** without the arrow (if possible)  
 - **Run apps as Admin**  
-- **Support .lnk shortcuts** without the arrow if possible
-- Persistent In-Memory Caching
+
+### Import/Export
+- **Supports .agz (AppGroupZip)** file import/export  
+
+
+### Others  
+- **Persistent In-Memory Caching** for faster performance
+- **Supports different taskbar positions**: **Top**, **Bottom**, **Left**, **Right**  
+
 
 ## Installation  
 

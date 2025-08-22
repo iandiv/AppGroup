@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace AppGroup {
-    public static class NativeMethods {
+    public static partial class NativeMethods {
 
 
 
@@ -77,13 +77,194 @@ namespace AppGroup {
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
-  
+
+        // Constants
+        public const uint WM_TRAYICON = 0x8000;
+        public const uint WM_COMMAND = 0x0111;
+        public const uint WM_DESTROY = 0x0002;
+        public const uint WM_LBUTTONDBLCLK = 0x0203;
+        public const uint WM_RBUTTONUP = 0x0205;
+        public const uint WM_NULL = 0x0000; // Added for menu fix
+
+        public const uint NIF_MESSAGE = 0x00000001;
+        public const uint NIF_ICON = 0x00000002;
+        public const uint NIF_TIP = 0x00000004;
+
+        public const uint NIM_ADD = 0x00000000;
+        public const uint NIM_MODIFY = 0x00000001;
+        public const uint NIM_DELETE = 0x00000002;
+
+        public const uint IMAGE_ICON = 1;
+        public const uint LR_LOADFROMFILE = 0x00000010;
+
+        // Menu flags - CRITICAL ADDITIONS
+        public const uint TPM_RETURNCMD = 0x0100;
+        public const uint TPM_RIGHTBUTTON = 0x0002;
+
+        public const int ID_SHOW = 1001;
+        public const int ID_EXIT = 1002;
+        public const uint MIN_ALL = 419;
+        public const uint RESTORE_ALL = 416;
+        public const uint SHCNE_ASSOCCHANGED = 0x08000000;
+        public const uint SHCNF_FLUSH = 0x1000;
+
+        // Delegates
+        public delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        // Structures
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WNDCLASSEX {
+            public uint cbSize;
+            public uint style;
+            public IntPtr lpfnWndProc;
+            public int cbClsExtra;
+            public int cbWndExtra;
+            public IntPtr hInstance;
+            public IntPtr hIcon;
+            public IntPtr hCursor;
+            public IntPtr hbrBackground;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string lpszMenuName;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string lpszClassName;
+            public IntPtr hIconSm;
+        }
+
+        // Replace your NOTIFYICONDATA structure with this fixed version:
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct NOTIFYICONDATA {
+            public int cbSize;
+            public IntPtr hWnd;
+            public uint uID;
+            public uint uFlags;
+            public uint uCallbackMessage;
+            public IntPtr hIcon;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szTip;
+        }
+
+        // Add these to your NativeMethods class
+
+
+        [DllImport("user32.dll")]
+        public static extern bool UpdateWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string className, string windowTitle);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        [DllImport("user32.dll")]
+        public static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
+
+        public const int SHCNE_RENAMEITEM = 0x00000001;
+        public const int SHCNE_CREATE = 0x00000002;
+        public const int SHCNE_DELETE = 0x00000004;
+        public const int SHCNE_UPDATEIMAGE = 0x00008000;
+        public const int SHCNE_UPDATEDIR = 0x00001000;
+        public const int SHCNE_RENAMEFOLDER = 0x00020000;
+
+        public const uint SHCNF_PATH = 0x0005;
+        public const uint SHCNF_IDLIST = 0x0000;
+
+        // RedrawWindow constants
+        public const uint RDW_ERASE = 0x0004;
+        public const uint RDW_FRAME = 0x0400;
+        public const uint RDW_INVALIDATE = 0x0001;
+        public const uint RDW_ALLCHILDREN = 0x0080;
+
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern uint RegisterWindowMessage(string lpString);
 
 
 
-     
-       [DllImport("psapi.dll")]
+        // Also update the Shell_NotifyIcon declaration to explicitly use Unicode:
+        [DllImport("shell32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA lpData);
+
+
+        // P/Invoke declarations
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern ushort RegisterClassEx(ref WNDCLASSEX lpWndClass);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr CreateWindowEx(
+            uint dwExStyle, string lpClassName, string lpWindowName, uint dwStyle,
+            int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu,
+            IntPtr hInstance, IntPtr lpParam);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr DefWindowProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr LoadCursor(IntPtr hInstance, uint lpCursorName);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr LoadImage(IntPtr hinst, string lpszName, uint uType,
+            int cxDesired, int cyDesired, uint fuLoad);
+
+      
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr CreatePopupMenu();
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern bool AppendMenu(IntPtr hMenu, uint uFlags, uint uIDNewItem, string lpNewItem);
+
+        [DllImport("user32.dll")]
+        public static extern uint TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y,
+            int nReserved, IntPtr hWnd, IntPtr prcRect);
+
+
+        [DllImport("user32.dll")]
+        public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern bool DestroyWindow(IntPtr hWnd);
+
+
+
+        [DllImport("user32.dll")]
+        public static extern bool DestroyMenu(IntPtr hMenu);
+
+
+
+        [DllImport("shell32.dll")]
+        public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool InvalidateRect(IntPtr hWnd, IntPtr lpRect, bool bErase);
+
+        public const int WM_SETICON = 0x0080;
+        public const int ICON_SMALL = 0;
+        public const int ICON_BIG = 1;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        public static IntPtr LoadIcon(string iconPath) {
+            return LoadImage(IntPtr.Zero, iconPath, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
+        }
+
+        public const uint LR_DEFAULTSIZE = 0x00000040;
+   
+        public const int MONITOR_DEFAULTTOPRIMARY = 0x00000001;
+
+        [DllImport("user32.dll")]
+        public static extern int GetSystemMetrics(int nIndex);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+        public const int SW_SHOWNORMAL = 1;
+
+        [DllImport("psapi.dll")]
         public static extern int EmptyWorkingSet(IntPtr hwProc);
+        public const int SW_SHOWNOACTIVATE = 4;  // Shows window without activating/focusing it
 
         public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
             try {
@@ -191,6 +372,143 @@ namespace AppGroup {
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error positioning window: {ex.Message}");
+            }
+        }
+
+        public static void PositionWindowBelowTaskbar(IntPtr hWnd) {
+            try {
+                // Get window dimensions
+                NativeMethods.RECT windowRect;
+                if (!NativeMethods.GetWindowRect(hWnd, out windowRect))
+                    return;
+
+                int windowWidth = windowRect.right - windowRect.left;
+                int windowHeight = windowRect.bottom - windowRect.top;
+
+                // Get cursor position
+                NativeMethods.POINT cursorPos;
+                if (!NativeMethods.GetCursorPos(out cursorPos))
+                    return;
+
+                // Get monitor info
+                IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+                if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo))
+                    return;
+
+                // DPI scaling
+                float dpiScale = GetDpiScaleForMonitor(monitor);
+                int baseTaskbarHeight = 52;
+                int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
+
+                // Spacing
+                int spacing = 99999;
+                if (IsTaskbarAutoHide()) {
+                    int autoHideSpacing = (int)(baseTaskbarHeight * dpiScale);
+                    spacing += autoHideSpacing;
+                }
+
+                // Taskbar position
+                TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
+
+                // Initial x = center horizontally on cursor
+                int x = cursorPos.X - (windowWidth / 2);
+                int y;
+
+                // Position BELOW taskbar (off-screen if bottom)
+                switch (taskbarPosition) {
+                    case TaskbarPosition.Top:
+                        y = monitorInfo.rcMonitor.top + taskbarHeight + spacing;
+                        break;
+
+                    case TaskbarPosition.Bottom:
+                        y = monitorInfo.rcMonitor.bottom + spacing; // 👈 off-screen below
+                        break;
+
+                    case TaskbarPosition.Left:
+                        x = monitorInfo.rcMonitor.left + taskbarHeight + spacing;
+                        y = cursorPos.Y - (windowHeight / 2);
+                        break;
+
+                    case TaskbarPosition.Right:
+                        x = monitorInfo.rcMonitor.right - windowWidth - taskbarHeight - spacing;
+                        y = cursorPos.Y - (windowHeight / 2);
+                        break;
+
+                    default:
+                        y = monitorInfo.rcMonitor.bottom + spacing ; // 👈 off-screen below
+                        break;
+                }
+
+                // Keep window horizontally inside screen
+                if (x < monitorInfo.rcWork.left)
+                    x = monitorInfo.rcWork.left;
+                if (x + windowWidth > monitorInfo.rcWork.right)
+                    x = monitorInfo.rcWork.right - windowWidth;
+
+                // Move window (don’t clamp vertically so it can go off-screen)
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0,
+                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error positioning window: {ex.Message}");
+            }
+        }
+
+        public static void PositionWindowOffScreenBelow(IntPtr hWnd) {
+            try {
+                // Get current cursor position
+                NativeMethods.POINT cursorPos;
+                if (!NativeMethods.GetCursorPos(out cursorPos)) {
+                    // Fallback to center of screen if cursor position fails
+                    cursorPos.X = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN) / 2;
+                    cursorPos.Y = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSCREEN) / 2;
+                }
+
+                // Get window dimensions
+                NativeMethods.RECT windowRect;
+                if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+                    return;
+                }
+                int windowWidth = windowRect.right - windowRect.left;
+                int windowHeight = windowRect.bottom - windowRect.top;
+
+                // Get primary monitor information (most reliable for off-screen positioning)
+                IntPtr primaryMonitor = NativeMethods.MonitorFromPoint(new NativeMethods.POINT { X = 0, Y = 0 },
+                    NativeMethods.MONITOR_DEFAULTTOPRIMARY);
+                NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+
+                if (!NativeMethods.GetMonitorInfo(primaryMonitor, ref monitorInfo)) {
+                    // Fallback to system metrics if monitor info fails
+                    int screenWidth = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN);
+
+                    // Position window off-screen to the right, aligned with cursor Y position
+                    int x = screenWidth + 100; // 100 pixels to the right of screen
+                    int y = cursorPos.Y; // Align with cursor Y position
+
+                    NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0,
+                        NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+                    return;
+                }
+
+                // Calculate off-screen position to the right of the primary monitor, aligned with cursor Y
+                int offScreenX = monitorInfo.rcMonitor.right + 100; // 100 pixels to the right of monitor
+                int offScreenY = cursorPos.Y; // Use cursor Y position
+
+                // Additional safety margin to ensure it's completely off-screen horizontally
+                int safetyMargin = Math.Max(windowWidth, 200);
+                offScreenX += safetyMargin;
+
+                // Move the window to off-screen position
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, offScreenX, offScreenY, 0, 0,
+                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+
+                Debug.WriteLine($"Window positioned off-screen at: ({offScreenX}, {offScreenY}), cursor at: ({cursorPos.X}, {cursorPos.Y})");
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error positioning window off-screen: {ex.Message}");
             }
         }
 
@@ -306,82 +624,6 @@ namespace AppGroup {
                 return 1.0f;
             }
         }
-
-
-        //public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
-        //    try {
-        //        // Get window dimensions
-        //        NativeMethods.RECT windowRect;
-        //        if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
-        //            return;
-        //        }
-
-        //        int windowWidth = windowRect.right - windowRect.left;
-        //        int windowHeight = windowRect.bottom - windowRect.top;
-
-        //        // Get current cursor position
-        //        NativeMethods.POINT cursorPos;
-        //        if (!NativeMethods.GetCursorPos(out cursorPos)) {
-        //            return;
-        //        }
-
-        //        // Calculate new position
-        //        int x = cursorPos.X - (windowWidth / 2);
-
-        //        // Get monitor information
-        //        IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        //        NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
-        //        monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-
-        //        if (NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
-        //            // Calculate position based on taskbar
-        //            float dpiScale = GetDpiScaleForMonitor(monitor);
-        //            int baseTaskbarHeight = 52;
-        //            int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
-        //            int y = monitorInfo.rcMonitor.bottom - windowHeight - taskbarHeight;
-
-        //            //int workAreaDifference = monitorInfo.rcMonitor.bottom - monitorInfo.rcWork.bottom;
-
-        //            //if (workAreaDifference > 5) {
-        //            //    y = monitorInfo.rcMonitor.bottom - windowHeight - workAreaDifference;
-        //            //}
-
-        //            // Ensure window stays within monitor bounds horizontally
-        //            if (x < monitorInfo.rcWork.left)
-        //                x = monitorInfo.rcWork.left;
-        //            if (x + windowWidth > monitorInfo.rcWork.right)
-        //                x = monitorInfo.rcWork.right - windowWidth;
-
-        //            // Move the window (maintain size, only change position)
-        //            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
-        //        }
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Error positioning window: {ex.Message}");
-        //    }
-        //}
-
-        //private static float GetDpiScaleForMonitor(IntPtr hMonitor) {
-        //    try {
-        //        if (Environment.OSVersion.Version.Major > 6 ||
-        //            (Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor >= 3)) {
-
-        //            uint dpiX, dpiY;
-
-        //            // Try to get DPI for the monitor
-        //            if (NativeMethods.GetDpiForMonitor(hMonitor, NativeMethods.MDT_EFFECTIVE_DPI, out dpiX, out dpiY) == 0) {
-        //                return dpiX / 96.0f;
-        //            }
-        //        }
-
-        //        using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) {
-        //            return g.DpiX / 96.0f;
-        //        }
-        //    }
-        //    catch {
-        //        return 1.0f;
-        //    }
-        //}
 
 
         [StructLayout(LayoutKind.Sequential)]

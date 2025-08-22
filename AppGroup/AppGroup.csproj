@@ -2,6 +2,9 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+	  <AssemblyVersion>1.1.0.0</AssemblyVersion>
+	  <FileVersion>1.1.0.0</FileVersion>
+	  <Version>1.1.0</Version>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>AppGroup</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -14,18 +17,19 @@
 	  <Nullable>enable</Nullable>
 	  <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 
-
-
-
+  <ApplicationIcon>AppGroup.ico</ApplicationIcon>
+<Win32Icon>AppGroup.ico</Win32Icon>
     
   </PropertyGroup>
   <ItemGroup>
     <None Remove="EditGroupWindow.xaml" />
     <None Remove="MainWindow.xaml" />
     <None Remove="PopupWindow.xaml" />
+    <None Remove="SettingsDialog.xaml" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="AppGroup.ico" />
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" />
@@ -118,10 +122,21 @@
   <!-- Publish Properties -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
-    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
+    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">False</PublishReadyToRun>
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">False</PublishTrimmed>
     <ApplicationIcon>AppGroup.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <EditorConfigFiles Remove="C:\Users\Ian Divinagracia\source\repos\AppGroup\AppGroup\.editorconfig" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Ian Divinagracia\source\repos\AppGroup\AppGroup\.editorconfig" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="SettingsDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
 </Project>

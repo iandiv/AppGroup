@@ -43,7 +43,10 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
 - **Show or hide group names** for a clean look  
 - **Dark Mode & Light Mode** experience  
 - **Adjust grid columns**  
-- **Drag & Drop** to reorder apps instantly  
+- **Drag & Drop**
+  - reorder apps instantly 
+  - pin groups to taskbar
+
 - **Supports .exe files** as custom icons  
 - **Custom tooltips and launch arguments**  
 

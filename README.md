@@ -19,6 +19,7 @@ App Group lets you **organize, customize, and launch** your apps. Create groups,
   - [Screenshots](#screenshots)
   - [Video Demo](#video-demo)
   - [How to Use](#how-to-use)
+  - [Create UWP Shortcuts](#create-uwp-shortcuts)
   - [Support](#support)
   - [License](#license)
 
@@ -128,6 +129,16 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
    - This opens the folder containing the shortcut  
    - **Right-click → Pin to Taskbar**  
 
+
+# Create UWP Shortcuts 
+
+1. **Press** `Win + R`  
+2. **Type** `shell:AppsFolder` → **Enter**  
+   - File Explorer opens with **all installed apps (Win32 + UWP)**.
+     
+3. **Find** the UWP app (e.g., Calculator, Settings).  
+4. **Right-click** the app → **Create shortcut**  
+   - If Windows asks, choose **Yes** (shortcut will be placed on Desktop).  
 
 
 

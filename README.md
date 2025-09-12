@@ -104,7 +104,9 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
    - Set a **Group Name**  
 
 2. **Add Apps**  
-   - Click **“+”** or **drag & drop** apps into the group  
+   - Click **“+”** or **drag & drop** apps into the group
+   - For UWP apps Shortcuts, see [Create UWP Shortcuts](#create-uwp-shortcuts)
+
 
 3. **Customize Your Group**  
    - Enable **Show Header** if needed  

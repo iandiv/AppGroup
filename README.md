@@ -95,6 +95,7 @@ AppGroup is available in **four variants**:
 
 https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
 
+<img src="https://github.com/user-attachments/assets/a524eab8-b941-4be4-9ed6-579c63e4c4fe" width="500">
 
 
 ## How to Use  

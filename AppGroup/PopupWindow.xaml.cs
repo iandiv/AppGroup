@@ -45,6 +45,8 @@ namespace AppGroup {
         public bool groupHeader { get; set; }
         public int groupCol { get; set; }
         public int groupId { get; set; }
+        public bool showLabels { get; set; } = false;  // Default: labels off for backward compatibility
+        public int labelSize { get; set; } = 10;       // Default font size
     }
 
     public class PopupItem : INotifyPropertyChanged {
@@ -70,8 +72,12 @@ namespace AppGroup {
     public sealed partial class PopupWindow : Window {
         // Constants for UI elements
         private const int BUTTON_SIZE = 40;
+        private const int BUTTON_SIZE_WITH_LABEL = 56;
+        private const int BUTTON_HEIGHT_HORIZONTAL_LABEL = 32;
+        private const int BUTTON_WIDTH_HORIZONTAL_LABEL = 150;
         private const int ICON_SIZE = 24;
         private const int BUTTON_MARGIN = 4;
+        private const int DEFAULT_LABEL_SIZE = 10;
 
         // Static JSON options to prevent redundant creation
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions {
@@ -90,8 +96,17 @@ namespace AppGroup {
         private string _json = "";
         private bool _anyGroupDisplayed;
         private DataTemplate _itemTemplate;
+        private DataTemplate _itemTemplateWithLabel;
+        private DataTemplate _itemTemplateHorizontalLabel;
         private ItemsPanelTemplate _panelTemplate;
+        private ItemsPanelTemplate _panelTemplateWithLabel;
+        private ItemsPanelTemplate _panelTemplateHorizontalLabel;
         private nint hWnd;
+
+        // Label settings for current group
+        private bool _showLabels = false;
+        private int _labelSize = DEFAULT_LABEL_SIZE;
+        private int _currentColumns = 1;
 
 
         private string _originalIconPath;
@@ -162,7 +177,7 @@ namespace AppGroup {
         }
 
         private void InitializeTemplates() {
-            // Create item template once
+            // Create item template once (without labels)
             _itemTemplate = (DataTemplate)XamlReader.Load(
      $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
     xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
@@ -181,7 +196,7 @@ namespace AppGroup {
     </Grid>
 </DataTemplate>");
 
-            // Create panel template once
+            // Create panel template once (without labels)
             const int EFFECTIVE_BUTTON_WIDTH = BUTTON_SIZE + (BUTTON_MARGIN * 2);
             _panelTemplate = (ItemsPanelTemplate)XamlReader.Load(
                 $@"<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
@@ -191,6 +206,81 @@ namespace AppGroup {
                               ItemHeight=""{EFFECTIVE_BUTTON_WIDTH}""
                               HorizontalAlignment=""Center""
                               VerticalAlignment=""Center""/>
+            </ItemsPanelTemplate>");
+
+            // Create item template with labels
+            const int EFFECTIVE_BUTTON_WIDTH_WITH_LABEL = BUTTON_SIZE_WITH_LABEL + (BUTTON_MARGIN * 2);
+            _itemTemplateWithLabel = (DataTemplate)XamlReader.Load(
+     $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+    xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+    <StackPanel VerticalAlignment=""Center""
+          HorizontalAlignment=""Center""
+          Width=""{BUTTON_SIZE_WITH_LABEL}""
+          Height=""{BUTTON_SIZE_WITH_LABEL}""
+          ToolTipService.ToolTip=""{{Binding ToolTip}}"">
+        <Image Source=""{{Binding Icon}}""
+               Width=""{ICON_SIZE}""
+               Height=""{ICON_SIZE}""
+               Stretch=""Uniform""
+               HorizontalAlignment=""Center""
+               Margin=""4,6,4,2"" />
+        <TextBlock Text=""{{Binding ToolTip}}""
+                   FontSize=""{DEFAULT_LABEL_SIZE}""
+                   TextTrimming=""CharacterEllipsis""
+                   TextAlignment=""Center""
+                   HorizontalAlignment=""Center""
+                   MaxWidth=""{BUTTON_SIZE_WITH_LABEL - 4}""
+                   Opacity=""0.9"" />
+    </StackPanel>
+</DataTemplate>");
+
+            // Create panel template with labels
+            _panelTemplateWithLabel = (ItemsPanelTemplate)XamlReader.Load(
+                $@"<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+                xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+                <ItemsWrapGrid Orientation=""Horizontal""
+                              ItemWidth=""{EFFECTIVE_BUTTON_WIDTH_WITH_LABEL}""
+                              ItemHeight=""{EFFECTIVE_BUTTON_WIDTH_WITH_LABEL}""
+                              HorizontalAlignment=""Center""
+                              VerticalAlignment=""Center""/>
+            </ItemsPanelTemplate>");
+
+            // Create item template with horizontal labels (for single column layout)
+            const int EFFECTIVE_BUTTON_HEIGHT_HORIZONTAL = BUTTON_HEIGHT_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2);
+            _itemTemplateHorizontalLabel = (DataTemplate)XamlReader.Load(
+     $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+    xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+    <Grid Width=""{BUTTON_WIDTH_HORIZONTAL_LABEL}""
+          Height=""{BUTTON_HEIGHT_HORIZONTAL_LABEL}""
+          ToolTipService.ToolTip=""{{Binding ToolTip}}"">
+        <StackPanel Orientation=""Horizontal""
+              VerticalAlignment=""Center""
+              HorizontalAlignment=""Left"">
+            <Image Source=""{{Binding Icon}}""
+                   Width=""{ICON_SIZE}""
+                   Height=""{ICON_SIZE}""
+                   Stretch=""Uniform""
+                   VerticalAlignment=""Center""
+                   Margin=""0,0,8,0"" />
+            <TextBlock Text=""{{Binding ToolTip}}""
+                       FontSize=""{DEFAULT_LABEL_SIZE}""
+                       TextTrimming=""CharacterEllipsis""
+                       VerticalAlignment=""Center""
+                       MaxWidth=""{BUTTON_WIDTH_HORIZONTAL_LABEL - ICON_SIZE - 12}""
+                       Opacity=""0.9"" />
+        </StackPanel>
+    </Grid>
+</DataTemplate>");
+
+            // Create panel template with horizontal labels
+            _panelTemplateHorizontalLabel = (ItemsPanelTemplate)XamlReader.Load(
+                $@"<ItemsPanelTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+                xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+                <ItemsWrapGrid Orientation=""Horizontal""
+                              ItemWidth=""{BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2)}""
+                              ItemHeight=""{EFFECTIVE_BUTTON_HEIGHT_HORIZONTAL}""
+                              HorizontalAlignment=""Left""
+                              VerticalAlignment=""Top""/>
             </ItemsPanelTemplate>");
         }
 
@@ -229,11 +319,16 @@ namespace AppGroup {
 
         // Non-async window initialization for faster loading
         private void InitializeWindow() {
-           
+
             int maxPathItems = 1;
             int maxColumns = 1;
             string groupIcon = "AppGroup.ico";
             bool groupHeader = false;
+
+            // Reset label settings
+            _showLabels = false;
+            _labelSize = DEFAULT_LABEL_SIZE;
+            _currentColumns = 1;
 
             // If we have a group filter, only consider that group
             if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
@@ -244,6 +339,12 @@ namespace AppGroup {
                 groupHeader = filteredGroup.Value.groupHeader;
                 //groupIcon = filteredGroup.Value.groupIcon;
                 iconGroup = filteredGroup.Value.groupIcon;
+
+                // Get label settings
+                _showLabels = filteredGroup.Value.showLabels;
+                _labelSize = filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : DEFAULT_LABEL_SIZE;
+                _currentColumns = maxColumns;
+
                 if (!int.TryParse(filteredGroup.Key, out _groupId)) {
                     Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
                     return;
@@ -254,15 +355,32 @@ namespace AppGroup {
                     maxPathItems = Math.Max(maxPathItems, group.path.Count);
                     maxColumns = Math.Max(maxColumns, group.groupCol);
                 }
+                _currentColumns = maxColumns;
+            }
+
+            // Determine if using horizontal labels (single column with labels)
+            bool useHorizontalLabels = _showLabels && _currentColumns == 1;
+
+            // Use appropriate button size based on label setting and layout
+            int buttonWidth, buttonHeight;
+            if (useHorizontalLabels) {
+                buttonWidth = BUTTON_WIDTH_HORIZONTAL_LABEL;
+                buttonHeight = BUTTON_HEIGHT_HORIZONTAL_LABEL;
+            } else if (_showLabels) {
+                buttonWidth = BUTTON_SIZE_WITH_LABEL;
+                buttonHeight = BUTTON_SIZE_WITH_LABEL;
+            } else {
+                buttonWidth = BUTTON_SIZE;
+                buttonHeight = BUTTON_SIZE;
             }
 
             int numberOfRows = (int)Math.Ceiling((double)maxPathItems / maxColumns);
-            int dynamicWidth = maxColumns * (BUTTON_SIZE + BUTTON_MARGIN * 2);
-            if (groupHeader == true && maxColumns < 2) {
-                dynamicWidth = 2 * (BUTTON_SIZE + BUTTON_MARGIN * 2);
+            int dynamicWidth = maxColumns * (buttonWidth + BUTTON_MARGIN * 2);
+            if (groupHeader == true && maxColumns < 2 && !useHorizontalLabels) {
+                dynamicWidth = 2 * (buttonWidth + BUTTON_MARGIN * 2);
             }
 
-            int dynamicHeight = numberOfRows * (BUTTON_SIZE + BUTTON_MARGIN * 2);
+            int dynamicHeight = numberOfRows * (buttonHeight + BUTTON_MARGIN * 2);
             var displayInfo = GetDisplayInformation();
             float scaleFactor = displayInfo.Item1;
 
@@ -336,7 +454,24 @@ namespace AppGroup {
                     ScrollView.Margin = new Thickness(0, 5, 0, 5);
                 }
 
-                // Configure GridView
+                // Configure GridView - select template based on labels and column count
+                // Auto: horizontal labels for 1 column, vertical labels for 2+
+                bool useHorizontalLabels = _showLabels && _currentColumns == 1;
+
+                DataTemplate selectedItemTemplate;
+                ItemsPanelTemplate selectedPanelTemplate;
+
+                if (useHorizontalLabels) {
+                    selectedItemTemplate = _itemTemplateHorizontalLabel;
+                    selectedPanelTemplate = _panelTemplateHorizontalLabel;
+                } else if (_showLabels) {
+                    selectedItemTemplate = _itemTemplateWithLabel;
+                    selectedPanelTemplate = _panelTemplateWithLabel;
+                } else {
+                    selectedItemTemplate = _itemTemplate;
+                    selectedPanelTemplate = _panelTemplate;
+                }
+
                 _gridView = new GridView {
                     SelectionMode = ListViewSelectionMode.Extended,
                     IsItemClickEnabled = true,
@@ -344,8 +479,8 @@ namespace AppGroup {
                     CanDragItems = true,
                     CanReorderItems = true,
                     AllowDrop = true,
-                    ItemTemplate = _itemTemplate,
-                    ItemsPanel = _panelTemplate
+                    ItemTemplate = selectedItemTemplate,
+                    ItemsPanel = selectedPanelTemplate
                 };
 
 
@@ -503,6 +638,8 @@ namespace AppGroup {
                     filteredGroup.Value.groupHeader,
                     newIconPath, // Use the new grid icon path
                     filteredGroup.Value.groupCol,
+                    filteredGroup.Value.showLabels,
+                    filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : 10,
                     reorderedPaths
                 );
 
@@ -563,6 +700,8 @@ namespace AppGroup {
                         filteredGroup.Value.groupHeader,
                         filteredGroup.Value.groupIcon,
                         filteredGroup.Value.groupCol,
+                        filteredGroup.Value.showLabels,
+                        filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : 10,
                         newPathOrder
                     );
                 }

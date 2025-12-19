@@ -139,7 +139,61 @@ namespace AppGroup {
             // Load on activation
             //this.Activated += Window_Activated;
             this.AppWindow.Closing += AppWindow_Closing;
-          SetWindowIcon();
+            SetWindowIcon();
+
+            // Check for updates on startup if enabled
+            _ = CheckForUpdatesOnStartupAsync();
+        }
+
+        private async Task CheckForUpdatesOnStartupAsync() {
+            try {
+                // Wait for window to be fully loaded and settings to be available
+                await Task.Delay(2000);
+
+                // Load settings properly (not just get cached which may be null)
+                var settings = await SettingsHelper.LoadSettingsAsync();
+                if (!settings.CheckForUpdatesOnStartup) {
+                    return;
+                }
+
+                var updateInfo = await UpdateChecker.CheckForUpdatesAsync();
+
+                if (updateInfo.UpdateAvailable && this.Content?.XamlRoot != null) {
+                    // Show update notification
+                    await ShowUpdateDialogAsync(updateInfo);
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error checking for updates on startup: {ex.Message}");
+            }
+        }
+
+        private async Task ShowUpdateDialogAsync(UpdateChecker.UpdateInfo updateInfo) {
+            try {
+                if (this.Content?.XamlRoot == null) {
+                    return;
+                }
+
+                var dialog = new ContentDialog {
+                    Title = "Update Available",
+                    Content = $"A new version of AppGroup is available!\n\n" +
+                              $"Current version: {updateInfo.CurrentVersion}\n" +
+                              $"Latest version: {updateInfo.LatestVersion}\n\n" +
+                              "Would you like to download the update?",
+                    PrimaryButtonText = "Download",
+                    CloseButtonText = "Later",
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.Primary) {
+                    UpdateChecker.OpenReleasesPage(updateInfo.ReleaseUrl);
+                }
+            }
+            catch (Exception ex) {
+                // Dialog may fail if another dialog is already open - this is expected
+                Debug.WriteLine($"Error showing update dialog: {ex.Message}");
+            }
         }
 
 

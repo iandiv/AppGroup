@@ -1,4 +1,4 @@
-<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="600"
+<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="700"
     x:Class="AppGroup.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

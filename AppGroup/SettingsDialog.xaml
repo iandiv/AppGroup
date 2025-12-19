@@ -169,32 +169,45 @@
                 </Border>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" MinWidth="200"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="200"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
-                            <TextBlock Text="Check for updates"
-                                     FontWeight="SemiBold"
-                                     FontSize="14"
-                                     TextWrapping="Wrap"/>
-                            <TextBlock x:Name="UpdateStatusText"
-                                     Text="Click to check for new versions"
-                                     FontSize="12"
-                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                     Margin="0,2,0,0"
-                                     TextWrapping="Wrap"/>
-                        </StackPanel>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                                <TextBlock Text="Check for updates"
+                                         FontWeight="SemiBold"
+                                         FontSize="14"
+                                         TextWrapping="Wrap"/>
+                                <TextBlock x:Name="UpdateStatusText"
+                                         Text="Click to check for new versions"
+                                         FontSize="12"
+                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                         Margin="0,2,0,0"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
 
-                        <Button x:Name="CheckUpdateButton"
-                                Grid.Column="1"
-                                Content="Check Now"
-                                Click="CheckUpdateButton_Click"
-                                VerticalAlignment="Center"
-                                Padding="16,8"/>
-                    </Grid>
+                            <Button x:Name="CheckUpdateButton"
+                                    Grid.Column="1"
+                                    Content="Check Now"
+                                    Click="CheckUpdateButton_Click"
+                                    VerticalAlignment="Center"
+                                    Padding="16,8"/>
+                        </Grid>
+
+                        <InfoBar x:Name="UpdateInfoBar"
+                                 IsOpen="False"
+                                 Severity="Success"
+                                 Title="Update Available"
+                                 Margin="0,12,0,0"
+                                 IsClosable="True">
+                            <InfoBar.ActionButton>
+                                <Button Content="Download" Click="DownloadUpdate_Click"/>
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+                    </StackPanel>
                 </Border>
 
                 <!-- About Section -->

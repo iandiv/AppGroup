@@ -13,6 +13,7 @@ namespace AppGroup {
         private readonly DispatcherQueue _dispatcherQueue;
         private bool _isLoading = true;
         private bool _isCheckingForUpdates = false;
+        private string _updateReleaseUrl = "";
 
         public SettingsDialog() {
             this.InitializeComponent();
@@ -151,24 +152,12 @@ namespace AppGroup {
                     UpdateStatusText.Text = updateInfo.ErrorMessage;
                 }
                 else if (updateInfo.UpdateAvailable) {
-                    UpdateStatusText.Text = $"Update available: v{updateInfo.LatestVersion}";
+                    UpdateStatusText.Text = $"v{updateInfo.LatestVersion} available";
+                    _updateReleaseUrl = updateInfo.ReleaseUrl;
 
-                    // Show update dialog
-                    var dialog = new ContentDialog {
-                        Title = "Update Available",
-                        Content = $"A new version of AppGroup is available!\n\n" +
-                                  $"Current version: {updateInfo.CurrentVersion}\n" +
-                                  $"Latest version: {updateInfo.LatestVersion}\n\n" +
-                                  "Would you like to download the update?",
-                        PrimaryButtonText = "Download",
-                        CloseButtonText = "Later",
-                        XamlRoot = this.XamlRoot
-                    };
-
-                    var result = await dialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary) {
-                        UpdateChecker.OpenReleasesPage(updateInfo.ReleaseUrl);
-                    }
+                    // Show inline InfoBar
+                    UpdateInfoBar.Message = $"Version {updateInfo.LatestVersion} is available (you have {updateInfo.CurrentVersion})";
+                    UpdateInfoBar.IsOpen = true;
                 }
                 else {
                     UpdateStatusText.Text = $"You're up to date! (v{updateInfo.CurrentVersion})";
@@ -181,6 +170,12 @@ namespace AppGroup {
             finally {
                 _isCheckingForUpdates = false;
                 CheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        private void DownloadUpdate_Click(object sender, RoutedEventArgs e) {
+            if (!string.IsNullOrEmpty(_updateReleaseUrl)) {
+                UpdateChecker.OpenReleasesPage(_updateReleaseUrl);
             }
         }
 

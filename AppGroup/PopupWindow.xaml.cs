@@ -73,7 +73,7 @@ namespace AppGroup {
         // Constants for UI elements
         private const int BUTTON_SIZE = 40;
         private const int BUTTON_SIZE_WITH_LABEL = 56;
-        private const int BUTTON_HEIGHT_HORIZONTAL_LABEL = 32;
+        private const int BUTTON_HEIGHT_HORIZONTAL_LABEL = 40;  // Same as BUTTON_SIZE for consistent height
         private const int BUTTON_WIDTH_HORIZONTAL_LABEL = 150;
         private const int ICON_SIZE = 24;
         private const int BUTTON_MARGIN = 4;
@@ -280,7 +280,7 @@ namespace AppGroup {
                               ItemWidth=""{BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2)}""
                               ItemHeight=""{EFFECTIVE_BUTTON_HEIGHT_HORIZONTAL}""
                               HorizontalAlignment=""Left""
-                              VerticalAlignment=""Top""/>
+                              VerticalAlignment=""Center""/>
             </ItemsPanelTemplate>");
         }
 
@@ -380,6 +380,10 @@ namespace AppGroup {
             int dynamicWidth = maxColumns * (buttonWidth + BUTTON_MARGIN * 2);
             if (groupHeader == true && maxColumns < 2 && !useHorizontalLabels) {
                 dynamicWidth = 2 * (buttonWidth + BUTTON_MARGIN * 2);
+            }
+            // Ensure minimum width for horizontal labels
+            if (useHorizontalLabels) {
+                dynamicWidth = Math.Max(dynamicWidth, BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2));
             }
 
             int dynamicHeight = numberOfRows * (buttonHeight + BUTTON_MARGIN * 2);

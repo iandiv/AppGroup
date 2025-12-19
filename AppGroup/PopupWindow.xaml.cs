@@ -40,13 +40,13 @@ namespace AppGroup {
 
     public class GroupData {
         public Dictionary<string, Dictionary<string, string>> path { get; set; }
-        public string groupIcon { get; set; }
-        public string groupName { get; set; }
-        public bool groupHeader { get; set; }
-        public int groupCol { get; set; }
-        public int groupId { get; set; }
-        public bool showLabels { get; set; } = false;  // Default: labels off for backward compatibility
-        public int labelSize { get; set; } = 10;       // Default font size
+        public required string GroupIcon { get; set; }
+        public required string GroupName { get; set; }
+        public bool GroupHeader { get; set; }
+        public int GroupCol { get; set; }
+        public int GroupId { get; set; }
+        public bool ShowLabels { get; set; } = false;  // Default: labels off for backward compatibility
+        public int LabelSize { get; set; } = 10;       // Default font size
     }
 
     public class PopupItem : INotifyPropertyChanged {
@@ -331,18 +331,18 @@ namespace AppGroup {
             _currentColumns = 1;
 
             // If we have a group filter, only consider that group
-            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
                 maxPathItems = filteredGroup.Value.path.Count;
-                maxColumns = filteredGroup.Value.groupCol;
-                groupHeader = filteredGroup.Value.groupHeader;
+                maxColumns = filteredGroup.Value.GroupCol;
+                groupHeader = filteredGroup.Value.GroupHeader;
                 //groupIcon = filteredGroup.Value.groupIcon;
-                iconGroup = filteredGroup.Value.groupIcon;
+                iconGroup = filteredGroup.Value.GroupIcon;
 
                 // Get label settings
-                _showLabels = filteredGroup.Value.showLabels;
-                _labelSize = filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : DEFAULT_LABEL_SIZE;
+                _showLabels = filteredGroup.Value.ShowLabels;
+                _labelSize = filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE;
                 _currentColumns = maxColumns;
 
                 if (!int.TryParse(filteredGroup.Key, out _groupId)) {
@@ -353,7 +353,7 @@ namespace AppGroup {
             else {
                 foreach (var group in _groups.Values) {
                     maxPathItems = Math.Max(maxPathItems, group.path.Count);
-                    maxColumns = Math.Max(maxColumns, group.groupCol);
+                    maxColumns = Math.Max(maxColumns, group.GroupCol);
                 }
                 _currentColumns = maxColumns;
             }
@@ -366,10 +366,12 @@ namespace AppGroup {
             if (useHorizontalLabels) {
                 buttonWidth = BUTTON_WIDTH_HORIZONTAL_LABEL;
                 buttonHeight = BUTTON_HEIGHT_HORIZONTAL_LABEL;
-            } else if (_showLabels) {
+            }
+            else if (_showLabels) {
                 buttonWidth = BUTTON_SIZE_WITH_LABEL;
                 buttonHeight = BUTTON_SIZE_WITH_LABEL;
-            } else {
+            }
+            else {
                 buttonWidth = BUTTON_SIZE;
                 buttonHeight = BUTTON_SIZE;
             }
@@ -402,7 +404,7 @@ namespace AppGroup {
             hWnd = WindowNative.GetWindowHandle(this);
             NativeMethods.PositionWindowAboveTaskbar(hWnd);
 
-        
+
         }
 
 
@@ -437,16 +439,16 @@ namespace AppGroup {
 
             foreach (var group in _groups) {
                 // Skip this group if filtering is active and this isn't the requested group
-                if (_groupFilter != null && !group.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
+                if (_groupFilter != null && !group.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
                     continue;
                 }
 
                 _anyGroupDisplayed = true;
 
                 // Set header visibility
-                if (group.Value.groupHeader) {
+                if (group.Value.GroupHeader) {
                     Header.Visibility = Visibility.Visible;
-                    HeaderText.Text = group.Value.groupName;
+                    HeaderText.Text = group.Value.GroupName;
                     ScrollView.Margin = new Thickness(0, 0, 0, 5);
                 }
                 else {
@@ -464,10 +466,12 @@ namespace AppGroup {
                 if (useHorizontalLabels) {
                     selectedItemTemplate = _itemTemplateHorizontalLabel;
                     selectedPanelTemplate = _panelTemplateHorizontalLabel;
-                } else if (_showLabels) {
+                }
+                else if (_showLabels) {
                     selectedItemTemplate = _itemTemplateWithLabel;
                     selectedPanelTemplate = _panelTemplateWithLabel;
-                } else {
+                }
+                else {
                     selectedItemTemplate = _itemTemplate;
                     selectedPanelTemplate = _panelTemplate;
                 }
@@ -525,14 +529,14 @@ namespace AppGroup {
                 }
 
                 // Get the group information
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
                 if (filteredGroup.Key == null) {
                     Debug.WriteLine($"Error: Group '{_groupFilter}' not found");
                     return;
                 }
 
                 // Determine if this is a grid icon based on the current icon path
-                string currentIcon = filteredGroup.Value.groupIcon;
+                string currentIcon = filteredGroup.Value.GroupIcon;
                 bool isCurrentlyGridIcon = currentIcon.Contains("grid");
 
                 if (!isCurrentlyGridIcon) {
@@ -613,7 +617,7 @@ namespace AppGroup {
 
         private async Task UpdateJsonConfiguration(string newIconPath, int gridSize) {
             try {
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
                 if (filteredGroup.Key == null) return;
 
                 if (!int.TryParse(filteredGroup.Key, out int groupId)) {
@@ -634,12 +638,12 @@ namespace AppGroup {
                 JsonConfigHelper.AddGroupToJson(
                     JsonConfigHelper.GetDefaultConfigPath(),
                     groupId,
-                    filteredGroup.Value.groupName,
-                    filteredGroup.Value.groupHeader,
+                    filteredGroup.Value.GroupName,
+                    filteredGroup.Value.GroupHeader,
                     newIconPath, // Use the new grid icon path
-                    filteredGroup.Value.groupCol,
-                    filteredGroup.Value.showLabels,
-                    filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : 10,
+                    filteredGroup.Value.GroupCol,
+                    filteredGroup.Value.ShowLabels,
+                    filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : 10,
                     reorderedPaths
                 );
 
@@ -663,7 +667,7 @@ namespace AppGroup {
                     return;
                 }
 
-                var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
                 if (filteredGroup.Key == null) {
                     Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
@@ -684,7 +688,7 @@ namespace AppGroup {
                 }
 
                 // Check if current icon is a grid icon and regenerate if needed
-                string currentIcon = filteredGroup.Value.groupIcon;
+                string currentIcon = filteredGroup.Value.GroupIcon;
                 bool isGridIcon = currentIcon.Contains("grid");
 
                 if (isGridIcon) {
@@ -696,12 +700,12 @@ namespace AppGroup {
                     JsonConfigHelper.AddGroupToJson(
                         JsonConfigHelper.GetDefaultConfigPath(),
                         groupId,
-                        filteredGroup.Value.groupName,
-                        filteredGroup.Value.groupHeader,
-                        filteredGroup.Value.groupIcon,
-                        filteredGroup.Value.groupCol,
-                        filteredGroup.Value.showLabels,
-                        filteredGroup.Value.labelSize > 0 ? filteredGroup.Value.labelSize : 10,
+                        filteredGroup.Value.GroupName,
+                        filteredGroup.Value.GroupHeader,
+                        filteredGroup.Value.GroupIcon,
+                        filteredGroup.Value.GroupCol,
+                        filteredGroup.Value.ShowLabels,
+                        filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : 10,
                         newPathOrder
                     );
                 }
@@ -836,7 +840,7 @@ namespace AppGroup {
         //}
 
 
-       
+
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
                 var settings = await SettingsHelper.LoadSettingsAsync();
@@ -910,7 +914,7 @@ namespace AppGroup {
                     });
 
                     _ = Task.Run(() => {
-                        GC.Collect(0, GCCollectionMode.Optimized); 
+                        GC.Collect(0, GCCollectionMode.Optimized);
                     });
                 }
             }
@@ -947,20 +951,20 @@ namespace AppGroup {
                 UpdateMainGridBackground(_uiSettings);
 
                 // Do heavy operations in background after window is shown
-              
+
 
                 // Load configuration asynchronously to not block UI
                 _ = this.DispatcherQueue.TryEnqueue(() => {
                     try {
                         LoadConfiguration();
-                          _ = Task.Run(async () => {
-                                try {
-                                    await UpdateTaskbarIcon(_groupFilter);
-                                }
-                                catch (Exception ex) {
-                                    Debug.WriteLine($"Background taskbar update error: {ex.Message}");
-                                }
-                         });
+                        _ = Task.Run(async () => {
+                            try {
+                                await UpdateTaskbarIcon(_groupFilter);
+                            }
+                            catch (Exception ex) {
+                                Debug.WriteLine($"Background taskbar update error: {ex.Message}");
+                            }
+                        });
                     }
                     catch (Exception ex) {
                         Debug.WriteLine($"Configuration loading error: {ex.Message}");
@@ -986,19 +990,19 @@ namespace AppGroup {
                 string groupIcon = IconHelper.FindOrigIcon(iconGroup);
 
                 // Load settings to check grayscale preference
-             
+
 
                 _originalIconPath = groupIcon;
 
-              
+
 
                 if (!string.IsNullOrEmpty(_originalIconPath) && File.Exists(_originalIconPath)) {
                     if (settings.UseGrayscaleIcon) {
-                    _iconWithBackgroundPath = await IconHelper.CreateBlackWhiteIconAsync(_originalIconPath);
+                        _iconWithBackgroundPath = await IconHelper.CreateBlackWhiteIconAsync(_originalIconPath);
 
                         await TaskbarManager.UpdateTaskbarShortcutIcon(groupName, _iconWithBackgroundPath);
                     }
-                 
+
                 }
             }
             catch (Exception ex) {
@@ -1006,9 +1010,9 @@ namespace AppGroup {
             }
         }
 
-     
 
-        private void TryLaunchApp(string path,string args) {
+
+        private void TryLaunchApp(string path, string args) {
             try {
                 ProcessStartInfo psi = new ProcessStartInfo {
                     FileName = path,
@@ -1117,12 +1121,12 @@ namespace AppGroup {
             if (!string.IsNullOrEmpty(_groupFilter)) {
                 // Find the group with the matching name
                 var matchingGroup = _groups.Values.FirstOrDefault(g =>
-                    g.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                    g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
                 // Check if we found a matching group
                 if (matchingGroup != null) {
                     // Call the LaunchAll function with the matching group name
-                    await JsonConfigHelper.LaunchAll(matchingGroup.groupName);
+                    await JsonConfigHelper.LaunchAll(matchingGroup.GroupName);
                 }
             }
         }
@@ -1210,6 +1214,6 @@ namespace AppGroup {
         }
 
 
-          }
+    }
 
 }

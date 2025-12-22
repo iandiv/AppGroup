@@ -208,6 +208,11 @@ namespace AppGroup {
                               VerticalAlignment=""Center""/>
             </ItemsPanelTemplate>");
 
+            // Label templates will be created dynamically in CreateLabelTemplates() with the actual font size
+        }
+
+        // Create label templates with the specified font size
+        private void CreateLabelTemplates(int fontSize) {
             // Create item template with labels
             const int EFFECTIVE_BUTTON_WIDTH_WITH_LABEL = BUTTON_SIZE_WITH_LABEL + (BUTTON_MARGIN * 2);
             _itemTemplateWithLabel = (DataTemplate)XamlReader.Load(
@@ -225,7 +230,7 @@ namespace AppGroup {
                HorizontalAlignment=""Center""
                Margin=""4,6,4,2"" />
         <TextBlock Text=""{{Binding ToolTip}}""
-                   FontSize=""{DEFAULT_LABEL_SIZE}""
+                   FontSize=""{fontSize}""
                    TextTrimming=""CharacterEllipsis""
                    TextAlignment=""Center""
                    HorizontalAlignment=""Center""
@@ -263,7 +268,7 @@ namespace AppGroup {
                    VerticalAlignment=""Center""
                    Margin=""0,0,8,0"" />
             <TextBlock Text=""{{Binding ToolTip}}""
-                       FontSize=""{DEFAULT_LABEL_SIZE}""
+                       FontSize=""{fontSize}""
                        TextTrimming=""CharacterEllipsis""
                        VerticalAlignment=""Center""
                        MaxWidth=""{BUTTON_WIDTH_HORIZONTAL_LABEL - ICON_SIZE - 12}""
@@ -344,6 +349,11 @@ namespace AppGroup {
                 _showLabels = filteredGroup.Value.ShowLabels;
                 _labelSize = filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE;
                 _currentColumns = maxColumns;
+
+                // Create label templates with the actual font size from config
+                if (_showLabels) {
+                    CreateLabelTemplates(_labelSize);
+                }
 
                 if (!int.TryParse(filteredGroup.Key, out _groupId)) {
                     Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");

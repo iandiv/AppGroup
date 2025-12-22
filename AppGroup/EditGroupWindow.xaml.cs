@@ -543,6 +543,29 @@ namespace AppGroup {
                         });
                     }
                 }
+                else {
+                    // Config file doesn't exist (fresh install) - initialize with defaults
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        groupName = "";
+                        GroupHeader.IsOn = false;
+                        GroupNameTextBox.Text = string.Empty;
+                        GroupColComboBox.Items.Clear();
+                        selectedIconPath = string.Empty;
+                        IconPreviewImage.Source = new BitmapImage(new Uri("ms-appx:///default_preview.png"));
+
+                        ApplicationCount.Text = string.Empty;
+                        ExeFiles.Clear();
+                        IconGridComboBox.Items.Clear();
+                        IconGridComboBox.Visibility = Visibility.Collapsed;
+
+                        // Initialize label settings for new groups on fresh install
+                        InitializeLabelSizeComboBox();
+                        ShowLabels.IsOn = false;
+                        LabelSizePanel.Opacity = 0.5;
+                        LabelSizeComboBox.IsEnabled = false;
+                    });
+                }
 
                 await Task.Run(() => Task.Delay(100));
 

@@ -284,7 +284,7 @@ namespace AppGroup {
             hWnd = WindowNative.GetWindowHandle(this);
             NativeMethods.PositionWindowAboveTaskbar(hWnd);
 
-        
+
         }
 
 

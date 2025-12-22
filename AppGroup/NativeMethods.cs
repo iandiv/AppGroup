@@ -265,115 +265,231 @@ namespace AppGroup {
         [DllImport("psapi.dll")]
         public static extern int EmptyWorkingSet(IntPtr hwProc);
         public const int SW_SHOWNOACTIVATE = 4;  // Shows window without activating/focusing it
-
         public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
-            try {
-                // Get window dimensions
-                NativeMethods.RECT windowRect;
-                if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
-                    return;
-                }
-                int windowWidth = windowRect.right - windowRect.left;
-                int windowHeight = windowRect.bottom - windowRect.top;
+    try {
 
-                // Get current cursor position
-                NativeMethods.POINT cursorPos;
-                if (!NativeMethods.GetCursorPos(out cursorPos)) {
-                    return;
-                }
 
-                // Get monitor information
-                IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
-                NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
-                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-                if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
-                    return;
-                }
 
-                // Calculate position based on taskbar position
-                float dpiScale = GetDpiScaleForMonitor(monitor);
-                int baseTaskbarHeight = 52;
-                int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
+        // Get window dimensions
+        NativeMethods.RECT windowRect;
+        if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+            return;
+        }
+        int windowWidth = windowRect.right - windowRect.left;
+        int windowHeight = windowRect.bottom - windowRect.top;
 
-                // Define a consistent spacing value for all sides
-                int spacing = 8; // Pixels of space between window and taskbar
+        // Get current cursor position
+        NativeMethods.POINT cursorPos;
+        if (!NativeMethods.GetCursorPos(out cursorPos)) {
+            return;
+        }
 
-                // Check if taskbar is auto-hidden and adjust spacing if needed
-                bool isTaskbarAutoHide = IsTaskbarAutoHide();
-                if (isTaskbarAutoHide) {
-                    // When taskbar is auto-hidden, we need to ensure we provide enough space
-                    // The typical auto-hide taskbar shows a few pixels even when hidden
-                    int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale); // Additional space for auto-hide taskbar
-                    spacing += autoHideSpacing;
-                }
+        // Get monitor information
+        IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+        monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+        if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
+            return;
+        }
 
-                // Determine taskbar position by comparing work area with monitor area
-                TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
+       
+        // Calculate position based on taskbar position
+        float dpiScale = GetDpiScaleForMonitor(monitor);
+        int baseTaskbarHeight = 52;
+        int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
 
-                // Initial position (centered horizontally relative to cursor)
-                int x = cursorPos.X - (windowWidth / 2);
-                int y;
+        // Define a consistent spacing value for all sides
+        int spacing = 6; // Pixels of space between window and taskbar
 
-                // Set position based on taskbar position
-                switch (taskbarPosition) {
+        // Check if taskbar is auto-hidden and adjust spacing if needed
+        bool isTaskbarAutoHide = IsTaskbarAutoHide();
+        Debug.WriteLine($"Taskbar Auto-Hide: {isTaskbarAutoHide}");
+        
+        if (isTaskbarAutoHide) {
+            int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale);
+            spacing += autoHideSpacing;
+        }
+
+        // Determine taskbar position by comparing work area with monitor area
+        TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
+        Debug.WriteLine($"Taskbar Position: {taskbarPosition}");
+
+        // Initial position (centered horizontally relative to cursor)
+        int x = cursorPos.X - (windowWidth / 2);
+        int y;
+
+        // Set position based on taskbar position
+        switch (taskbarPosition) {
+                    //case TaskbarPosition.Top:
+                    //    if (isTaskbarAutoHide)
+                    //        y = monitorInfo.rcMonitor.top + spacing;
+                    //    else
+                    //        y = monitorInfo.rcMonitor.top + spacing;
+                    //    break;
+                    //case TaskbarPosition.Bottom:
+                    //    if (isTaskbarAutoHide)
+                    //        y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
+                    //    else
+                    //        y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
+                    //    break;
                     case TaskbarPosition.Top:
-                        // For auto-hide, work area might be full screen, so use monitor top with spacing
-                        if (isTaskbarAutoHide)
-                            y = monitorInfo.rcMonitor.top + spacing;
-                        else
-                            y = monitorInfo.rcWork.top + spacing;
-                        break;
                     case TaskbarPosition.Bottom:
-                        // For auto-hide, work area might be full screen, so use monitor bottom with spacing
-                        if (isTaskbarAutoHide)
-                            y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
-                        else
+                        // Position near cursor, accounting for spacing on both edges
+                        y = cursorPos.Y - (windowHeight / 2);
+                        // Clamp to work area WITH spacing
+                        if (y < monitorInfo.rcWork.top + spacing)
+                            y = monitorInfo.rcWork.top + spacing;
+                        if (y + windowHeight > monitorInfo.rcWork.bottom - spacing)
                             y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         break;
                     case TaskbarPosition.Left:
-                        // For auto-hide, work area might be full screen, so use monitor left with spacing
-                        if (isTaskbarAutoHide)
-                            x = monitorInfo.rcMonitor.left + spacing;
-                        else
-                            x = monitorInfo.rcWork.left + spacing;
-                        y = cursorPos.Y - (windowHeight / 2);
-                        break;
-                    case TaskbarPosition.Right:
-                        // For auto-hide, work area might be full screen, so use monitor right with spacing
-                        if (isTaskbarAutoHide)
-                            x = monitorInfo.rcMonitor.right - windowWidth - spacing;
-                        else
-                            x = monitorInfo.rcWork.right - windowWidth - spacing;
-                        y = cursorPos.Y - (windowHeight / 2);
-                        break;
-                    default:
-                        // Default to bottom positioning
-                        if (isTaskbarAutoHide)
-                            y = monitorInfo.rcMonitor.bottom - windowHeight -spacing;
-                        else
-                            y = monitorInfo.rcWork.bottom - windowHeight - spacing;
-                        break;
-                }
-
-                // Ensure window stays within monitor bounds horizontally
-                if (x < monitorInfo.rcWork.left)
-                    x = monitorInfo.rcWork.left;
-                if (x + windowWidth > monitorInfo.rcWork.right)
-                    x = monitorInfo.rcWork.right - windowWidth;
-
-                // Ensure window stays within monitor bounds vertically
-                if (y < monitorInfo.rcWork.top)
-                    y = monitorInfo.rcWork.top;
-                if (y + windowHeight > monitorInfo.rcWork.bottom)
-                    y = monitorInfo.rcWork.bottom - windowHeight;
-
-                // Move the window (maintain size, only change position)
-                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error positioning window: {ex.Message}");
-            }
+                if (isTaskbarAutoHide)
+                    x = monitorInfo.rcMonitor.left + spacing;
+                else
+                    x = monitorInfo.rcWork.left + spacing;
+                y = cursorPos.Y - (windowHeight / 2);
+                break;
+            case TaskbarPosition.Right:
+                if (isTaskbarAutoHide)
+                    x = monitorInfo.rcMonitor.right - windowWidth - spacing;
+                else
+                    x = monitorInfo.rcWork.right - windowWidth - spacing;
+                y = cursorPos.Y - (windowHeight / 2);
+                break;
+            default:
+                if (isTaskbarAutoHide)
+                    y = monitorInfo.rcMonitor.bottom - windowHeight - spacing;
+                else
+                    y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+                break;
         }
+
+        Debug.WriteLine($"Calculated Position (before bounds check): X={x}, Y={y}");
+
+        // Ensure window stays within monitor bounds horizontally
+        if (x < monitorInfo.rcWork.left)
+            x = monitorInfo.rcWork.left;
+        if (x + windowWidth > monitorInfo.rcWork.right)
+            x = monitorInfo.rcWork.right - windowWidth;
+
+        Debug.WriteLine($"Final Position (after bounds check): X={x}, Y={y}");
+        Debug.WriteLine($"================================");
+
+        // Move the window (maintain size, only change position)
+        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+    }
+    catch (Exception ex) {
+        Debug.WriteLine($"Error positioning window: {ex.Message}");
+    }
+}
+        //public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
+        //    try {
+        //        // Get window dimensions
+        //        NativeMethods.RECT windowRect;
+        //        if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+        //            return;
+        //        }
+        //        int windowWidth = windowRect.right - windowRect.left;
+        //        int windowHeight = windowRect.bottom - windowRect.top;
+
+        //        // Get current cursor position
+        //        NativeMethods.POINT cursorPos;
+        //        if (!NativeMethods.GetCursorPos(out cursorPos)) {
+        //            return;
+        //        }
+
+        //        // Get monitor information
+        //        IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        //        NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+        //        monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+        //        if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
+        //            return;
+        //        }
+
+        //        // Calculate position based on taskbar position
+        //        float dpiScale = GetDpiScaleForMonitor(monitor);
+        //        int baseTaskbarHeight = 52;
+        //        int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
+
+        //        // Define a consistent spacing value for all sides
+        //        int spacing = 8; // Pixels of space between window and taskbar
+
+        //        // Check if taskbar is auto-hidden and adjust spacing if needed
+        //        bool isTaskbarAutoHide = IsTaskbarAutoHide();
+        //        if (isTaskbarAutoHide) {
+        //            // When taskbar is auto-hidden, we need to ensure we provide enough space
+        //            // The typical auto-hide taskbar shows a few pixels even when hidden
+        //            int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale); // Additional space for auto-hide taskbar
+        //            spacing += autoHideSpacing;
+        //        }
+
+        //        // Determine taskbar position by comparing work area with monitor area
+        //        TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
+
+        //        // Initial position (centered horizontally relative to cursor)
+        //        int x = cursorPos.X - (windowWidth / 2);
+        //        int y;
+
+        //        // Set position based on taskbar position
+        //        switch (taskbarPosition) {
+        //            case TaskbarPosition.Top:
+        //                // For auto-hide, work area might be full screen, so use monitor top with spacing
+        //                if (isTaskbarAutoHide)
+        //                    y = monitorInfo.rcMonitor.top + spacing;
+        //                else
+        //                    y = monitorInfo.rcWork.top + spacing;
+        //                break;
+        //            case TaskbarPosition.Bottom:
+        //                // For auto-hide, work area might be full screen, so use monitor bottom with spacing
+        //                if (isTaskbarAutoHide)
+        //                    y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
+        //                else
+        //                    y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+        //                break;
+        //            case TaskbarPosition.Left:
+        //                // For auto-hide, work area might be full screen, so use monitor left with spacing
+        //                if (isTaskbarAutoHide)
+        //                    x = monitorInfo.rcMonitor.left + spacing;
+        //                else
+        //                    x = monitorInfo.rcWork.left + spacing;
+        //                y = cursorPos.Y - (windowHeight / 2);
+        //                break;
+        //            case TaskbarPosition.Right:
+        //                // For auto-hide, work area might be full screen, so use monitor right with spacing
+        //                if (isTaskbarAutoHide)
+        //                    x = monitorInfo.rcMonitor.right - windowWidth - spacing;
+        //                else
+        //                    x = monitorInfo.rcWork.right - windowWidth - spacing;
+        //                y = cursorPos.Y - (windowHeight / 2);
+        //                break;
+        //            default:
+        //                // Default to bottom positioning
+        //                if (isTaskbarAutoHide)
+        //                    y = monitorInfo.rcMonitor.bottom - windowHeight -spacing;
+        //                else
+        //                    y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+        //                break;
+        //        }
+
+        //        // Ensure window stays within monitor bounds horizontally
+        //        if (x < monitorInfo.rcWork.left)
+        //            x = monitorInfo.rcWork.left;
+        //        if (x + windowWidth > monitorInfo.rcWork.right)
+        //            x = monitorInfo.rcWork.right - windowWidth;
+
+        //        // Ensure window stays within monitor bounds vertically
+        //        if (y < monitorInfo.rcWork.top)
+        //            y = monitorInfo.rcWork.top;
+        //        if (y + windowHeight > monitorInfo.rcWork.bottom)
+        //            y = monitorInfo.rcWork.bottom - windowHeight;
+
+        //        // Move the window (maintain size, only change position)
+        //        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error positioning window: {ex.Message}");
+        //    }
+        //}
 
         public static void PositionWindowBelowTaskbar(IntPtr hWnd) {
             try {

@@ -10,9 +10,10 @@ using System.Threading.Tasks;
 namespace AppGroup {
     public sealed partial class SettingsDialog : ContentDialog {
         private SettingsHelper.AppSettings _settings;
-        private Button _checkUpdateButton;
         private readonly DispatcherQueue _dispatcherQueue;
         private bool _isLoading = true;
+        private bool _isCheckingForUpdates = false;
+        private string _updateReleaseUrl = "";
 
         public SettingsDialog() {
             this.InitializeComponent();
@@ -20,9 +21,10 @@ namespace AppGroup {
             // Get the dispatcher queue for UI thread operations
             _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
-            this.Loaded += SettingsDialog_Loaded;
+            // Display the current version
+            VersionText.Text = $"Version {UpdateChecker.GetCurrentVersion()}";
 
-          
+            this.Loaded += SettingsDialog_Loaded;
         }
 
         private async void SettingsDialog_Loaded(object sender, RoutedEventArgs e) {
@@ -33,6 +35,7 @@ namespace AppGroup {
                 SystemTrayToggle.Toggled += SystemTrayToggle_Toggled;
                 StartupToggle.Toggled += StartupToggle_Toggled;
                 GrayscaleIconToggle.Toggled += GrayScaleToggle_Toggled;
+                UpdateCheckToggle.Toggled += UpdateCheckToggle_Toggled;
 
                 _isLoading = false;
             }
@@ -53,6 +56,7 @@ namespace AppGroup {
                 SystemTrayToggle.IsOn = _settings.ShowSystemTrayIcon;
                 StartupToggle.IsOn = _settings.RunAtStartup;
                 GrayscaleIconToggle.IsOn = _settings.UseGrayscaleIcon;
+                UpdateCheckToggle.IsOn = _settings.CheckForUpdatesOnStartup;
 
                 // Verify startup setting matches registry
                 bool isInRegistry = SettingsHelper.IsInStartupRegistry();
@@ -70,6 +74,7 @@ namespace AppGroup {
                 SystemTrayToggle.IsOn = true;
                 StartupToggle.IsOn = true;
                 GrayscaleIconToggle.IsOn = false;
+                UpdateCheckToggle.IsOn = true;
             }
         }
 
@@ -118,6 +123,62 @@ namespace AppGroup {
             }
         }
 
+        private async void UpdateCheckToggle_Toggled(object sender, RoutedEventArgs e) {
+            if (_isLoading) return;
+
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving update check settings: {ex.Message}");
+                // Revert the toggle if saving failed
+                _isLoading = true;
+                UpdateCheckToggle.IsOn = !UpdateCheckToggle.IsOn;
+                _isLoading = false;
+            }
+        }
+
+        private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e) {
+            if (_isCheckingForUpdates) return;
+
+            _isCheckingForUpdates = true;
+            CheckUpdateButton.IsEnabled = false;
+            UpdateStatusText.Text = "Checking for updates...";
+
+            try {
+                var updateInfo = await UpdateChecker.CheckForUpdatesAsync();
+
+                if (!string.IsNullOrEmpty(updateInfo.ErrorMessage)) {
+                    UpdateStatusText.Text = updateInfo.ErrorMessage;
+                }
+                else if (updateInfo.UpdateAvailable) {
+                    UpdateStatusText.Text = $"v{updateInfo.LatestVersion} available";
+                    _updateReleaseUrl = updateInfo.ReleaseUrl;
+
+                    // Show inline InfoBar
+                    UpdateInfoBar.Message = $"Version {updateInfo.LatestVersion} is available (you have {updateInfo.CurrentVersion})";
+                    UpdateInfoBar.IsOpen = true;
+                }
+                else {
+                    UpdateStatusText.Text = $"You're up to date! (v{updateInfo.CurrentVersion})";
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error checking for updates: {ex}");
+                UpdateStatusText.Text = "Error checking for updates";
+            }
+            finally {
+                _isCheckingForUpdates = false;
+                CheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        private void DownloadUpdate_Click(object sender, RoutedEventArgs e) {
+            if (!string.IsNullOrEmpty(_updateReleaseUrl)) {
+                UpdateChecker.OpenReleasesPage(_updateReleaseUrl);
+            }
+        }
+
         private async Task SaveSettingsAsync() {
             try {
                 if (_settings == null) {
@@ -128,6 +189,7 @@ namespace AppGroup {
                 _settings.ShowSystemTrayIcon = SystemTrayToggle.IsOn;
                 _settings.RunAtStartup = StartupToggle.IsOn;
                 _settings.UseGrayscaleIcon = GrayscaleIconToggle.IsOn;
+                _settings.CheckForUpdatesOnStartup = UpdateCheckToggle.IsOn;
 
                 // Save to file
                 await SettingsHelper.SaveSettingsAsync(_settings);

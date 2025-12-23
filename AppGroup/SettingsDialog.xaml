@@ -41,7 +41,7 @@
             </Button>
         </Grid>
 
-        <ScrollViewer>
+        <ScrollViewer MaxHeight="580" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="0" Margin="20,0,20,20">
 
                 <!-- Application Section -->
@@ -114,7 +114,7 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
-                            <TextBlock Text="Grayscale icon" 
+                            <TextBlock Text="Grayscale icon"
                                      FontWeight="SemiBold"
                                      FontSize="14"
                                      TextWrapping="Wrap"/>
@@ -136,7 +136,96 @@
                     </Grid>
                 </Border>
 
-               
+                <!-- Updates Section -->
+                <TextBlock Text="Updates" Style="{StaticResource SectionHeaderStyle}"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Check for updates on startup"
+                                     FontWeight="SemiBold"
+                                     FontSize="14"
+                                     TextWrapping="Wrap"/>
+                            <TextBlock Text="Automatically check for new versions when the app starts"
+                                     FontSize="12"
+                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                     Margin="0,2,0,0"
+                                     TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <ToggleSwitch x:Name="UpdateCheckToggle"
+                                    Grid.Column="1"
+                                    IsOn="True"
+                                    VerticalAlignment="Center"
+                                    OnContent=""
+                                    OffContent=""
+                                   />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="200"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                                <TextBlock Text="Check for updates"
+                                         FontWeight="SemiBold"
+                                         FontSize="14"
+                                         TextWrapping="Wrap"/>
+                                <TextBlock x:Name="UpdateStatusText"
+                                         Text="Click to check for new versions"
+                                         FontSize="12"
+                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                         Margin="0,2,0,0"
+                                         TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <Button x:Name="CheckUpdateButton"
+                                    Grid.Column="1"
+                                    Content="Check Now"
+                                    Click="CheckUpdateButton_Click"
+                                    VerticalAlignment="Center"
+                                    Padding="16,8"/>
+                        </Grid>
+
+                        <InfoBar x:Name="UpdateInfoBar"
+                                 IsOpen="False"
+                                 Severity="Success"
+                                 Title="Update Available"
+                                 Margin="0,12,0,0"
+                                 IsClosable="True">
+                            <InfoBar.ActionButton>
+                                <Button Content="Download" Click="DownloadUpdate_Click"/>
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+                    </StackPanel>
+                </Border>
+
+                <!-- About Section -->
+                <TextBlock Text="About" Style="{StaticResource SectionHeaderStyle}"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="AppGroup"
+                                 FontWeight="SemiBold"
+                                 FontSize="14"/>
+                        <TextBlock x:Name="VersionText"
+                                 Text="Version"
+                                 FontSize="12"
+                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                 Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
     </StackPanel>

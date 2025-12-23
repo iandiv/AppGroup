@@ -19,6 +19,7 @@ namespace AppGroup {
             public bool ShowSystemTrayIcon { get; set; } = true;
             public bool RunAtStartup { get; set; } = true;
             public bool UseGrayscaleIcon { get; set; } = false;
+            public bool CheckForUpdatesOnStartup { get; set; } = true;
         }
 
         private static AppSettings _currentSettings;

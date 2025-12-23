@@ -61,7 +61,7 @@ namespace AppGroup
             return bitmapImage;
         }
         public static async Task<string> GetIconPathAsync(string filePath) {
-            if (string.IsNullOrEmpty(filePath)) return null;
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
 
             string cacheKey = ComputeFileCacheKey(filePath);
 
@@ -103,6 +103,9 @@ namespace AppGroup
         }
 
         public static string ComputeFileCacheKey(string filePath) {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
+                return filePath ?? string.Empty;
+            }
             var fileInfo = new FileInfo(filePath);
             return $"{filePath}_{fileInfo.LastWriteTimeUtc}_{fileInfo.Length}";
         }

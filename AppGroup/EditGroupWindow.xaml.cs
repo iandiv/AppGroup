@@ -369,6 +369,27 @@ namespace AppGroup {
                 GroupHeader.IsEnabled = true;
             }
         }
+
+        private void ShowLabels_Toggled(object sender, RoutedEventArgs e) {
+            if (ShowLabels.IsOn) {
+                LabelSizePanel.Opacity = 1.0;
+                LabelSizeComboBox.IsEnabled = true;
+            }
+            else {
+                LabelSizePanel.Opacity = 0.5;
+                LabelSizeComboBox.IsEnabled = false;
+            }
+        }
+
+        private void InitializeLabelSizeComboBox() {
+            LabelSizeComboBox.Items.Clear();
+            int[] sizes = { 8, 9, 10, 11, 12, 14 };
+            foreach (int size in sizes) {
+                LabelSizeComboBox.Items.Add(size.ToString());
+            }
+            LabelSizeComboBox.SelectedItem = "10"; // Default
+        }
+
         private async Task LoadGroupDataAsync(int groupId) {
             await Task.Run(async () =>
             {
@@ -382,6 +403,8 @@ namespace AppGroup {
                         int groupCol = groupNode["groupCol"]?.GetValue<int>() ?? 0;
                         string groupIcon = IconHelper.FindOrigIcon(groupNode["groupIcon"]?.GetValue<string>());
                         bool groupHeader = groupNode["groupHeader"]?.GetValue<bool>() ?? false;
+                        bool showLabels = groupNode["showLabels"]?.GetValue<bool>() ?? false;
+                        int labelSize = groupNode["labelSize"]?.GetValue<int>() ?? 10;
 
                         JsonObject paths = groupNode["path"]?.AsObject();
 
@@ -405,6 +428,20 @@ namespace AppGroup {
                             GroupHeader.IsOn = groupHeader;
                             if (!string.IsNullOrEmpty(groupName)) {
                                 GroupNameTextBox.Text = groupName;
+                            }
+
+                            // Initialize and set label settings
+                            InitializeLabelSizeComboBox();
+                            ShowLabels.IsOn = showLabels;
+                            LabelSizeComboBox.SelectedItem = labelSize.ToString();
+                            // Update label size panel state
+                            if (showLabels) {
+                                LabelSizePanel.Opacity = 1.0;
+                                LabelSizeComboBox.IsEnabled = true;
+                            }
+                            else {
+                                LabelSizePanel.Opacity = 0.5;
+                                LabelSizeComboBox.IsEnabled = false;
                             }
                         });
 
@@ -497,8 +534,37 @@ namespace AppGroup {
                             ExeFiles.Clear();
                             IconGridComboBox.Items.Clear();
                             IconGridComboBox.Visibility = Visibility.Collapsed;
+
+                            // Initialize label settings for new groups
+                            InitializeLabelSizeComboBox();
+                            ShowLabels.IsOn = false;
+                            LabelSizePanel.Opacity = 0.5;
+                            LabelSizeComboBox.IsEnabled = false;
                         });
                     }
+                }
+                else {
+                    // Config file doesn't exist (fresh install) - initialize with defaults
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        groupName = "";
+                        GroupHeader.IsOn = false;
+                        GroupNameTextBox.Text = string.Empty;
+                        GroupColComboBox.Items.Clear();
+                        selectedIconPath = string.Empty;
+                        IconPreviewImage.Source = new BitmapImage(new Uri("ms-appx:///default_preview.png"));
+
+                        ApplicationCount.Text = string.Empty;
+                        ExeFiles.Clear();
+                        IconGridComboBox.Items.Clear();
+                        IconGridComboBox.Visibility = Visibility.Collapsed;
+
+                        // Initialize label settings for new groups on fresh install
+                        InitializeLabelSizeComboBox();
+                        ShowLabels.IsOn = false;
+                        LabelSizePanel.Opacity = 0.5;
+                        LabelSizeComboBox.IsEnabled = false;
+                    });
                 }
 
                 await Task.Run(() => Task.Delay(100));
@@ -976,8 +1042,12 @@ if (isPinned) {
          file => (file.Tooltip, file.Args, file.IconPath)
      );
 
+                    // Get label settings from UI
+                    bool showLabels = ShowLabels.IsOn;
+                    int labelSize = LabelSizeComboBox.SelectedItem != null ? int.Parse(LabelSizeComboBox.SelectedItem.ToString()) : 10;
+
                     // Update your AddGroupToJson method signature and implementation to handle icon
-                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, paths);
+                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, showLabels, labelSize, paths);
 
                    
                     if (tempIcon != null) {

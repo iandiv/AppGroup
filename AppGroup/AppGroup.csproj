@@ -86,7 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Interop.IWshRuntimeLibrary" Version="1.0.1" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7175" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001">
       <TreatAsUsed>true</TreatAsUsed>
     </PackageReference>
@@ -143,9 +143,9 @@
 
   <!-- Automatically set version from git tags (e.g., v1.3.0 -> 1.3.0) -->
   <Target Name="SetVersionFromGitTag" BeforeTargets="PrepareForBuild">
-    <Exec Command="git describe --tags --abbrev=0 2>nul" ConsoleToMsBuild="true" IgnoreExitCode="true">
-      <Output TaskParameter="ConsoleOutput" PropertyName="GitTag"/>
-      <Output TaskParameter="ExitCode" PropertyName="GitExitCode"/>
+    <Exec Command="git describe --tags --abbrev=0 2&gt;nul" ConsoleToMsBuild="true" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitTag" />
+      <Output TaskParameter="ExitCode" PropertyName="GitExitCode" />
     </Exec>
     <PropertyGroup Condition="'$(GitExitCode)' == '0' and '$(GitTag)' != ''">
       <CleanVersion>$([System.Text.RegularExpressions.Regex]::Replace($(GitTag), '^[vV]', ''))</CleanVersion>

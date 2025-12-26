@@ -10,17 +10,86 @@ using System.Threading.Tasks;
 namespace AppGroup {
     public static partial class NativeMethods {
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("user32.dll")]
+        public static extern bool BringWindowToTop(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool AllowSetForegroundWindow(uint dwProcessId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SetFocus(IntPtr hWnd);
+
+        // Constants you may already have
+        public const int SW_SHOW = 5;
+        public const int SW_RESTORE = 9;
+        public const int SW_SHOWNOACTIVATE = 4;
+
+        /// <summary>
+        /// CRITICAL: This is the ONLY reliable way to bring WinUI3 window to foreground
+        /// Regular SetForegroundWindow doesn't work when window is visible but not foreground
+        /// </summary>
+        public static void ForceForegroundWindow(IntPtr hWnd) {
+            // Don't do anything if already foreground
+            if (GetForegroundWindow() == hWnd) {
+                return;
+            }
+
+            // Get the thread IDs
+            uint currentThreadId = GetCurrentThreadId();
+            IntPtr foregroundWindow = GetForegroundWindow();
+            uint foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, out _);
+
+            // Attach to foreground thread to bypass restrictions
+            if (currentThreadId != foregroundThreadId) {
+                AttachThreadInput(currentThreadId, foregroundThreadId, true);
+
+                // Now we can set foreground window
+                BringWindowToTop(hWnd);
+                ShowWindow(hWnd, SW_SHOW);
+                SetForegroundWindow(hWnd);
+                SetFocus(hWnd);
+
+                // Detach
+                AttachThreadInput(currentThreadId, foregroundThreadId, false);
+            }
+            else {
+                // Same thread, just set it
+                BringWindowToTop(hWnd);
+                ShowWindow(hWnd, SW_SHOW);
+                SetForegroundWindow(hWnd);
+                SetFocus(hWnd);
+            }
+        }
+
 
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool SetForegroundWindow(IntPtr hWnd);
+        //[DllImport("user32.dll")]
+        //[return: MarshalAs(UnmanagedType.Bool)]
+        //public static extern bool SetForegroundWindow(IntPtr hWnd);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        //[DllImport("user32.dll", CharSet = CharSet.Auto)]
+        //public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -58,8 +127,8 @@ namespace AppGroup {
         }
 
         public const int SW_HIDE = 0;
-        public const int SW_SHOW = 5;
-        public const int SW_RESTORE = 9;
+        //public const int SW_SHOW = 5;
+        //public const int SW_RESTORE = 9;
         public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOZORDER = 0x0004;
@@ -73,7 +142,7 @@ namespace AppGroup {
         public const int SW_NORMAL = 1;
         // Window Messages
         public const int WM_COPYDATA = 0x004A;
-       
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
@@ -208,7 +277,7 @@ namespace AppGroup {
         public static extern IntPtr LoadImage(IntPtr hinst, string lpszName, uint uType,
             int cxDesired, int cyDesired, uint fuLoad);
 
-      
+
 
         [DllImport("user32.dll")]
         public static extern IntPtr CreatePopupMenu();
@@ -252,7 +321,7 @@ namespace AppGroup {
         }
 
         public const uint LR_DEFAULTSIZE = 0x00000040;
-   
+
         public const int MONITOR_DEFAULTTOPRIMARY = 0x00000001;
 
         [DllImport("user32.dll")]
@@ -262,9 +331,9 @@ namespace AppGroup {
         public static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
         public const int SW_SHOWNORMAL = 1;
 
-        [DllImport("psapi.dll")]
-        public static extern int EmptyWorkingSet(IntPtr hwProc);
-        public const int SW_SHOWNOACTIVATE = 4;  // Shows window without activating/focusing it
+        //[DllImport("psapi.dll")]
+        //public static extern int EmptyWorkingSet(IntPtr hwProc);
+        //public const int SW_SHOWNOACTIVATE = 4;  // Shows window without activating/focusing it
 
         public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
             try {
@@ -349,7 +418,7 @@ namespace AppGroup {
                     default:
                         // Default to bottom positioning
                         if (isTaskbarAutoHide)
-                            y = monitorInfo.rcMonitor.bottom - windowHeight -spacing;
+                            y = monitorInfo.rcMonitor.bottom - windowHeight - spacing;
                         else
                             y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         break;
@@ -437,7 +506,7 @@ namespace AppGroup {
                         break;
 
                     default:
-                        y = monitorInfo.rcMonitor.bottom + spacing ; // 👈 off-screen below
+                        y = monitorInfo.rcMonitor.bottom + spacing; // 👈 off-screen below
                         break;
                 }
 
@@ -686,7 +755,7 @@ namespace AppGroup {
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
-    
+
 
 
 

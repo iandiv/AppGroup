@@ -28,7 +28,9 @@
     <None Remove="PopupWindow.xaml" />
     <None Remove="SettingsDialog.xaml" />
   </ItemGroup>
-
+	<PropertyGroup>
+		<RunMakePri>false</RunMakePri>
+	</PropertyGroup>
   <ItemGroup>
     <Content Include="AppGroup.ico" />
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -86,7 +88,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Interop.IWshRuntimeLibrary" Version="1.0.1" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6901" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001">
       <TreatAsUsed>true</TreatAsUsed>
     </PackageReference>

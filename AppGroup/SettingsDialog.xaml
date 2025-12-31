@@ -119,7 +119,7 @@
                                      FontWeight="SemiBold"
                                      FontSize="14"
                                      TextWrapping="Wrap"/>
-                            <TextBlock Text="Show the tray icon in grayscale when the group is showing"
+                            <TextBlock Text="Show the icon in grayscale when the group is showing"
                                      FontSize="12"
                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                      Margin="0,2,0,0"

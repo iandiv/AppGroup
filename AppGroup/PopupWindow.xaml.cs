@@ -975,8 +975,8 @@ namespace AppGroup {
 
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
-               
-               
+
+                NativeMethods.PositionWindowOffScreenBelow(hWnd);
                 if (_groups != null) {
                     foreach (var group in _groups) {
                         Header.Visibility = Visibility.Collapsed;

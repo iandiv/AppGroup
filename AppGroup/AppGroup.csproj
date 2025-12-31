@@ -28,7 +28,9 @@
     <None Remove="PopupWindow.xaml" />
     <None Remove="SettingsDialog.xaml" />
   </ItemGroup>
-
+	<PropertyGroup>
+		<RunMakePri>false</RunMakePri>
+	</PropertyGroup>
   <ItemGroup>
     <Content Include="AppGroup.ico" />
     <Content Include="Assets\SplashScreen.scale-200.png" />

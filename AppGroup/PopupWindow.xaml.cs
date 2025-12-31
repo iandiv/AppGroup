@@ -37,20 +37,16 @@ using WinUIEx;
 using File = System.IO.File;
 
 namespace AppGroup {
-    public class PathData {
-        public string Tooltip { get; set; }
-        public string Args { get; set; }
-        public string Icon { get; set; }
-    }
+
     public class GroupData {
+        public Dictionary<string, Dictionary<string, string>> path { get; set; }
         public required string GroupIcon { get; set; }
         public required string GroupName { get; set; }
         public bool GroupHeader { get; set; }
         public int GroupCol { get; set; }
         public int GroupId { get; set; }
-        public bool ShowLabels { get; set; } = false;
-        public int LabelSize { get; set; } = 10;
-        public Dictionary<string, PathData> Path { get; set; }  // Changed to Pascal case
+        public bool ShowLabels { get; set; } = false;  // Default: labels off for backward compatibility
+        public int LabelSize { get; set; } = 10;       // Default font size
     }
 
     public class PopupItem : INotifyPropertyChanged {
@@ -85,8 +81,7 @@ namespace AppGroup {
 
         // Static JSON options to prevent redundant creation
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions {
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase 
+            PropertyNameCaseInsensitive = true
         };
 
         // Member variables
@@ -133,7 +128,6 @@ namespace AppGroup {
 
             // Setup window
             _windowHelper = new WindowHelper(this);
-
             _windowHelper.SetSystemBackdrop(WindowHelper.BackdropType.AcrylicBase);
             _windowHelper.IsMaximizable = false;
             _windowHelper.IsMinimizable = false;
@@ -148,8 +142,6 @@ namespace AppGroup {
 
             SetWindowIcon();
 
-
-
             //InitializeSystemTray();
             this.AppWindow.IsShownInSwitchers = false;
 
@@ -163,27 +155,9 @@ namespace AppGroup {
 
         private void UpdateMainGridBackground(UISettings uiSettings) {
             // Check if the accent color is being shown on Start and taskbar
+
             if (IsAccentColorOnStartTaskbarEnabled()) {
-
-                if (Content is FrameworkElement rootElement) {
-                    rootElement.RequestedTheme = ElementTheme.Dark;
-                }
-                // Get current app theme
-                var appTheme = Application.Current.RequestedTheme;
-
-                // Use SystemAccentColorDark2 for Light mode, Dark3 for Dark mode
-                string accentResourceKey = appTheme == ApplicationTheme.Light
-                    ? "SystemAccentColorDark2"
-                    : "SystemAccentColorDark2";
-
-                if (Application.Current.Resources.TryGetValue(accentResourceKey, out object accentColor)) {
-                    var acrylicBrush = new Microsoft.UI.Xaml.Media.AcrylicBrush {
-                        TintColor = (Windows.UI.Color)accentColor,
-                        TintOpacity = 0.8,
-                        FallbackColor = (Windows.UI.Color)accentColor
-                    };
-                    MainGrid.Background = acrylicBrush;
-                }
+                MainGrid.Background = Application.Current.Resources["AccentAcrylicInAppFillColorBaseBrush"] as Microsoft.UI.Xaml.Media.AcrylicBrush;
             }
             else {
                 MainGrid.Background = null;
@@ -292,7 +266,7 @@ namespace AppGroup {
                    Height=""{ICON_SIZE}""
                    Stretch=""Uniform""
                    VerticalAlignment=""Center""
-                   Margin=""8,0,8,0"" />
+                   Margin=""0,0,8,0"" />
             <TextBlock Text=""{{Binding ToolTip}}""
                        FontSize=""{fontSize}""
                        TextTrimming=""CharacterEllipsis""
@@ -316,7 +290,8 @@ namespace AppGroup {
         }
 
         // Load configuration with better error handling and caching
-        private  void LoadConfiguration() {
+        private async void LoadConfiguration() {
+            // Update taskbar icon with white background when window shows
             try {
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
                 _json = JsonConfigHelper.ReadJsonFromFile(configPath);
@@ -364,7 +339,7 @@ namespace AppGroup {
             if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
                 var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
-                maxPathItems = filteredGroup.Value.Path.Count;
+                maxPathItems = filteredGroup.Value.path.Count;
                 maxColumns = filteredGroup.Value.GroupCol;
                 groupHeader = filteredGroup.Value.GroupHeader;
                 //groupIcon = filteredGroup.Value.groupIcon;
@@ -387,7 +362,7 @@ namespace AppGroup {
             }
             else {
                 foreach (var group in _groups.Values) {
-                    maxPathItems = Math.Max(maxPathItems, group.Path.Count);
+                    maxPathItems = Math.Max(maxPathItems, group.path.Count);
                     maxColumns = Math.Max(maxColumns, group.GroupCol);
                 }
                 _currentColumns = maxColumns;
@@ -439,10 +414,8 @@ namespace AppGroup {
 
             int finalWidth = scaledWidth + 30;
             int finalHeight = scaledHeight + 20;
-
-
             this.AppWindow.Resize(new SizeInt32(finalWidth, finalHeight));
-
+            hWnd = WindowNative.GetWindowHandle(this);
             NativeMethods.PositionWindowAboveTaskbar(hWnd);
 
 
@@ -475,72 +448,8 @@ namespace AppGroup {
             // Clear existing items
             PopupItems.Clear();
             GridPanel.Children.Clear();
-            HeaderText.Text = "";
+
             _anyGroupDisplayed = false;
-
-            //foreach (var group in _groups) {
-            //    // Skip this group if filtering is active and this isn't the requested group
-            //    if (_groupFilter != null && !group.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
-            //        continue;
-            //    }
-
-            //    _anyGroupDisplayed = true;
-
-            //    // Set header visibility
-            //    if (group.Value.GroupHeader) {
-            //        Header.Visibility = Visibility.Visible;
-            //        HeaderText.Text = group.Value.GroupName;
-            //        ScrollView.Margin = new Thickness(0, 0, 0, 5);
-            //    }
-            //    else {
-            //        Header.Visibility = Visibility.Collapsed;
-            //        ScrollView.Margin = new Thickness(0, 5, 0, 5);
-            //    }
-
-            //    // Configure GridView - select template based on labels and column count
-            //    // Auto: horizontal labels for 1 column, vertical labels for 2+
-            //    bool useHorizontalLabels = _showLabels && _currentColumns == 1;
-
-            //    DataTemplate selectedItemTemplate;
-            //    ItemsPanelTemplate selectedPanelTemplate;
-
-            //    if (useHorizontalLabels) {
-            //        selectedItemTemplate = _itemTemplateHorizontalLabel;
-            //        selectedPanelTemplate = _panelTemplateHorizontalLabel;
-            //    }
-            //    else if (_showLabels) {
-            //        selectedItemTemplate = _itemTemplateWithLabel;
-            //        selectedPanelTemplate = _panelTemplateWithLabel;
-            //    }
-            //    else {
-            //        selectedItemTemplate = _itemTemplate;
-            //        selectedPanelTemplate = _panelTemplate;
-            //    }
-
-            //    _gridView = new GridView {
-            //        SelectionMode = ListViewSelectionMode.Extended,
-            //        IsItemClickEnabled = true,
-            //        HorizontalAlignment = HorizontalAlignment.Left,
-            //        CanDragItems = true,
-            //        CanReorderItems = true,
-            //        AllowDrop = true,
-            //        ItemTemplate = selectedItemTemplate,
-            //        ItemsPanel = selectedPanelTemplate
-            //    };
-
-
-            //    // Set up events
-            //    _gridView.RightTapped += GridView_RightTapped;
-            //    _gridView.DragItemsCompleted += GridView_DragItemsCompleted;
-            //    _gridView.ItemClick += GridView_ItemClick;
-
-            //    // Load items
-            //    LoadGridItems(group.Value.path);
-
-            //    _gridView.ItemsSource = PopupItems;
-            //    GridPanel.Children.Add(_gridView);
-            //}
-
 
             foreach (var group in _groups) {
                 // Skip this group if filtering is active and this isn't the requested group
@@ -561,7 +470,8 @@ namespace AppGroup {
                     ScrollView.Margin = new Thickness(0, 5, 0, 5);
                 }
 
-                // Configure GridView
+                // Configure GridView - select template based on labels and column count
+                // Auto: horizontal labels for 1 column, vertical labels for 2+
                 bool useHorizontalLabels = _showLabels && _currentColumns == 1;
 
                 DataTemplate selectedItemTemplate;
@@ -591,30 +501,31 @@ namespace AppGroup {
                     ItemsPanel = selectedPanelTemplate
                 };
 
+
                 // Set up events
                 _gridView.RightTapped += GridView_RightTapped;
                 _gridView.DragItemsCompleted += GridView_DragItemsCompleted;
                 _gridView.ItemClick += GridView_ItemClick;
 
-                // Load items with updated PathData structure
-                LoadGridItems(group.Value.Path);  // Now passing Dictionary<string, PathData>
+                // Load items
+                LoadGridItems(group.Value.path);
 
                 _gridView.ItemsSource = PopupItems;
                 GridPanel.Children.Add(_gridView);
+            }
 
-                // Handle case where no groups match filter
-                if (!_anyGroupDisplayed) {
-                    TextBlock noGroupsText = new TextBlock {
-                        Text = $"No group found matching '{_groupFilter}'",
-                        Margin = new Thickness(10),
-                        TextWrapping = TextWrapping.Wrap,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        TextAlignment = TextAlignment.Center
-                    };
-                    GridPanel.Children.Add(noGroupsText);
+            // Handle case where no groups match filter
+            if (!_anyGroupDisplayed) {
+                TextBlock noGroupsText = new TextBlock {
+                    Text = $"No group found matching '{_groupFilter}'",
+                    Margin = new Thickness(10),
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextAlignment = TextAlignment.Center
+                };
+                GridPanel.Children.Add(noGroupsText);
 
-                    this.AppWindow.Resize(new SizeInt32(250, 120));
-                }
+                this.AppWindow.Resize(new SizeInt32(250, 120));
             }
         }
 
@@ -822,50 +733,19 @@ namespace AppGroup {
             }
         }
 
-        //private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
-        //    foreach (var pathEntry in pathsWithProperties) {
-        //        string path = pathEntry.Key;
-        //        var properties = pathEntry.Value;
-
-        //        // Get displayName from properties if available, otherwise use default method
-        //        string tooltip = properties.ContainsKey("tooltip") && !string.IsNullOrEmpty(properties["tooltip"])
-        //            ? properties["tooltip"]
-        //            : GetDisplayName(path);
-
-        //        // Get custom icon path from JSON if available
-        //        string customIconPath = properties.ContainsKey("icon") && !string.IsNullOrEmpty(properties["icon"])
-        //            ? properties["icon"]
-        //            : null;
-
-        //        var popupItem = new PopupItem {
-        //            Path = path,
-        //            Name = Path.GetFileNameWithoutExtension(path),
-        //            ToolTip = tooltip,
-        //            Icon = null,
-        //            Args = properties.ContainsKey("args") ? properties["args"] : "",
-        //            IconPath = customIconPath, // Store the custom icon path
-        //            CustomIconPath = customIconPath // Additional tracking
-        //        };
-
-        //        PopupItems.Add(popupItem);
-        //        _ = LoadIconAsync(popupItem, path);
-        //    }
-        //}
-
-
-        private void LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
+        private void LoadGridItems(Dictionary<string, Dictionary<string, string>> pathsWithProperties) {
             foreach (var pathEntry in pathsWithProperties) {
                 string path = pathEntry.Key;
-                PathData properties = pathEntry.Value;
+                var properties = pathEntry.Value;
 
-                // Get tooltip from PathData if available, otherwise use default method
-                string tooltip = !string.IsNullOrEmpty(properties.Tooltip)
-                    ? properties.Tooltip
+                // Get displayName from properties if available, otherwise use default method
+                string tooltip = properties.ContainsKey("tooltip") && !string.IsNullOrEmpty(properties["tooltip"])
+                    ? properties["tooltip"]
                     : GetDisplayName(path);
 
-                // Get custom icon path from PathData if available
-                string customIconPath = !string.IsNullOrEmpty(properties.Icon)
-                    ? properties.Icon
+                // Get custom icon path from JSON if available
+                string customIconPath = properties.ContainsKey("icon") && !string.IsNullOrEmpty(properties["icon"])
+                    ? properties["icon"]
                     : null;
 
                 var popupItem = new PopupItem {
@@ -873,15 +753,17 @@ namespace AppGroup {
                     Name = Path.GetFileNameWithoutExtension(path),
                     ToolTip = tooltip,
                     Icon = null,
-                    Args = properties.Args ?? "",
-                    IconPath = customIconPath,
-                    CustomIconPath = customIconPath
+                    Args = properties.ContainsKey("args") ? properties["args"] : "",
+                    IconPath = customIconPath, // Store the custom icon path
+                    CustomIconPath = customIconPath // Additional tracking
                 };
 
                 PopupItems.Add(popupItem);
                 _ = LoadIconAsync(popupItem, path);
             }
         }
+
+
         private async Task LoadIconAsync(PopupItem item, string path) {
             try {
                 string iconPath;
@@ -975,17 +857,6 @@ namespace AppGroup {
 
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
-               
-               
-                if (_groups != null) {
-                    foreach (var group in _groups) {
-                        Header.Visibility = Visibility.Collapsed;
-                        HeaderText.Text = "";
-                         PopupItems.Clear();
-                GridPanel.Children.Clear();
-                _anyGroupDisplayed = false;
-                    }
-                }
                 var settings = await SettingsHelper.LoadSettingsAsync();
 
                 // FIRST: Cleanup UISettings to prevent event handler accumulation
@@ -1062,6 +933,7 @@ namespace AppGroup {
                 }
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
+                // Cache file paths to avoid repeated Path.Combine operations
 
                 if (_cachedAppFolderPath == null) {
                     string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -1114,7 +986,6 @@ namespace AppGroup {
                 });
             }
         }
-
 
         // Add this cleanup method to your class
         private void CleanupUISettings() {

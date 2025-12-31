@@ -976,7 +976,7 @@ namespace AppGroup {
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
 
-                NativeMethods.PositionWindowOffScreenBelow(hWnd);
+                NativeMethods.PositionWindowOffScreen(hWnd);
                 if (_groups != null) {
                     foreach (var group in _groups) {
                         Header.Visibility = Visibility.Collapsed;
@@ -994,6 +994,8 @@ namespace AppGroup {
                 if (!string.IsNullOrEmpty(_originalIconPath) && !string.IsNullOrEmpty(_groupFilter)) {
                     // Hide window immediately
                     this.DispatcherQueue.TryEnqueue(() => {
+                        NativeMethods.PositionWindowOffScreen(hWnd);
+
                         this.Hide();
                     });
 
@@ -1091,6 +1093,7 @@ namespace AppGroup {
 
                 // Initial update to set the background color based on the current settings
                 UpdateMainGridBackground(_uiSettings);
+                LoadConfiguration();
 
                 // Do heavy operations in background after window is shown
 
@@ -1098,7 +1101,6 @@ namespace AppGroup {
                 // Load configuration asynchronously to not block UI
                 _ = this.DispatcherQueue.TryEnqueue(() => {
                     try {
-                        LoadConfiguration();
                         _ = Task.Run(async () => {
                             try {
                                 await UpdateTaskbarIcon(_groupFilter);

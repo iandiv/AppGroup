@@ -363,101 +363,101 @@ namespace AppGroup {
             }
         }
 
-        private void BringWindowToFront(IntPtr hWnd) {
-            if (hWnd == IntPtr.Zero) return;
-
-            try {
-                // Hide window instantly (no flicker)
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_HIDE);
-
-                // Calculate target position while hidden
-                var pos = CalculateTargetPosition(hWnd);
-
-                // Move and show in ONE atomic operation
-                NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_TOPMOST,
-                    pos.x, pos.y, 0, 0,
-                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW | NativeMethods.SWP_NOACTIVATE);
-
-                // Remove topmost flag (keeps it on top but not always-on-top)
-                NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST,
-                    0, 0, 0, 0,
-                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
-
-                // Activate
-                NativeMethods.ForceForegroundWindow(hWnd);
-            }
-            catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
-            }
-        }
-
-        private (int x, int y) CalculateTargetPosition(IntPtr hWnd) {
-            // Get window dimensions
-            NativeMethods.RECT windowRect;
-            if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
-                return (100, 100); // Fallback
-            }
-            int windowWidth = windowRect.right - windowRect.left;
-            int windowHeight = windowRect.bottom - windowRect.top;
-
-            // Get cursor position
-            NativeMethods.POINT cursorPos;
-            if (!NativeMethods.GetCursorPos(out cursorPos)) {
-                return (100, 100); // Fallback
-            }
-
-            // Get monitor info
-            IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
-            NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
-            monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-            if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
-                return (100, 100); // Fallback
-            }
-
-            // Calculate position (simplified from your PositionWindowAboveTaskbar logic)
-            float dpiScale = NativeMethods.GetDpiScaleForMonitor(monitor);
-            int spacing = 6;
-            bool isTaskbarAutoHide = NativeMethods.IsTaskbarAutoHide();
-
-            if (isTaskbarAutoHide) {
-                spacing += (int)(5 * dpiScale);
-            }
-
-            // Center horizontally on cursor
-            int x = cursorPos.X - (windowWidth / 2);
-
-            // Position above taskbar
-            int y = monitorInfo.rcWork.bottom - windowHeight - spacing;
-
-            // Clamp horizontally
-            if (x < monitorInfo.rcWork.left)
-                x = monitorInfo.rcWork.left;
-            if (x + windowWidth > monitorInfo.rcWork.right)
-                x = monitorInfo.rcWork.right - windowWidth;
-
-            return (x, y);
-        }
         //private void BringWindowToFront(IntPtr hWnd) {
+        //    if (hWnd == IntPtr.Zero) return;
+
         //    try {
-        //        if (hWnd != IntPtr.Zero) {
+        //        // Hide window instantly (no flicker)
+        //        NativeMethods.ShowWindow(hWnd, NativeMethods.SW_HIDE);
 
+        //        // Calculate target position while hidden
+        //        var pos = CalculateTargetPosition(hWnd);
 
+        //        // Move and show in ONE atomic operation
+        //        NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_TOPMOST,
+        //            pos.x, pos.y, 0, 0,
+        //            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW | NativeMethods.SWP_NOACTIVATE);
 
+        //        // Remove topmost flag (keeps it on top but not always-on-top)
+        //        NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST,
+        //            0, 0, 0, 0,
+        //            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 
-        //            NativeMethods.PositionWindowOffScreenBelow(hWnd);
-        //            NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
-        //            Task.Delay(50).Wait();
-
-        //            NativeMethods.ForceForegroundWindow(hWnd);
-        //            NativeMethods.PositionWindowAboveTaskbar(hWnd);
-
-
-        //        }
+        //        // Activate
+        //        NativeMethods.ForceForegroundWindow(hWnd);
         //    }
         //    catch (Exception ex) {
         //        System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
         //    }
         //}
+
+        //private (int x, int y) CalculateTargetPosition(IntPtr hWnd) {
+        //    // Get window dimensions
+        //    NativeMethods.RECT windowRect;
+        //    if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+        //        return (100, 100); // Fallback
+        //    }
+        //    int windowWidth = windowRect.right - windowRect.left;
+        //    int windowHeight = windowRect.bottom - windowRect.top;
+
+        //    // Get cursor position
+        //    NativeMethods.POINT cursorPos;
+        //    if (!NativeMethods.GetCursorPos(out cursorPos)) {
+        //        return (100, 100); // Fallback
+        //    }
+
+        //    // Get monitor info
+        //    IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        //    NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+        //    monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+        //    if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
+        //        return (100, 100); // Fallback
+        //    }
+
+        //    // Calculate position (simplified from your PositionWindowAboveTaskbar logic)
+        //    float dpiScale = NativeMethods.GetDpiScaleForMonitor(monitor);
+        //    int spacing = 6;
+        //    bool isTaskbarAutoHide = NativeMethods.IsTaskbarAutoHide();
+
+        //    if (isTaskbarAutoHide) {
+        //        spacing += (int)(5 * dpiScale);
+        //    }
+
+        //    // Center horizontally on cursor
+        //    int x = cursorPos.X - (windowWidth / 2);
+
+        //    // Position above taskbar
+        //    int y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+
+        //    // Clamp horizontally
+        //    if (x < monitorInfo.rcWork.left)
+        //        x = monitorInfo.rcWork.left;
+        //    if (x + windowWidth > monitorInfo.rcWork.right)
+        //        x = monitorInfo.rcWork.right - windowWidth;
+
+        //    return (x, y);
+        //}
+        private void BringWindowToFront(IntPtr hWnd) {
+            try {
+                if (hWnd != IntPtr.Zero) {
+
+
+
+
+                    NativeMethods.PositionWindowOffScreenBelow(hWnd);
+                    NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
+                    //Task.Delay(50).Wait();
+
+                    NativeMethods.ForceForegroundWindow(hWnd);
+                    NativeMethods.PositionWindowAboveTaskbar(hWnd);
+
+
+                }
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
+            }
+        }
 
         private void BringEditWindowToFront(IntPtr hWnd) {
             try {

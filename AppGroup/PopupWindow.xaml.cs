@@ -989,7 +989,7 @@ namespace AppGroup {
                 var settings = await SettingsHelper.LoadSettingsAsync();
 
                 // FIRST: Cleanup UISettings to prevent event handler accumulation
-                CleanupUISettings();
+                CleanupUISettings(); 
 
                 if (!string.IsNullOrEmpty(_originalIconPath) && !string.IsNullOrEmpty(_groupFilter)) {
                     // Hide window immediately

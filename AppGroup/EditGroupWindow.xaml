@@ -1,4 +1,4 @@
-<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="600" 
+<winex:WindowEx xmlns:winex="using:WinUIEx" Width="530" Height="650" 
     x:Class="AppGroup.EditGroupWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -48,8 +48,8 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1">
                                     <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                                        <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Tooltip</TextBlock>
-                                        <TextBox x:Name="TooltipTextBox" FontWeight="SemiBold" PlaceholderText="Enter Tooltip" BorderBrush="Transparent" Background="Transparent"/>
+                                        <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Title</TextBlock>
+                                        <TextBox x:Name="TooltipTextBox" FontWeight="SemiBold" PlaceholderText="Enter Title" BorderBrush="Transparent" Background="Transparent"/>
                                     </StackPanel>
                                     <StackPanel CornerRadius="5" Padding="5" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                                         <TextBlock Margin="5,0,0,0" Opacity="0.8" FontSize="12">Argument</TextBlock>
@@ -144,15 +144,16 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
+                
+                <StackPanel Grid.Row="0" Spacing="0"  CornerRadius="5" Padding="0,0,0,0" Orientation="Vertical" VerticalAlignment="Center">
 
-                <StackPanel Grid.Row="0" Spacing="0" CornerRadius="5" Padding="0,0,0,0" Orientation="Vertical" VerticalAlignment="Center">
                     <Grid HorizontalAlignment="Stretch">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                     </Grid>
-                    <Grid ColumnSpacing="5" Margin="0,0,0,5" CornerRadius="5" VerticalAlignment="Center">
+                    <Grid ColumnSpacing="2" Margin="0,0,0,2" CornerRadius="5" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -178,7 +179,7 @@
                             </Grid>
                         </StackPanel>
                     </Grid>
-                    <Grid ColumnSpacing="5" Margin="0,0,0,5" CornerRadius="5" VerticalAlignment="Center">
+                    <Grid ColumnSpacing="2" Margin="0,0,0,0" CornerRadius="5" VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -193,7 +194,7 @@
                                 <ToggleSwitch Grid.Column="1" x:Name="ShowLabels" OnContent="" OffContent="" Toggled="ShowLabels_Toggled"/>
                             </Grid>
                         </StackPanel>
-                        <StackPanel x:Name="LabelSizePanel" Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center" Padding="10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5" Opacity="0.5">
+                        <StackPanel x:Name="LabelSizePanel"  Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center" Padding="10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5" Opacity="0.5">
                             <Grid HorizontalAlignment="Stretch">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>

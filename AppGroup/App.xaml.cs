@@ -1,9 +1,13 @@
-﻿using System;
+﻿
+
+using Microsoft.UI.Xaml;
+using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Microsoft.UI.Xaml;
+using Windows.Graphics;
 using Windows.UI.StartScreen;
 using WinRT.Interop;
 using WinUIEx;
@@ -27,24 +31,7 @@ namespace AppGroup {
                     Environment.Exit(0);
                     return;
                 }
-                //if (cmdArgs.Length > 1 && !isSilent) {
-                //    string command = cmdArgs[1];
 
-                //    if (command == "EditGroupWindow") {
-                //        // AppGroup.exe EditGroupWindow --id=123
-                //        int groupId = ExtractIdFromCommandLine(cmdArgs);
-                //        EditGroupHelper editGroup = new EditGroupHelper("Edit Group", groupId);
-
-                //        editGroup.Activate();
-                //    }
-                //    else if (command == "LaunchAll") {
-                //        // No need to save anything for LaunchAll
-                //    }
-                //    else {
-                //        // AppGroup.exe "GroupName"
-                //        SaveGroupNameToFile(command);
-                //    }
-                //}
                 // Check if running without arguments and another instance is already running
                 if (cmdArgs.Length <= 1 && !isSilent) {
                     // No arguments provided - check for existing main window instance
@@ -68,7 +55,84 @@ namespace AppGroup {
                         }
                     }
                 }
-                //InitializeJumpListAsync();
+
+                // Find existing windows - only check if we have arguments (not first launch)
+                if (!isSilent && cmdArgs.Length > 1) {
+                    IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
+                    IntPtr existingEditHWnd = NativeMethods.FindWindow(null, "Edit Group");
+                    IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
+
+                    // Handle existing windows in constructor for faster response
+                    string command = cmdArgs[1];
+
+                    if (command == "EditGroupWindow") {
+                        // AppGroup.exe EditGroupWindow --id
+                        int groupId = ExtractIdFromCommandLine(cmdArgs);
+                        SaveGroupIdToFile(groupId.ToString());
+
+                        // Initialize jump list BEFORE handling existing window
+
+                        if (existingEditHWnd != IntPtr.Zero) {
+
+                            EditGroupHelper editGroup = new EditGroupHelper("Edit Group", groupId);
+                            editGroup.Activate();
+                        InitializeJumpListSync();
+
+                            Environment.Exit(0);
+                            return;
+                        }
+                        else if (existingMainHWnd != IntPtr.Zero || existingPopupHWnd != IntPtr.Zero) {
+                            Environment.Exit(0);
+                            return;
+                        }
+                    }
+                    else if (command == "LaunchAll") {
+                    
+
+                        string targetGroupName = ExtractGroupNameFromCommandLine(cmdArgs);
+                        Task.Run(async () => {
+                            await JsonConfigHelper.LaunchAll(targetGroupName);
+                            InitializeJumpListSync();
+
+                            Environment.Exit(0);
+                        });
+                        Environment.Exit(0);
+                        return;
+                    }
+                    else {
+                        // AppGroup.exe "GroupName" - like "CH"
+                        SaveGroupNameToFile(command);
+
+                        // Also save the group ID for this group name
+                        try {
+                            int groupId = JsonConfigHelper.FindKeyByGroupName(command);
+                            SaveGroupIdToFile(groupId.ToString());
+                        }
+                        catch (Exception ex) {
+                            System.Diagnostics.Debug.WriteLine($"Failed to find group ID for '{command}': {ex.Message}");
+                        }
+
+
+                        if (existingPopupHWnd != IntPtr.Zero) {
+
+                            
+                           
+                            BringWindowToFront(existingPopupHWnd);
+                            InitializeJumpListSync();
+
+                            Environment.Exit(0);
+                            return;
+                        }
+                        else if (existingMainHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
+                           
+                            Environment.Exit(0);
+                            return;
+                        }
+
+
+                    }
+                }
+
                 // Initialize settings early - this will apply the default startup setting if needed
                 _ = InitializeSettingsAsync();
 
@@ -90,7 +154,19 @@ namespace AppGroup {
                 System.Diagnostics.Debug.WriteLine($"Settings initialization failed: {ex.Message}");
             }
         }
-      
+
+        // Synchronous version for constructor
+        private void InitializeJumpListSync() {
+            try {
+                Task.Run(async () => await InitializeJumpListAsync()).Wait();
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"Sync jump list initialization failed: {ex.Message}");
+            }
+        }
+
+
+
         private async Task InitializeJumpListAsync() {
             try {
                 string[] cmdArgs = Environment.GetCommandLineArgs();
@@ -229,34 +305,15 @@ namespace AppGroup {
                 return JumpListItem.CreateWithArguments("LaunchAll", "Launch All");
             }
         }
-        private void BringWindowToFrontFast(IntPtr hWnd) {
-            try {
-                if (hWnd != IntPtr.Zero) {
-                    // Use the FORCE method - this bypasses Windows restrictions
-                    NativeMethods.ForceForegroundWindow(hWnd);
 
-                    // Position above taskbar
-                    NativeMethods.PositionWindowAboveTaskbar(hWnd);
-                }
-            }
-            catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
-            }
-        }
-
-        // Replace your existing OnLaunched with this optimized version
         protected async override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args) {
             try {
                 string[] cmdArgs = Environment.GetCommandLineArgs();
                 bool isSilent = HasSilentFlag(cmdArgs);
 
-                // Find existing windows
-                IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
-                IntPtr existingEditHWnd = NativeMethods.FindWindow(null, "Edit Group");
-                IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
-
-                // Handle --silent flag
+                // Handle --silent flag (special case)
                 if (isSilent) {
+                    IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
                     if (existingPopupHWnd != IntPtr.Zero) {
                         Environment.Exit(0);
                         return;
@@ -267,80 +324,18 @@ namespace AppGroup {
                     return;
                 }
 
-                // HOT PATH: Group name argument with existing window
+                // ALWAYS update jump list when we have arguments
                 if (cmdArgs.Length > 1) {
-                    string command = cmdArgs[1];
-
-                    if (command == "EditGroupWindow") {
-                        int groupId = ExtractIdFromCommandLine(cmdArgs);
-                        SaveGroupIdToFile(groupId.ToString());
-
-                        if (existingEditHWnd != IntPtr.Zero) {
-                            NativeMethods.ForceForegroundWindow(existingEditHWnd);
-                            _ = InitializeJumpListAsync(); // Fire and forget
-                            Environment.Exit(0);
-                            return;
-                        }
-                        else if (existingMainHWnd != IntPtr.Zero || existingPopupHWnd != IntPtr.Zero) {
-                            Environment.Exit(0);
-                            return;
-                        }
-                    }
-                    else if (command == "LaunchAll") {
-                        string targetGroupName = ExtractGroupNameFromCommandLine(cmdArgs);
-                        await JsonConfigHelper.LaunchAll(targetGroupName);
-                        Environment.Exit(0);
-                        return;
-                    }
-                    else {
-                        // THIS IS YOUR CRITICAL PATH: "AppGroup.exe Work"
-
-                        // Write group name FIRST (fastest operation)
-                        SaveGroupNameToFile(command);
-
-                        // Save group ID (fast)
-                        try {
-                            int groupId = JsonConfigHelper.FindKeyByGroupName(command);
-                            SaveGroupIdToFile(groupId.ToString());
-                        }
-                        catch { }
-
-                        // If popup exists, bring to front IMMEDIATELY
-                        if (existingPopupHWnd != IntPtr.Zero) {
-                            // CRITICAL: Use forced foreground activation
-                            NativeMethods.ForceForegroundWindow(existingPopupHWnd);
-
-                            // Do jump list in background (don't wait)
-                            _ = InitializeJumpListAsync();
-
-                            Environment.Exit(0);
-                            return;
-                        }
-                        else if (existingMainHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
-                            Environment.Exit(0);
-                            return;
-                        }
-                    }
-
                     await InitializeJumpListAsync();
                 }
-                else {
-                    // No arguments
-                    if (existingMainHWnd != IntPtr.Zero) {
-                        NativeMethods.ForceForegroundWindow(existingMainHWnd);
-                        Environment.Exit(0);
-                        return;
-                    }
-                    else if (existingPopupHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
-                        Environment.Exit(0);
-                        return;
-                    }
-                }
 
+                // Create all windows for first launch
                 CreateAllWindows();
+
+                // Initialize system tray after windows are created
                 InitializeSystemTray();
 
-                // Show appropriate window
+                // Show the appropriate window based on arguments
                 if (cmdArgs.Length > 1) {
                     string command = cmdArgs[1];
 
@@ -349,8 +344,9 @@ namespace AppGroup {
                         HideMainWindow();
                         HidePopupWindow();
                     }
-                    else {
-                        ShowPopupWindowFast();
+                    else if (command != "LaunchAll") {
+                        // Show PopupWindow with group name
+                        ShowPopupWindow();
                         HideMainWindow();
                         HideEditWindow();
                     }
@@ -367,160 +363,95 @@ namespace AppGroup {
             }
         }
 
-        private void ShowPopupWindowFast() {
+        private void BringWindowToFront(IntPtr hWnd) {
+            if (hWnd == IntPtr.Zero) return;
+
             try {
-                if (popupWindow != null) {
-                    IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
-                    if (popupHWnd != IntPtr.Zero) {
-                        NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
-                        NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_SHOW);
-                        NativeMethods.ForceForegroundWindow(popupHWnd);
-                    }
-                }
+                // Hide window instantly (no flicker)
+                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_HIDE);
+
+                // Calculate target position while hidden
+                var pos = CalculateTargetPosition(hWnd);
+
+                // Move and show in ONE atomic operation
+                NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_TOPMOST,
+                    pos.x, pos.y, 0, 0,
+                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_SHOWWINDOW | NativeMethods.SWP_NOACTIVATE);
+
+                // Remove topmost flag (keeps it on top but not always-on-top)
+                NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST,
+                    0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+
+                // Activate
+                NativeMethods.ForceForegroundWindow(hWnd);
             }
             catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"Failed to show popup window: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
             }
         }
 
+        private (int x, int y) CalculateTargetPosition(IntPtr hWnd) {
+            // Get window dimensions
+            NativeMethods.RECT windowRect;
+            if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+                return (100, 100); // Fallback
+            }
+            int windowWidth = windowRect.right - windowRect.left;
+            int windowHeight = windowRect.bottom - windowRect.top;
 
+            // Get cursor position
+            NativeMethods.POINT cursorPos;
+            if (!NativeMethods.GetCursorPos(out cursorPos)) {
+                return (100, 100); // Fallback
+            }
 
-        //protected async override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args) {
-        //    try {
-        //        string[] cmdArgs = Environment.GetCommandLineArgs();
-        //        bool isSilent = HasSilentFlag(cmdArgs);
+            // Get monitor info
+            IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+            monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+            if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
+                return (100, 100); // Fallback
+            }
 
-        //        // Find existing windows
-        //        IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
-        //        IntPtr existingEditHWnd = NativeMethods.FindWindow(null, "Edit Group");
-        //        IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
+            // Calculate position (simplified from your PositionWindowAboveTaskbar logic)
+            float dpiScale = NativeMethods.GetDpiScaleForMonitor(monitor);
+            int spacing = 6;
+            bool isTaskbarAutoHide = NativeMethods.IsTaskbarAutoHide();
 
-        //        // Handle --silent flag (special case)
-        //        if (isSilent) {
-        //            if (existingPopupHWnd != IntPtr.Zero) {
-        //                Environment.Exit(0);
-        //                return;
-        //            }
-        //            CreateAllWindows();
+            if (isTaskbarAutoHide) {
+                spacing += (int)(5 * dpiScale);
+            }
 
-        //            _ = InitializeJumpListAsync();
+            // Center horizontally on cursor
+            int x = cursorPos.X - (windowWidth / 2);
 
-        //            // Initialize system tray after windows are created
-        //            InitializeSystemTray();
-        //            return;
-        //        }
+            // Position above taskbar
+            int y = monitorInfo.rcWork.bottom - windowHeight - spacing;
 
-        //        // ALWAYS update jump list when we have arguments, regardless of existing windows
-        //        if (cmdArgs.Length > 1) {
-        //            _ =  InitializeJumpListAsync();
-        //        }
+            // Clamp horizontally
+            if (x < monitorInfo.rcWork.left)
+                x = monitorInfo.rcWork.left;
+            if (x + windowWidth > monitorInfo.rcWork.right)
+                x = monitorInfo.rcWork.right - windowWidth;
 
-        //        // If we have arguments and ANY existing window is found, handle it and exit
-        //        if (cmdArgs.Length > 1) {
-        //            string command = cmdArgs[1];
-
-        //            if (command == "EditGroupWindow") {
-        //                // AppGroup.exe EditGroupWindow --id
-        //                int groupId = ExtractIdFromCommandLine(cmdArgs);
-        //                SaveGroupIdToFile(groupId.ToString());
-
-        //                if (existingEditHWnd != IntPtr.Zero) {
-        //                    EditGroupHelper editGroup = new EditGroupHelper("Edit Group", groupId);
-        //                    editGroup.Activate();
-        //                    Environment.Exit(0);
-        //                    return;
-        //                }
-        //                else if (existingMainHWnd != IntPtr.Zero || existingPopupHWnd != IntPtr.Zero) {
-        //                    Environment.Exit(0);
-        //                    return;
-        //                }
-        //            }
-        //            else if (command == "LaunchAll") {
-        //                string targetGroupName = ExtractGroupNameFromCommandLine(cmdArgs);
-        //                await JsonConfigHelper.LaunchAll(targetGroupName);
-        //                Environment.Exit(0);
-        //                return;
-        //            }
-        //            else {
-        //                // AppGroup.exe "GroupName" - like "CH"
-        //                SaveGroupNameToFile(command);
-
-        //                // Also save the group ID for this group name
-        //                try {
-        //                    int groupId = JsonConfigHelper.FindKeyByGroupName(command);
-        //                    SaveGroupIdToFile(groupId.ToString());
-        //                }
-        //                catch (Exception ex) {
-        //                    System.Diagnostics.Debug.WriteLine($"Failed to find group ID for '{command}': {ex.Message}");
-        //                }
-
-        //                if (existingPopupHWnd != IntPtr.Zero) {
-        //                    BringWindowToFront(existingPopupHWnd);
-        //                    Environment.Exit(0);
-        //                    return;
-        //                }
-        //                else if (existingMainHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
-        //                    Environment.Exit(0);
-        //                    return;
-        //                }
-        //            }
-        //        }
-        //        else {
-        //            // No arguments - check for existing main window
-        //            if (existingMainHWnd != IntPtr.Zero) {
-        //                BringWindowToFront(existingMainHWnd);
-        //                Environment.Exit(0);
-        //                return;
-        //            }
-        //            else if (existingPopupHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
-        //                Environment.Exit(0);
-        //                return;
-        //            }
-        //        }
-
-
-        //        CreateAllWindows();
-
-        //        // Initialize system tray after windows are created
-        //        InitializeSystemTray();
-
-        //        // Show the appropriate window based on arguments
-        //        if (cmdArgs.Length > 1) {
-        //            string command = cmdArgs[1];
-
-        //            if (command == "EditGroupWindow") {
-        //                ShowEditWindow();
-        //                HideMainWindow();
-        //                HidePopupWindow();
-        //            }
-        //            else {
-        //                // Show PopupWindow with group name
-
-        //                ShowPopupWindow();
-        //                HideMainWindow();
-        //                HideEditWindow();
-
-        //            }
-        //        }
-        //        else {
-        //            HidePopupWindow();
-        //            HideEditWindow();
-        //            ShowMainWindow();
-        //        }
-        //    }
-        //    catch (Exception ex) {
-        //        System.Diagnostics.Debug.WriteLine($"OnLaunched failed: {ex.Message}");
-        //        Environment.Exit(1);
-        //    }
-        //}
-
-
-        //     private void BringWindowToFront(IntPtr hWnd) {
+            return (x, y);
+        }
+        //private void BringWindowToFront(IntPtr hWnd) {
         //    try {
         //        if (hWnd != IntPtr.Zero) {
-        //            NativeMethods.SetForegroundWindow(hWnd);
-        //            NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
+
+
+
+
+        //            NativeMethods.PositionWindowOffScreenBelow(hWnd);
+        //            NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
+        //            Task.Delay(50).Wait();
+
+        //            NativeMethods.ForceForegroundWindow(hWnd);
         //            NativeMethods.PositionWindowAboveTaskbar(hWnd);
+
+
         //        }
         //    }
         //    catch (Exception ex) {
@@ -544,7 +475,7 @@ namespace AppGroup {
             try {
                 editWindow = new EditGroupWindow(-1);
                 editWindow.InitializeComponent();
-                //editWindow.Activate();
+
                 // Create MainWindow
                 m_window = new MainWindow();
                 m_window.InitializeComponent();
@@ -554,24 +485,19 @@ namespace AppGroup {
                 popupWindow.InitializeComponent();
                 IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
                 if (popupHWnd != IntPtr.Zero) {
+                    NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
                     NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_HIDE);
                 }
 
-                //// Create EditGroupWindow (hidden) - use provided ID or default
-                //poWindow = new EditGroupWindow("Popup Window");
-                //popupWindow.InitializeComponent();
-                //EditGroupHelper editGroup = new EditGroupHelper("Edit Group", -1);
-                //editGroup.Activate();
-                //int groupId =;
-
                 IntPtr editHWnd = WindowNative.GetWindowHandle(editWindow);
                 if (editHWnd != IntPtr.Zero) {
+                        NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
                     NativeMethods.ShowWindow(editHWnd, NativeMethods.SW_HIDE);
                 }
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Failed to create windows: {ex.Message}");
-                throw; // Re-throw to be handled by caller
+                throw;
             }
         }
 
@@ -584,22 +510,17 @@ namespace AppGroup {
             }
         }
 
-        private async void ShowPopupWindow() {
+
+       
+        private void ShowPopupWindow() {
             try {
                 if (popupWindow != null) {
                     IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
+
                     if (popupHWnd != IntPtr.Zero) {
-                   
-                        NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_HIDE);
                         NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
-                        popupWindow.Hide();
-                        //await Task.Delay(100);
-                        NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_RESTORE);
-                        NativeMethods.SetForegroundWindow(popupHWnd);       
-                        NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
-
-
-
+                        NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_SHOW);
+                        NativeMethods.ForceForegroundWindow(popupHWnd);
                     }
                 }
             }
@@ -607,6 +528,7 @@ namespace AppGroup {
                 System.Diagnostics.Debug.WriteLine($"Failed to show popup window: {ex.Message}");
             }
         }
+       
 
         private void ShowEditWindow() {
             try {
@@ -615,7 +537,6 @@ namespace AppGroup {
                     if (editHWnd != IntPtr.Zero) {
                         NativeMethods.SetForegroundWindow(editHWnd);
                         NativeMethods.ShowWindow(editHWnd, NativeMethods.SW_RESTORE);
-                        //NativeMethods.PositionWindowAboveTaskbar(editHWnd);
                         editWindow.Activate();
                     }
                 }
@@ -643,6 +564,7 @@ namespace AppGroup {
             try {
                 if (popupWindow != null) {
                     IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
+
                     if (popupHWnd != IntPtr.Zero) {
                         NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_HIDE);
                     }
@@ -683,7 +605,6 @@ namespace AppGroup {
             }
         }
 
-        // Public methods to control system tray visibility
         public void ShowSystemTray() {
             try {
                 SystemTrayManager.ShowSystemTray();
@@ -704,30 +625,26 @@ namespace AppGroup {
 
         private void ShowAppGroup() {
             try {
-                // First check if AppGroup is already running by window title
                 IntPtr appGroupWindow = NativeMethods.FindWindow(null, "App Group");
                 if (appGroupWindow != IntPtr.Zero) {
-                    // If window exists, make sure it's visible and bring it to front
+
                     Debug.WriteLine("AppGroup.exe window found, bringing to front");
                     NativeMethods.ShowWindow(appGroupWindow, NativeMethods.SW_RESTORE);
                     NativeMethods.SetForegroundWindow(appGroupWindow);
-                    return; // Exit early - no need to launch a new instance
+                    return;
                 }
 
-                // Next check if the process is running even if window is not found
                 Process[] existingProcesses = Process.GetProcessesByName("App Group");
                 if (existingProcesses.Length > 0) {
                     Debug.WriteLine("AppGroup.exe process found, attempting to show window");
                     foreach (var process in existingProcesses) {
-                        // Try to bring its main window to front if it has one
                         if (process.MainWindowHandle != IntPtr.Zero) {
                             NativeMethods.ShowWindow(process.MainWindowHandle, NativeMethods.SW_RESTORE);
                             NativeMethods.SetForegroundWindow(process.MainWindowHandle);
-                            return; // Exit if we successfully showed a window
+                            return;
                         }
                     }
 
-                    // If we got here, there's a process but no window - kill and restart
                     foreach (var process in existingProcesses) {
                         try {
                             process.Kill();
@@ -739,7 +656,6 @@ namespace AppGroup {
                     }
                 }
 
-                // Create and show the main window
                 if (m_window == null) {
                     m_window = new MainWindow();
                     m_window.InitializeComponent();
@@ -753,7 +669,6 @@ namespace AppGroup {
 
         private static void KillAppGroup() {
             try {
-                // Use taskkill to forcefully terminate all AppGroup.exe processes and their children
                 var startInfo = new ProcessStartInfo {
                     FileName = "taskkill",
                     Arguments = "/f /t /im AppGroup.exe",
@@ -815,7 +730,6 @@ namespace AppGroup {
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Failed to save group name: {ex.Message}");
-                /* Fail silently - don't block startup */
             }
         }
 
@@ -828,7 +742,6 @@ namespace AppGroup {
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Failed to save group ID: {ex.Message}");
-                /* Fail silently - don't block startup */
             }
         }
 
@@ -839,9 +752,7 @@ namespace AppGroup {
                         return arg.Substring(12).Trim('"');
                     }
                     else if (arg.StartsWith("--groupId=")) {
-                        // Handle --groupId parameter by finding the group name
                         if (int.TryParse(arg.Substring(10), out int groupId)) {
-                            // You'll need to create this method to find group name by ID
                             return JsonConfigHelper.FindGroupNameByKey(groupId);
                         }
                     }

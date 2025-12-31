@@ -1,14 +1,87 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace AppGroup {
     public static partial class NativeMethods {
+        public static readonly IntPtr HWND_TOP = IntPtr.Zero;
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOSIZE = 0x0001;
+        public const uint SWP_SHOWWINDOW = 0x0040;
+        public const uint SWP_NOACTIVATE = 0x0010;
+        public const uint SPI_GETWORKAREA = 0x0030;
+        public const int SW_SHOW = 5;
+        public const int SW_RESTORE = 9;
+        public const int SW_SHOWNOACTIVATE = 4;
+        public const int SW_HIDE = 0;
+        public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+        public const uint SWP_NOZORDER = 0x0004;
+        public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+        public const int MDT_EFFECTIVE_DPI = 0;
+        public const int SM_CXSCREEN = 0;
+        public const int SM_CYSCREEN = 1;
+        public const int WM_USER = 0x0400;
+        public const int SW_MAXIMIZE = 3;
+        public const int SW_MINIMIZE = 6;
+        public const int SW_NORMAL = 1;
+        public const int SWP_HIDEWINDOW = 0x0080;
+        public const int SHCNE_RENAMEITEM = 0x00000001;
+        public const int SHCNE_CREATE = 0x00000002;
+        public const int SHCNE_DELETE = 0x00000004;
+        public const int SHCNE_UPDATEIMAGE = 0x00008000;
+        public const int SHCNE_UPDATEDIR = 0x00001000;
+        public const int SHCNE_RENAMEFOLDER = 0x00020000;
+        public const uint SHCNF_PATH = 0x0005;
+        public const uint SHCNF_IDLIST = 0x0000;
+        public const uint RDW_ERASE = 0x0004;
+        public const uint RDW_FRAME = 0x0400;
+        public const uint RDW_INVALIDATE = 0x0001;
+        public const uint WM_SHOWWINDOW = 0x0018;
+        public const uint RDW_ALLCHILDREN = 0x0080;
+        public const uint WM_TRAYICON = 0x8000;
+        public const uint WM_COMMAND = 0x0111;
+        public const uint WM_DESTROY = 0x0002;
+        public const uint WM_LBUTTONDBLCLK = 0x0203;
+        public const uint WM_RBUTTONUP = 0x0205;
+        public const uint WM_NULL = 0x0000;
+        public const uint NIF_MESSAGE = 0x00000001;
+        public const uint NIF_ICON = 0x00000002;
+        public const uint NIF_TIP = 0x00000004;
+        public const uint NIM_ADD = 0x00000000;
+        public const uint NIM_MODIFY = 0x00000001;
+        public const uint NIM_DELETE = 0x00000002;
+        public const uint IMAGE_ICON = 1;
+        public const uint LR_LOADFROMFILE = 0x00000010;
+        public const uint TPM_RETURNCMD = 0x0100;
+        public const uint TPM_RIGHTBUTTON = 0x0002;
+        public const int ID_SHOW = 1001;
+        public const int ID_EXIT = 1002;
+        public const uint MIN_ALL = 419;
+        public const uint RESTORE_ALL = 416;
+        public const uint SHCNE_ASSOCCHANGED = 0x08000000;
+        public const uint SHCNF_FLUSH = 0x1000;
+        public const int WM_COPYDATA = 0x004A;
+        // Constants for SHAppBarMessage
+        public const uint ABM_GETSTATE = 0x4;
+        public const uint ABM_GETTASKBARPOS = 0x5;
+
+        // Constants for taskbar edge positions
+        public const int ABE_LEFT = 0;
+        public const int ABE_TOP = 1;
+        public const int ABE_RIGHT = 2;
+        public const int ABE_BOTTOM = 3;
+
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
@@ -37,45 +110,55 @@ namespace AppGroup {
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr SetFocus(IntPtr hWnd);
 
-        // Constants you may already have
-        public const int SW_SHOW = 5;
-        public const int SW_RESTORE = 9;
-        public const int SW_SHOWNOACTIVATE = 4;
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr ProcessId);
 
-        /// <summary>
-        /// CRITICAL: This is the ONLY reliable way to bring WinUI3 window to foreground
-        /// Regular SetForegroundWindow doesn't work when window is visible but not foreground
-        /// </summary>
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FlashWindow(IntPtr hwnd, bool bInvert);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT {
+            public int left;
+            public int top;
+            public int right;
+            public int bottom;
+        }
+
+
         public static void ForceForegroundWindow(IntPtr hWnd) {
-            // Don't do anything if already foreground
-            if (GetForegroundWindow() == hWnd) {
-                return;
-            }
 
-            // Get the thread IDs
-            uint currentThreadId = GetCurrentThreadId();
+            
+            if (GetForegroundWindow() == hWnd)
+                return;
+
+
+            // Get the thread ID of the foreground window
             IntPtr foregroundWindow = GetForegroundWindow();
             uint foregroundThreadId = GetWindowThreadProcessId(foregroundWindow, out _);
+            uint currentThreadId = GetCurrentThreadId();
 
-            // Attach to foreground thread to bypass restrictions
+            // Attach to the foreground thread's input queue
             if (currentThreadId != foregroundThreadId) {
                 AttachThreadInput(currentThreadId, foregroundThreadId, true);
-
-                // Now we can set foreground window
-                BringWindowToTop(hWnd);
-                ShowWindow(hWnd, SW_SHOW);
-                SetForegroundWindow(hWnd);
-                SetFocus(hWnd);
-
-                // Detach
-                AttachThreadInput(currentThreadId, foregroundThreadId, false);
             }
-            else {
-                // Same thread, just set it
-                BringWindowToTop(hWnd);
-                ShowWindow(hWnd, SW_SHOW);
-                SetForegroundWindow(hWnd);
-                SetFocus(hWnd);
+
+            // Bring the window to the top and set it as the foreground window
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+            SetFocus(hWnd);
+
+            // Detach from the foreground thread's input queue
+            if (currentThreadId != foregroundThreadId) {
+                AttachThreadInput(currentThreadId, foregroundThreadId, false);
             }
         }
 
@@ -83,13 +166,6 @@ namespace AppGroup {
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
-        //[DllImport("user32.dll")]
-        //[return: MarshalAs(UnmanagedType.Bool)]
-        //public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        //[DllImport("user32.dll", CharSet = CharSet.Auto)]
-        //public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -100,9 +176,10 @@ namespace AppGroup {
 
         [DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
         [DllImport("user32.dll")]
-        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+
 
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT {
@@ -118,64 +195,14 @@ namespace AppGroup {
             public uint dwFlags;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT {
-            public int left;
-            public int top;
-            public int right;
-            public int bottom;
-        }
-
-        public const int SW_HIDE = 0;
-        //public const int SW_SHOW = 5;
-        //public const int SW_RESTORE = 9;
-        public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
-        public const uint SWP_NOSIZE = 0x0001;
-        public const uint SWP_NOZORDER = 0x0004;
-        public const uint SWP_ASYNCWINDOWPOS = 0x4000;
-        public const int MDT_EFFECTIVE_DPI = 0;
-        public const int SM_CXSCREEN = 0;
-        public const int SM_CYSCREEN = 1;
-        public const int WM_USER = 0x0400;
-        public const int SW_MAXIMIZE = 3;
-        public const int SW_MINIMIZE = 6;
-        public const int SW_NORMAL = 1;
-        // Window Messages
-        public const int WM_COPYDATA = 0x004A;
+    
+      
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
 
         // Constants
-        public const uint WM_TRAYICON = 0x8000;
-        public const uint WM_COMMAND = 0x0111;
-        public const uint WM_DESTROY = 0x0002;
-        public const uint WM_LBUTTONDBLCLK = 0x0203;
-        public const uint WM_RBUTTONUP = 0x0205;
-        public const uint WM_NULL = 0x0000; // Added for menu fix
-
-        public const uint NIF_MESSAGE = 0x00000001;
-        public const uint NIF_ICON = 0x00000002;
-        public const uint NIF_TIP = 0x00000004;
-
-        public const uint NIM_ADD = 0x00000000;
-        public const uint NIM_MODIFY = 0x00000001;
-        public const uint NIM_DELETE = 0x00000002;
-
-        public const uint IMAGE_ICON = 1;
-        public const uint LR_LOADFROMFILE = 0x00000010;
-
-        // Menu flags - CRITICAL ADDITIONS
-        public const uint TPM_RETURNCMD = 0x0100;
-        public const uint TPM_RIGHTBUTTON = 0x0002;
-
-        public const int ID_SHOW = 1001;
-        public const int ID_EXIT = 1002;
-        public const uint MIN_ALL = 419;
-        public const uint RESTORE_ALL = 416;
-        public const uint SHCNE_ASSOCCHANGED = 0x08000000;
-        public const uint SHCNF_FLUSH = 0x1000;
 
         // Delegates
         public delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -212,8 +239,6 @@ namespace AppGroup {
             public string szTip;
         }
 
-        // Add these to your NativeMethods class
-
 
         [DllImport("user32.dll")]
         public static extern bool UpdateWindow(IntPtr hWnd);
@@ -226,22 +251,6 @@ namespace AppGroup {
 
         [DllImport("user32.dll")]
         public static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
-
-        public const int SHCNE_RENAMEITEM = 0x00000001;
-        public const int SHCNE_CREATE = 0x00000002;
-        public const int SHCNE_DELETE = 0x00000004;
-        public const int SHCNE_UPDATEIMAGE = 0x00008000;
-        public const int SHCNE_UPDATEDIR = 0x00001000;
-        public const int SHCNE_RENAMEFOLDER = 0x00020000;
-
-        public const uint SHCNF_PATH = 0x0005;
-        public const uint SHCNF_IDLIST = 0x0000;
-
-        // RedrawWindow constants
-        public const uint RDW_ERASE = 0x0004;
-        public const uint RDW_FRAME = 0x0400;
-        public const uint RDW_INVALIDATE = 0x0001;
-        public const uint RDW_ALLCHILDREN = 0x0080;
 
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -336,60 +345,67 @@ namespace AppGroup {
         //public const int SW_SHOWNOACTIVATE = 4;  // Shows window without activating/focusing it
 
         public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
-    try {
+            try {
 
 
 
-        // Get window dimensions
-        NativeMethods.RECT windowRect;
-        if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
-            return;
-        }
-        int windowWidth = windowRect.right - windowRect.left;
-        int windowHeight = windowRect.bottom - windowRect.top;
+                // Get window dimensions
+                NativeMethods.RECT windowRect;
+                if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
+                    return;
+                }
+                int windowWidth = windowRect.right - windowRect.left;
+                int windowHeight = windowRect.bottom - windowRect.top;
 
-        // Get current cursor position
-        NativeMethods.POINT cursorPos;
-        if (!NativeMethods.GetCursorPos(out cursorPos)) {
-            return;
-        }
+                // Get current cursor position
+                NativeMethods.POINT cursorPos;
+                if (!NativeMethods.GetCursorPos(out cursorPos)) {
+                    return;
+                }
 
-        // Get monitor information
-        IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
-        monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-        if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
-            return;
-        }
+                // Get monitor information
+                IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
+                monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
+                if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
+                    return;
+                }
 
-       
-        // Calculate position based on taskbar position
-        float dpiScale = GetDpiScaleForMonitor(monitor);
-        int baseTaskbarHeight = 52;
-        int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
 
-        // Define a consistent spacing value for all sides
-        int spacing = 6; // Pixels of space between window and taskbar
+                // Calculate position based on taskbar position
+                float dpiScale = GetDpiScaleForMonitor(monitor);
+                int baseTaskbarHeight = 52;
+                int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
 
-        // Check if taskbar is auto-hidden and adjust spacing if needed
-        bool isTaskbarAutoHide = IsTaskbarAutoHide();
-        Debug.WriteLine($"Taskbar Auto-Hide: {isTaskbarAutoHide}");
-        
-        if (isTaskbarAutoHide) {
-            int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale);
-            spacing += autoHideSpacing;
-        }
+                // Define a consistent spacing value for all sides
+                int spacing = 6; // Pixels of space between window and taskbar
 
-        // Determine taskbar position by comparing work area with monitor area
-        TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
-        Debug.WriteLine($"Taskbar Position: {taskbarPosition}");
+                // Check if taskbar is auto-hidden and adjust spacing if needed
+                bool isTaskbarAutoHide = IsTaskbarAutoHide();
+                Debug.WriteLine($"Taskbar Auto-Hide: {isTaskbarAutoHide}");
 
-        // Initial position (centered horizontally relative to cursor)
-        int x = cursorPos.X - (windowWidth / 2);
-        int y;
+                // Determine taskbar position by comparing work area with monitor area
+                TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
+                Debug.WriteLine($"Taskbar Position: {taskbarPosition}");
 
-        // Set position based on taskbar position
-        switch (taskbarPosition) {
+                if (isTaskbarAutoHide) {
+                    if (IsCursorOnTaskbar(cursorPos, monitorInfo, taskbarPosition)) {
+                        int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale);
+                        spacing = autoHideSpacing;    }
+                    else {
+
+                        spacing += (int)(5 * dpiScale); // DPI-scaled spacing for auto-hide
+
+                    }
+                }
+
+               
+                // Initial position (centered horizontally relative to cursor)
+                int x = cursorPos.X - (windowWidth / 2);
+                int y;
+
+                // Set position based on taskbar position
+                switch (taskbarPosition) {
                     //case TaskbarPosition.Top:
                     //    if (isTaskbarAutoHide)
                     //        y = monitorInfo.rcMonitor.top + spacing;
@@ -404,13 +420,23 @@ namespace AppGroup {
                     //    break;
                     case TaskbarPosition.Top:
                     case TaskbarPosition.Bottom:
-                        // Position near cursor, accounting for spacing on both edges
-                        y = cursorPos.Y - (windowHeight / 2);
-                        // Clamp to work area WITH spacing
-                        if (y < monitorInfo.rcWork.top + spacing)
-                            y = monitorInfo.rcWork.top + spacing;
-                        if (y + windowHeight > monitorInfo.rcWork.bottom - spacing)
-                            y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+                        // Check if cursor is on the taskbar
+                        if (IsCursorOnTaskbar(cursorPos, monitorInfo, taskbarPosition)) {
+                            // Position above/below taskbar
+                            if (taskbarPosition == TaskbarPosition.Top)
+                                y = monitorInfo.rcWork.top + spacing;
+                            else
+                                y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+                        }
+                        else {
+                            // Cursor is NOT on taskbar (desktop/explorer) - position near cursor
+                            y = cursorPos.Y - windowHeight - spacing;
+                            // Clamp to work area
+                            if (y < monitorInfo.rcWork.top + spacing)
+                                y = monitorInfo.rcWork.top + spacing;
+                            if (y + windowHeight > monitorInfo.rcWork.bottom - spacing)
+                                y = monitorInfo.rcWork.bottom - windowHeight - spacing;
+                        }
                         break;
                     case TaskbarPosition.Left:
                         // For auto-hide, work area might be full screen, so use monitor left with spacing
@@ -431,139 +457,31 @@ namespace AppGroup {
                     default:
                         // Default to bottom positioning
                         if (isTaskbarAutoHide)
-                            y = monitorInfo.rcMonitor.bottom - windowHeight -spacing;
+                            y = monitorInfo.rcMonitor.bottom - windowHeight - spacing;
                         else
                             y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         break;
                 }
 
-        Debug.WriteLine($"Calculated Position (before bounds check): X={x}, Y={y}");
+                Debug.WriteLine($"Calculated Position (before bounds check): X={x}, Y={y}");
 
-        // Ensure window stays within monitor bounds horizontally
-        if (x < monitorInfo.rcWork.left)
-            x = monitorInfo.rcWork.left;
-        if (x + windowWidth > monitorInfo.rcWork.right)
-            x = monitorInfo.rcWork.right - windowWidth;
+                // Ensure window stays within monitor bounds horizontally
+                if (x < monitorInfo.rcWork.left)
+                    x = monitorInfo.rcWork.left;
+                if (x + windowWidth > monitorInfo.rcWork.right)
+                    x = monitorInfo.rcWork.right - windowWidth;
 
-        Debug.WriteLine($"Final Position (after bounds check): X={x}, Y={y}");
-        Debug.WriteLine($"================================");
+                Debug.WriteLine($"Final Position (after bounds check): X={x}, Y={y}");
+                Debug.WriteLine($"================================");
 
-        // Move the window (maintain size, only change position)
-        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
-    }
-    catch (Exception ex) {
-        Debug.WriteLine($"Error positioning window: {ex.Message}");
-    }
-}
-        //public static void PositionWindowAboveTaskbar(IntPtr hWnd) {
-        //    try {
-        //        // Get window dimensions
-        //        NativeMethods.RECT windowRect;
-        //        if (!NativeMethods.GetWindowRect(hWnd, out windowRect)) {
-        //            return;
-        //        }
-        //        int windowWidth = windowRect.right - windowRect.left;
-        //        int windowHeight = windowRect.bottom - windowRect.top;
-
-        //        // Get current cursor position
-        //        NativeMethods.POINT cursorPos;
-        //        if (!NativeMethods.GetCursorPos(out cursorPos)) {
-        //            return;
-        //        }
-
-        //        // Get monitor information
-        //        IntPtr monitor = NativeMethods.MonitorFromPoint(cursorPos, NativeMethods.MONITOR_DEFAULTTONEAREST);
-        //        NativeMethods.MONITORINFO monitorInfo = new NativeMethods.MONITORINFO();
-        //        monitorInfo.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.MONITORINFO));
-        //        if (!NativeMethods.GetMonitorInfo(monitor, ref monitorInfo)) {
-        //            return;
-        //        }
-
-        //        // Calculate position based on taskbar position
-        //        float dpiScale = GetDpiScaleForMonitor(monitor);
-        //        int baseTaskbarHeight = 52;
-        //        int taskbarHeight = (int)(baseTaskbarHeight * dpiScale);
-
-        //        // Define a consistent spacing value for all sides
-        //        int spacing = 8; // Pixels of space between window and taskbar
-
-        //        // Check if taskbar is auto-hidden and adjust spacing if needed
-        //        bool isTaskbarAutoHide = IsTaskbarAutoHide();
-        //        if (isTaskbarAutoHide) {
-        //            // When taskbar is auto-hidden, we need to ensure we provide enough space
-        //            // The typical auto-hide taskbar shows a few pixels even when hidden
-        //            int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale); // Additional space for auto-hide taskbar
-        //            spacing += autoHideSpacing;
-        //        }
-
-        //        // Determine taskbar position by comparing work area with monitor area
-        //        TaskbarPosition taskbarPosition = GetTaskbarPosition(monitorInfo);
-
-        //        // Initial position (centered horizontally relative to cursor)
-        //        int x = cursorPos.X - (windowWidth / 2);
-        //        int y;
-
-        //        // Set position based on taskbar position
-        //        switch (taskbarPosition) {
-        //            case TaskbarPosition.Top:
-        //                // For auto-hide, work area might be full screen, so use monitor top with spacing
-        //                if (isTaskbarAutoHide)
-        //                    y = monitorInfo.rcMonitor.top + spacing;
-        //                else
-        //                    y = monitorInfo.rcWork.top + spacing;
-        //                break;
-        //            case TaskbarPosition.Bottom:
-        //                // For auto-hide, work area might be full screen, so use monitor bottom with spacing
-        //                if (isTaskbarAutoHide)
-        //                    y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
-        //                else
-        //                    y = monitorInfo.rcWork.bottom - windowHeight - spacing;
-        //                break;
-        //            case TaskbarPosition.Left:
-        //                // For auto-hide, work area might be full screen, so use monitor left with spacing
-        //                if (isTaskbarAutoHide)
-        //                    x = monitorInfo.rcMonitor.left + spacing;
-        //                else
-        //                    x = monitorInfo.rcWork.left + spacing;
-        //                y = cursorPos.Y - (windowHeight / 2);
-        //                break;
-        //            case TaskbarPosition.Right:
-        //                // For auto-hide, work area might be full screen, so use monitor right with spacing
-        //                if (isTaskbarAutoHide)
-        //                    x = monitorInfo.rcMonitor.right - windowWidth - spacing;
-        //                else
-        //                    x = monitorInfo.rcWork.right - windowWidth - spacing;
-        //                y = cursorPos.Y - (windowHeight / 2);
-        //                break;
-        //            default:
-        //                // Default to bottom positioning
-        //                if (isTaskbarAutoHide)
-        //                    y = monitorInfo.rcMonitor.bottom - windowHeight -spacing;
-        //                else
-        //                    y = monitorInfo.rcWork.bottom - windowHeight - spacing;
-        //                break;
-        //        }
-
-        //        // Ensure window stays within monitor bounds horizontally
-        //        if (x < monitorInfo.rcWork.left)
-        //            x = monitorInfo.rcWork.left;
-        //        if (x + windowWidth > monitorInfo.rcWork.right)
-        //            x = monitorInfo.rcWork.right - windowWidth;
-
-        //        // Ensure window stays within monitor bounds vertically
-        //        if (y < monitorInfo.rcWork.top)
-        //            y = monitorInfo.rcWork.top;
-        //        if (y + windowHeight > monitorInfo.rcWork.bottom)
-        //            y = monitorInfo.rcWork.bottom - windowHeight;
-
-        //        // Move the window (maintain size, only change position)
-        //        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Error positioning window: {ex.Message}");
-        //    }
-        //}
-
+                // Move the window (maintain size, only change position)
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error positioning window: {ex.Message}");
+            }
+        }
+     
         public static void PositionWindowBelowTaskbar(IntPtr hWnd) {
             try {
                 // Get window dimensions
@@ -645,6 +563,21 @@ namespace AppGroup {
             }
         }
 
+        public static void PositionWindowOffScreen(IntPtr hWnd) {
+            // Freeze window updates to prevent flicker
+            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero,
+                0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE |
+                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE |
+                NativeMethods.SWP_HIDEWINDOW);
+
+            // Move offscreen while hidden
+            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero,
+                -1000, -1000, 0, 0,
+                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER |
+                NativeMethods.SWP_NOACTIVATE);
+        }
+
         public static void PositionWindowOffScreenBelow(IntPtr hWnd) {
             try {
                 // Get current cursor position
@@ -701,12 +634,28 @@ namespace AppGroup {
             }
         }
 
-        /// <summary>
-        /// Determines the position of the taskbar based on monitor work area
-        /// </summary>
-        /// <summary>
-        /// Determines the position of the taskbar based on monitor work area
-        /// </summary>
+     
+        private static bool IsCursorOnTaskbar(POINT cursorPos, MONITORINFO monitorInfo, TaskbarPosition taskbarPosition) {
+            float dpiScale = GetDpiScaleForMonitor(MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST));
+            int taskbarThickness = (int)(52 * dpiScale); // Base taskbar height/width scaled
+
+            switch (taskbarPosition) {
+                case TaskbarPosition.Top:
+                    return cursorPos.Y >= monitorInfo.rcMonitor.top &&
+                           cursorPos.Y <= monitorInfo.rcWork.top + taskbarThickness;
+                case TaskbarPosition.Bottom:
+                    return cursorPos.Y >= monitorInfo.rcWork.bottom - taskbarThickness &&
+                           cursorPos.Y <= monitorInfo.rcMonitor.bottom;
+                case TaskbarPosition.Left:
+                    return cursorPos.X >= monitorInfo.rcMonitor.left &&
+                           cursorPos.X <= monitorInfo.rcWork.left + taskbarThickness;
+                case TaskbarPosition.Right:
+                    return cursorPos.X >= monitorInfo.rcWork.right - taskbarThickness &&
+                           cursorPos.X <= monitorInfo.rcMonitor.right;
+                default:
+                    return false;
+            }
+        }
         private static TaskbarPosition GetTaskbarPosition(NativeMethods.MONITORINFO monitorInfo) {
             // If work area equals monitor area (which can happen with auto-hide taskbar), 
             // fall back to detecting taskbar position via other means
@@ -737,7 +686,7 @@ namespace AppGroup {
             Left,
             Right
         }
-        private static bool IsTaskbarAutoHide() {
+        public static bool IsTaskbarAutoHide() {
             NativeMethods.APPBARDATA appBarData = new NativeMethods.APPBARDATA();
             appBarData.cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.APPBARDATA));
 
@@ -771,15 +720,6 @@ namespace AppGroup {
             // Default to bottom if we couldn't determine
             return TaskbarPosition.Bottom;
         }
-        // Constants for SHAppBarMessage
-        public const uint ABM_GETSTATE = 0x4;
-        public const uint ABM_GETTASKBARPOS = 0x5;
-
-        // Constants for taskbar edge positions
-        public const int ABE_LEFT = 0;
-        public const int ABE_TOP = 1;
-        public const int ABE_RIGHT = 2;
-        public const int ABE_BOTTOM = 3;
 
 
         [DllImport("shell32.dll")]
@@ -795,7 +735,7 @@ namespace AppGroup {
             public RECT rc;
             public IntPtr lParam;
         }
-        private static float GetDpiScaleForMonitor(IntPtr hMonitor) {
+        public static float GetDpiScaleForMonitor(IntPtr hMonitor) {
             try {
                 if (Environment.OSVersion.Version.Major > 6 ||
                     (Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor >= 3)) {
@@ -868,19 +808,9 @@ namespace AppGroup {
             public string szDevice;
         }
 
-
-
-
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
-
-
-
-
-
-
 
 
     }

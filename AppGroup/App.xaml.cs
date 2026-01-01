@@ -76,7 +76,7 @@ namespace AppGroup {
 
                             EditGroupHelper editGroup = new EditGroupHelper("Edit Group", groupId);
                             editGroup.Activate();
-                        InitializeJumpListSync();
+                        //InitializeJumpListSync();   
 
                             Environment.Exit(0);
                             return;
@@ -92,7 +92,7 @@ namespace AppGroup {
                         string targetGroupName = ExtractGroupNameFromCommandLine(cmdArgs);
                         Task.Run(async () => {
                             await JsonConfigHelper.LaunchAll(targetGroupName);
-                            InitializeJumpListSync();
+                            //InitializeJumpListSync();
 
                             Environment.Exit(0);
                         });

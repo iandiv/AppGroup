@@ -78,7 +78,7 @@ namespace AppGroup {
         private const int BUTTON_SIZE = 40;
         private const int BUTTON_SIZE_WITH_LABEL = 56;
         private const int BUTTON_HEIGHT_HORIZONTAL_LABEL = 40;  // Same as BUTTON_SIZE for consistent height
-        private const int BUTTON_WIDTH_HORIZONTAL_LABEL = 150;
+        private const int BUTTON_WIDTH_HORIZONTAL_LABEL = 180;
         private const int ICON_SIZE = 24;
         private const int BUTTON_MARGIN = 4;
         private const int DEFAULT_LABEL_SIZE = 10;
@@ -430,7 +430,7 @@ namespace AppGroup {
             if (groupHeader) {
                 scaledHeight += 40;
             }
-
+           
             //var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
 
             //this.AppWindow.SetIcon(iconPath);
@@ -440,6 +440,12 @@ namespace AppGroup {
             int finalWidth = scaledWidth + 30;
             int finalHeight = scaledHeight + 20;
 
+
+            int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height);
+            int maxAllowedHeight = screenHeight - 30; // Reserve space for taskbar and window chrome
+            if (finalHeight > maxAllowedHeight) {
+                finalHeight = maxAllowedHeight;
+            }
 
             this.AppWindow.Resize(new SizeInt32(finalWidth, finalHeight));
 

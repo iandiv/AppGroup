@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.UI.Windowing;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -75,6 +76,83 @@ namespace AppGroup {
         public const int ABE_RIGHT = 2;
         public const int ABE_BOTTOM = 3;
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct COPYDATASTRUCT {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool EnumThreadWindows(int dwThreadId, EnumThreadDelegate lpfn, IntPtr lParam);
+        public delegate bool EnumThreadDelegate(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+        public const uint GW_OWNER = 4;
+        // Sender code
+        public static void SendString(IntPtr targetWindow, string message) {
+            COPYDATASTRUCT cds = new COPYDATASTRUCT();
+            cds.dwData = (IntPtr)100; // Custom identifier
+            cds.cbData = (message.Length + 1) * 2; // Unicode string length in bytes
+            cds.lpData = Marshal.StringToHGlobalUni(message);
+
+            try {
+                IntPtr cdsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(cds));
+                Marshal.StructureToPtr(cds, cdsPtr, false);
+
+                NativeMethods.SendMessage(targetWindow, NativeMethods.WM_COPYDATA,
+                    IntPtr.Zero, cdsPtr);
+
+                Marshal.FreeHGlobal(cdsPtr);
+            }
+            finally {
+                Marshal.FreeHGlobal(cds.lpData);
+            }
+        }
+        public delegate IntPtr SubclassProc(
+    IntPtr hWnd,
+    uint uMsg,
+    IntPtr wParam,
+    IntPtr lParam,
+    IntPtr uIdSubclass,
+    IntPtr dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        public static extern bool SetWindowSubclass(
+     IntPtr hWnd,
+     SubclassProc pfnSubclass,
+     IntPtr uIdSubclass,
+     IntPtr dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        public static extern bool RemoveWindowSubclass(
+            IntPtr hWnd,
+            SubclassProc pfnSubclass,
+            IntPtr uIdSubclass);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        public static extern IntPtr DefSubclassProc(
+            IntPtr hWnd,
+            uint uMsg,
+            IntPtr wParam,
+            IntPtr lParam);
+
+
+        public static readonly int WM_UPDATE_GROUP = RegisterWindowMessage("AppGroup.WM_UPDATE_GROUP");
+        // Register a unique message ID (call once at startup)
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int RegisterWindowMessage(string lpString);
+
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        public const int GWL_WNDPROC = -4;
+
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -136,7 +214,7 @@ namespace AppGroup {
 
         public static void ForceForegroundWindow(IntPtr hWnd) {
 
-            
+
             if (GetForegroundWindow() == hWnd)
                 return;
 
@@ -195,8 +273,8 @@ namespace AppGroup {
             public uint dwFlags;
         }
 
-    
-      
+
+
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         public static extern void SetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] string AppID);
@@ -253,8 +331,8 @@ namespace AppGroup {
         public static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
 
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        public static extern uint RegisterWindowMessage(string lpString);
+        //[DllImport("user32.dll", CharSet = CharSet.Auto)]
+        //public static extern uint RegisterWindowMessage(string lpString);
 
 
 
@@ -391,40 +469,36 @@ namespace AppGroup {
                 if (isTaskbarAutoHide) {
                     if (IsCursorOnTaskbar(cursorPos, monitorInfo, taskbarPosition)) {
                         int autoHideSpacing = (int)((baseTaskbarHeight) * dpiScale);
-                        spacing = autoHideSpacing;    }
+                        spacing = autoHideSpacing;
+                    }
                     else {
-
-                        spacing += (int)(5 * dpiScale); // DPI-scaled spacing for auto-hide
-
+                        spacing += (int)(5 * dpiScale);
+                    }
+                }
+                else {
+                    // For normal (visible) taskbar, use larger spacing
+                    if (taskbarPosition == TaskbarPosition.Top) {
+                        spacing = (int)(10 * dpiScale); // Smaller spacing for top
+                    }
+                    else {
+                        spacing = (int)(6 * dpiScale); // Larger spacing for bottom
                     }
                 }
 
-               
+
                 // Initial position (centered horizontally relative to cursor)
                 int x = cursorPos.X - (windowWidth / 2);
                 int y;
 
                 // Set position based on taskbar position
                 switch (taskbarPosition) {
-                    //case TaskbarPosition.Top:
-                    //    if (isTaskbarAutoHide)
-                    //        y = monitorInfo.rcMonitor.top + spacing;
-                    //    else
-                    //        y = monitorInfo.rcMonitor.top + spacing;
-                    //    break;
-                    //case TaskbarPosition.Bottom:
-                    //    if (isTaskbarAutoHide)
-                    //        y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
-                    //    else
-                    //        y = monitorInfo.rcMonitor.bottom - windowHeight - spacing + 5;
-                    //    break;
-                    case TaskbarPosition.Top:
+                     case TaskbarPosition.Top:
                     case TaskbarPosition.Bottom:
                         // Check if cursor is on the taskbar
                         if (IsCursorOnTaskbar(cursorPos, monitorInfo, taskbarPosition)) {
                             // Position above/below taskbar
                             if (taskbarPosition == TaskbarPosition.Top)
-                                y = monitorInfo.rcWork.top + spacing;
+                                y = monitorInfo.rcWork.top  + spacing;
                             else
                                 y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         }
@@ -475,13 +549,13 @@ namespace AppGroup {
                 Debug.WriteLine($"================================");
 
                 // Move the window (maintain size, only change position)
-                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER);
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_SHOWWINDOW  );
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error positioning window: {ex.Message}");
             }
         }
-     
+
         public static void PositionWindowBelowTaskbar(IntPtr hWnd) {
             try {
                 // Get window dimensions
@@ -564,19 +638,33 @@ namespace AppGroup {
         }
 
         public static void PositionWindowOffScreen(IntPtr hWnd) {
-            // Freeze window updates to prevent flicker
-            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero,
-                0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE |
-                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE |
-                NativeMethods.SWP_HIDEWINDOW);
+            int screenHeight = (int)DisplayArea.Primary.WorkArea.Height;
+            int screenWidth = (int)DisplayArea.Primary.WorkArea.Width;
 
-            // Move offscreen while hidden
-            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero,
-                -1000, -1000, 0, 0,
-                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER |
-                NativeMethods.SWP_NOACTIVATE);
+            // Hide first to avoid flicker
+            NativeMethods.SetWindowPos(
+                hWnd,
+                IntPtr.Zero,
+                0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE |
+                NativeMethods.SWP_NOSIZE |
+                NativeMethods.SWP_NOZORDER |
+                NativeMethods.SWP_NOACTIVATE |
+                NativeMethods.SWP_HIDEWINDOW
+            );
+
+            // Move window BELOW the screen using screenHeight
+            NativeMethods.SetWindowPos(
+                hWnd,
+                IntPtr.Zero,
+                0, screenHeight + 100, // push below bottom edge
+                0, 0,
+                NativeMethods.SWP_NOSIZE |
+                NativeMethods.SWP_NOZORDER |
+                NativeMethods.SWP_NOACTIVATE
+            );
         }
+
 
         public static void PositionWindowOffScreenBelow(IntPtr hWnd) {
             try {
@@ -634,7 +722,7 @@ namespace AppGroup {
             }
         }
 
-     
+
         private static bool IsCursorOnTaskbar(POINT cursorPos, MONITORINFO monitorInfo, TaskbarPosition taskbarPosition) {
             float dpiScale = GetDpiScaleForMonitor(MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST));
             int taskbarThickness = (int)(52 * dpiScale); // Base taskbar height/width scaled

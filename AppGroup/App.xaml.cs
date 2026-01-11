@@ -1,5 +1,6 @@
 ﻿
 
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using System;
 using System.Diagnostics;
@@ -9,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Windows.Graphics;
 using Windows.UI.StartScreen;
+using Windows.UI.WindowManagement;
 using WinRT.Interop;
 using WinUIEx;
 
@@ -20,9 +22,11 @@ namespace AppGroup {
         private EditGroupWindow? editWindow;
 
         private nint hWnd;
+        private bool useFileMode = false;
 
         public App() {
             try {
+
                 string[] cmdArgs = Environment.GetCommandLineArgs();
                 bool isSilent = HasSilentFlag(cmdArgs);
 
@@ -101,10 +105,11 @@ namespace AppGroup {
                     }
                     else {
                         // AppGroup.exe "GroupName" - like "CH"
-                        SaveGroupNameToFile(command);
-
-                        // Also save the group ID for this group name
-                        try {
+                        if (useFileMode) {
+                            SaveGroupNameToFile(command);
+                        }
+                            // Also save the group ID for this group name
+                            try {
                             int groupId = JsonConfigHelper.FindKeyByGroupName(command);
                             SaveGroupIdToFile(groupId.ToString());
                         }
@@ -115,12 +120,11 @@ namespace AppGroup {
 
                         if (existingPopupHWnd != IntPtr.Zero) {
 
-                            
-                           
-                            BringWindowToFront(existingPopupHWnd);
-                            InitializeJumpListSync();
 
+                            //BringWindowToFront(existingPopupHWnd);
+                            InitializeJumpListSync();
                             Environment.Exit(0);
+
                             return;
                         }
                         else if (existingMainHWnd != IntPtr.Zero || existingEditHWnd != IntPtr.Zero) {
@@ -310,10 +314,10 @@ namespace AppGroup {
             try {
                 string[] cmdArgs = Environment.GetCommandLineArgs();
                 bool isSilent = HasSilentFlag(cmdArgs);
+                IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
 
                 // Handle --silent flag (special case)
                 if (isSilent) {
-                    IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
                     if (existingPopupHWnd != IntPtr.Zero) {
                         Environment.Exit(0);
                         return;
@@ -347,8 +351,11 @@ namespace AppGroup {
                     else if (command != "LaunchAll") {
                         // Show PopupWindow with group name
                         ShowPopupWindow();
+                        //HidePopupWindow();
                         HideMainWindow();
                         HideEditWindow();
+
+                       
                     }
                 }
                 else {
@@ -437,27 +444,75 @@ namespace AppGroup {
 
         //    return (x, y);
         //}
+
+
         private void BringWindowToFront(IntPtr hWnd) {
-            try {
-                if (hWnd != IntPtr.Zero) {
+            if (useFileMode) {
+                try {
+                    if (hWnd != IntPtr.Zero) {
 
 
 
+                        NativeMethods.PositionWindowOffScreen(hWnd);
+                        NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
+                        NativeMethods.ForceForegroundWindow(hWnd);
 
-                    NativeMethods.PositionWindowOffScreenBelow(hWnd);
-                    NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
-                    //Task.Delay(50).Wait();
-
-                    NativeMethods.ForceForegroundWindow(hWnd);
-                    NativeMethods.PositionWindowAboveTaskbar(hWnd);
+                        Task.Delay(5).Wait();
 
 
+                        NativeMethods.PositionWindowAboveTaskbar(hWnd);
+
+                    }
+                }
+                catch (Exception ex) {
+                    System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
                 }
             }
-            catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
+            else { 
+                try {
+                    if (hWnd != IntPtr.Zero) {
+                        // FIRST: Position and show the window immediately
+                        NativeMethods.PositionWindowOffScreen(hWnd);
+
+                        // THEN: Send the message to update content (async, non-blocking)
+                        string[] cmdArgs = Environment.GetCommandLineArgs();
+                        if (cmdArgs.Length > 1) {
+                            string command = cmdArgs[1];
+                            NativeMethods.SendString(hWnd, command);
+                        }
+                        NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
+
+                        NativeMethods.ForceForegroundWindow(hWnd);
+
+                        NativeMethods.PositionWindowAboveTaskbar(hWnd);
+                    }
+                }
+                catch (Exception ex) {
+                    System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
+                }
             }
         }
+        //private void BringWindowToFront(IntPtr hWnd) {
+        //    try {
+        //        if (hWnd != IntPtr.Zero) {
+
+
+
+        //            NativeMethods.PositionWindowOffScreen(hWnd);
+        //            NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOW);
+        //            NativeMethods.ForceForegroundWindow(hWnd);
+
+        //            Task.Delay(5).Wait();
+
+
+        //            NativeMethods.PositionWindowAboveTaskbar(hWnd);
+
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        System.Diagnostics.Debug.WriteLine($"Failed to bring window to front: {ex.Message}");
+        //    }
+        //}
 
         private void BringEditWindowToFront(IntPtr hWnd) {
             try {
@@ -473,6 +528,9 @@ namespace AppGroup {
 
         private void CreateAllWindows() {
             try {
+
+
+
                 editWindow = new EditGroupWindow(-1);
                 editWindow.InitializeComponent();
 
@@ -482,16 +540,18 @@ namespace AppGroup {
 
                 // Create PopupWindow (hidden)
                 popupWindow = new PopupWindow("Popup Window");
+                popupWindow.AppWindow.Resize(new SizeInt32(0,0));
+
                 popupWindow.InitializeComponent();
-                IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
-                if (popupHWnd != IntPtr.Zero) {
-                    NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
-                    NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_HIDE);
-                }
+
+                NativeMethods.PositionWindowOffScreen(popupWindow.GetWindowHandle());
+
+
+
+                //NativeMethods.ShowWindow(popupWindow.GetWindowHandle(), NativeMethods.SW_HIDE);
 
                 IntPtr editHWnd = WindowNative.GetWindowHandle(editWindow);
                 if (editHWnd != IntPtr.Zero) {
-                        NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
                     NativeMethods.ShowWindow(editHWnd, NativeMethods.SW_HIDE);
                 }
             }
@@ -515,13 +575,15 @@ namespace AppGroup {
         private void ShowPopupWindow() {
             try {
                 if (popupWindow != null) {
-                    IntPtr popupHWnd = WindowNative.GetWindowHandle(popupWindow);
 
-                    if (popupHWnd != IntPtr.Zero) {
-                        NativeMethods.PositionWindowAboveTaskbar(popupHWnd);
-                        NativeMethods.ShowWindow(popupHWnd, NativeMethods.SW_SHOW);
-                        NativeMethods.ForceForegroundWindow(popupHWnd);
-                    }
+
+
+                    IntPtr popupHWnd = NativeMethods.FindWindow(null, "Popup Window");
+
+                    Task.Delay(200).Wait();
+                    BringWindowToFront(popupWindow.GetWindowHandle());
+
+
                 }
             }
             catch (Exception ex) {

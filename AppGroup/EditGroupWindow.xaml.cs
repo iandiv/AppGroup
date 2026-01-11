@@ -58,6 +58,9 @@ namespace AppGroup {
         private string originalItemIconPath = null;
         private bool _isDialogRepositioning = false;
 
+        private const int DEFAULT_LABEL_SIZE = 12;
+        private const string DEFAULT_LABEL_POSITION = "Bottom";
+
         public EditGroupWindow(int groupId) {
    
             this.InitializeComponent();
@@ -299,8 +302,17 @@ namespace AppGroup {
                     foreach (var item in items) {
                         if (item is StorageFile file &&
                             (file.FileType.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-                             file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase))) {
-                            var icon = await IconCache.GetIconPathAsync(file.Path);
+                             file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
+                             file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))) {
+
+                            string icon;
+
+                            if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                                icon = await IconHelper.GetUrlFileIconAsync(file.Path);
+                            }
+                            else {
+                                icon = await IconCache.GetIconPathAsync(file.Path);
+                            }
 
                             ExeFiles.Add(new ExeFileModel {
                                 FileName = file.Name,
@@ -364,9 +376,12 @@ namespace AppGroup {
         private void GroupColComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
             if (GroupColComboBox.SelectedItem != null && GroupColComboBox.SelectedItem.ToString() == "1") {
                 GroupHeader.IsEnabled = false;
+                HeaderPanel.Opacity = 0.5;
             }
             else {
                 GroupHeader.IsEnabled = true;
+                HeaderPanel.Opacity = 1.0;
+
             }
         }
 
@@ -374,10 +389,15 @@ namespace AppGroup {
             if (ShowLabels.IsOn) {
                 LabelSizePanel.Opacity = 1.0;
                 LabelSizeComboBox.IsEnabled = true;
+
+                LabelPositionPanel.Opacity = 1.0;
+                LabelPositionComboBox.IsEnabled = true;
             }
             else {
                 LabelSizePanel.Opacity = 0.5;
                 LabelSizeComboBox.IsEnabled = false;
+                LabelPositionPanel.Opacity = 0.5;
+                LabelPositionComboBox.IsEnabled = false;
             }
         }
 
@@ -387,7 +407,15 @@ namespace AppGroup {
             foreach (int size in sizes) {
                 LabelSizeComboBox.Items.Add(size.ToString());
             }
-            LabelSizeComboBox.SelectedItem = "10"; // Default
+            LabelSizeComboBox.SelectedItem = int.Parse(DEFAULT_LABEL_SIZE.ToString()); // Default
+        }
+
+        private void InitializeLabelPositionComboBox() {
+            LabelPositionComboBox.Items.Clear();
+
+            LabelPositionComboBox.Items.Add("Right");
+            LabelPositionComboBox.Items.Add("Bottom");
+            LabelPositionComboBox.SelectedItem = DEFAULT_LABEL_POSITION; 
         }
 
         private async Task LoadGroupDataAsync(int groupId) {
@@ -404,8 +432,8 @@ namespace AppGroup {
                         string groupIcon = IconHelper.FindOrigIcon(groupNode["groupIcon"]?.GetValue<string>());
                         bool groupHeader = groupNode["groupHeader"]?.GetValue<bool>() ?? false;
                         bool showLabels = groupNode["showLabels"]?.GetValue<bool>() ?? false;
-                        int labelSize = groupNode["labelSize"]?.GetValue<int>() ?? 10;
-
+                        int labelSize = groupNode["labelSize"]?.GetValue<int>() ?? int.Parse(DEFAULT_LABEL_SIZE.ToString());
+                        string labelPosition = groupNode["labelPosition"]?.GetValue<string>() ?? DEFAULT_LABEL_POSITION;
                         JsonObject paths = groupNode["path"]?.AsObject();
 
                         string tempSubfolderPath = Path.Combine(Path.GetTempPath(), "AppGroup");
@@ -432,16 +460,24 @@ namespace AppGroup {
 
                             // Initialize and set label settings
                             InitializeLabelSizeComboBox();
+                            InitializeLabelPositionComboBox();
                             ShowLabels.IsOn = showLabels;
                             LabelSizeComboBox.SelectedItem = labelSize.ToString();
+                            LabelPositionComboBox.SelectedItem = labelPosition.ToString();
                             // Update label size panel state
+                        
                             if (showLabels) {
                                 LabelSizePanel.Opacity = 1.0;
                                 LabelSizeComboBox.IsEnabled = true;
+
+                                LabelPositionPanel.Opacity = 1.0;
+                                LabelPositionComboBox.IsEnabled = true;
                             }
                             else {
                                 LabelSizePanel.Opacity = 0.5;
                                 LabelSizeComboBox.IsEnabled = false;
+                                LabelPositionPanel.Opacity = 0.5;
+                                LabelPositionComboBox.IsEnabled = false;
                             }
                         });
 
@@ -478,7 +514,7 @@ namespace AppGroup {
                                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                     Debug.WriteLine($"Icon : {filePath}");
                                     var icon = await IconCache.GetIconPathAsync(filePath);
-                                    await Task.Delay(50);
+                                    await Task.Delay(10);
 
                                     if (path.Value.AsObject().TryGetPropertyValue("icon", out JsonNode? iconNode)
                                           && iconNode is not null
@@ -537,9 +573,14 @@ namespace AppGroup {
 
                             // Initialize label settings for new groups
                             InitializeLabelSizeComboBox();
+                            InitializeLabelPositionComboBox();
+
                             ShowLabels.IsOn = false;
                             LabelSizePanel.Opacity = 0.5;
                             LabelSizeComboBox.IsEnabled = false;
+                            LabelPositionPanel.Opacity = 0.5;
+                            LabelPositionComboBox.IsEnabled = false;
+
                         });
                     }
                 }
@@ -561,13 +602,15 @@ namespace AppGroup {
 
                         // Initialize label settings for new groups on fresh install
                         InitializeLabelSizeComboBox();
+                        InitializeLabelPositionComboBox();
+
                         ShowLabels.IsOn = false;
                         LabelSizePanel.Opacity = 0.5;
                         LabelSizeComboBox.IsEnabled = false;
                     });
                 }
 
-                await Task.Run(() => Task.Delay(100));
+                await Task.Run(() => Task.Delay(10));
 
                 DispatcherQueue.TryEnqueue(() =>
                 {
@@ -621,6 +664,10 @@ namespace AppGroup {
         private void CloseEditDialog(object sender, RoutedEventArgs e) {
             EditItemDialog.Hide();
         }
+
+        private void CloseCustomizeDialog(object sender, RoutedEventArgs e) {
+            CustomizeDialog.Hide();
+        }
         private void GridClick(object sender, RoutedEventArgs e) {
             if (ExeListView.Items.Count == 0) {
                 regularIcon = false;
@@ -647,6 +694,7 @@ namespace AppGroup {
                 openPicker.FileTypeFilter.Add(".jpeg");
                 openPicker.FileTypeFilter.Add(".jpg");
                 openPicker.FileTypeFilter.Add(".exe");
+                openPicker.FileTypeFilter.Add(".url");
                 openPicker.FileTypeFilter.Add(".png");
                 openPicker.FileTypeFilter.Add(".ico");
                 StorageFile file = await openPicker.PickSingleFileAsync();
@@ -690,6 +738,7 @@ namespace AppGroup {
             var openPicker = new FileOpenPicker();
             openPicker.SuggestedStartLocation = PickerLocationId.Desktop;
             openPicker.FileTypeFilter.Add(".exe");
+            openPicker.FileTypeFilter.Add(".url");
             openPicker.FileTypeFilter.Add(".lnk");
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -697,9 +746,12 @@ namespace AppGroup {
 
             var files = await openPicker.PickMultipleFilesAsync();
             if (files == null || files.Count == 0) return;
-
+            string icon;
             foreach (var file in files) {
-                var icon = await IconCache.GetIconPathAsync(file.Path);
+                if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                    icon = await IconHelper.GetUrlFileIconAsync(file.Path);
+                }else{ icon = await IconCache.GetIconPathAsync(file.Path);
+                    }
                 ExeFiles.Add(new ExeFileModel { FileName = file.Name, Icon = icon, FilePath = file.Path, Tooltip = "", Args = "" });
             }
 
@@ -761,7 +813,12 @@ namespace AppGroup {
                 CreateGridIcon();
             }
         }
-      
+
+
+        private async void CustomizeDialog_Click(object sender, RoutedEventArgs e) {
+            ContentDialogResult result = await CustomizeDialog.ShowAsync();
+
+        }
         private async void EditItem_Click(object sender, RoutedEventArgs e) {
             if (sender is Button button && button.Tag is ExeFileModel item) {
                 CurrentItem = item;
@@ -924,6 +981,13 @@ namespace AppGroup {
             }
         }
         private async void CreateShortcut_Click(object sender, RoutedEventArgs e) {
+            var button = sender as Button;
+            if (button != null && !button.IsEnabled)
+                return;
+
+            if (button != null)
+                button.IsEnabled = false;
+
             try {
                 string newGroupName = GroupNameTextBox.Text?.Trim();
                 if (string.IsNullOrEmpty(newGroupName)) {
@@ -1044,12 +1108,14 @@ if (isPinned) {
 
                     // Get label settings from UI
                     bool showLabels = ShowLabels.IsOn;
-                    int labelSize = LabelSizeComboBox.SelectedItem != null ? int.Parse(LabelSizeComboBox.SelectedItem.ToString()) : 10;
+                    int labelSize = LabelSizeComboBox.SelectedItem != null ? int.Parse(LabelSizeComboBox.SelectedItem.ToString()) : int.Parse(DEFAULT_LABEL_SIZE.ToString());
+                    string? labelPosition = LabelPositionComboBox.SelectedItem != null ? LabelPositionComboBox.SelectedItem.ToString() : DEFAULT_LABEL_POSITION;
 
                     // Update your AddGroupToJson method signature and implementation to handle icon
-                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, showLabels, labelSize, paths);
+                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, showLabels, labelSize,labelPosition, paths);
+                    ExpanderLabel.IsExpanded = false;
 
-                   
+
                     if (tempIcon != null) {
                         try {
                             File.Delete(tempIcon);
@@ -1081,6 +1147,10 @@ if (isPinned) {
             }
             catch (Exception ex) {
                 await ShowDialog("Error", $"An error occurred: {ex.Message}");
+            }
+            finally {
+                if (button != null)
+                    button.IsEnabled = true;
             }
         }
 

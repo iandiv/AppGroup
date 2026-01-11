@@ -112,7 +112,7 @@ namespace AppGroup
 
             return Path.Combine(appDataPath, fileName);
         }
-        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, bool showLabels, int labelSize, Dictionary<string, (string tooltip, string args, string icon)> paths) {
+        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, bool showLabels, int labelSize, string labelPosition, Dictionary<string, (string tooltip, string args, string icon)> paths) {
             try {
                 string directory = Path.GetDirectoryName(filePath);
                 if (!Directory.Exists(directory)) {
@@ -141,6 +141,7 @@ namespace AppGroup
             { "groupIcon", groupIcon },
             { "showLabels", showLabels },
             { "labelSize", labelSize },
+            { "labelPosition", labelPosition },
             { "path", jsonPaths }
         };
                 jsonObject[groupId.ToString()] = newGroup;

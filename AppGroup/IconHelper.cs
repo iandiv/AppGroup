@@ -21,6 +21,32 @@ using Image = Microsoft.UI.Xaml.Controls.Image;
 
 namespace AppGroup {
     public class IconHelper {
+        public static async Task<string> GetUrlFileIconAsync(string filePath) {
+            try {
+                // Read all lines from the .url file
+                var lines = await File.ReadAllLinesAsync(filePath);
+
+                // Find the IconFile line
+                var iconLine = lines.FirstOrDefault(l => l.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrEmpty(iconLine)) {
+                    // Extract the path after "IconFile="
+                    var iconPath = iconLine.Substring("IconFile=".Length).Trim();
+
+                    // Check if the icon file exists
+                    if (File.Exists(iconPath)) {
+                        // Use your existing icon cache with the extracted path
+                        return await IconCache.GetIconPathAsync(iconPath);
+                    }
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error reading .url file: {ex.Message}");
+            }
+
+            // Fallback to a default icon
+            return "ms-appx:///Assets/default-icon.png";
+        }
 
         public static string FindOrigIcon(string icoFilePath) {
             if (string.IsNullOrEmpty(icoFilePath)) {

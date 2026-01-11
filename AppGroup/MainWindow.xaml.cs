@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -292,7 +293,15 @@ namespace AppGroup {
                                             return customIcon;
                                         }
                                         else {
-                                            return await IconCache.GetIconPathAsync(filePath);
+                                            string icon;
+                                            if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                                                icon = await IconHelper.GetUrlFileIconAsync(filePath);
+                                            }
+                                            else {
+                                                icon = await IconCache.GetIconPathAsync(filePath);
+                                            }
+
+                                            return icon;
                                         }
                                     })
                                     .ToList();
@@ -750,8 +759,13 @@ namespace AppGroup {
                         }
                         else {
                             // Force icon regeneration if not exists
-                            string cachedIconPath = await IconCache.GetIconPathAsync(filePath);
-
+                            string cachedIconPath;
+                            if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                                cachedIconPath = await IconHelper.GetUrlFileIconAsync(filePath);
+                            }
+                            else {
+                                cachedIconPath = await IconCache.GetIconPathAsync(filePath);
+                            }
                             // Additional verification to ensure icon is actually generated
                             if (string.IsNullOrEmpty(cachedIconPath) || !File.Exists(cachedIconPath)) {
                                 cachedIconPath = await ReGenerateIconAsync(filePath, outputDirectory);

@@ -22,6 +22,10 @@
 <Win32Icon>AppGroup.ico</Win32Icon>
     
   </PropertyGroup>
+	<PropertyGroup>
+		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+	</PropertyGroup>
+
   <ItemGroup>
     <None Remove="EditGroupWindow.xaml" />
     <None Remove="MainWindow.xaml" />

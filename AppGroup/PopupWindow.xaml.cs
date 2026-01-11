@@ -34,6 +34,7 @@ using Windows.UI.ViewManagement;
 using Windows.UI.WindowManagement;
 using WinRT.Interop;
 using WinUIEx;
+using static AppGroup.WindowHelper;
 using File = System.IO.File;
 
 namespace AppGroup {
@@ -49,7 +50,9 @@ namespace AppGroup {
         public int GroupCol { get; set; }
         public int GroupId { get; set; }
         public bool ShowLabels { get; set; } = false;
-        public int LabelSize { get; set; } = 10;
+        public int LabelSize { get; set; } = 12;
+        public string LabelPosition { get; set; } = "Bottom";
+
         public Dictionary<string, PathData> Path { get; set; }  // Changed to Pascal case
     }
 
@@ -74,6 +77,7 @@ namespace AppGroup {
         public event PropertyChangedEventHandler PropertyChanged;
     }
     public sealed partial class PopupWindow : Window {
+
         // Constants for UI elements
         private const int BUTTON_SIZE = 40;
         private const int BUTTON_SIZE_WITH_LABEL = 56;
@@ -81,12 +85,20 @@ namespace AppGroup {
         private const int BUTTON_WIDTH_HORIZONTAL_LABEL = 180;
         private const int ICON_SIZE = 24;
         private const int BUTTON_MARGIN = 4;
-        private const int DEFAULT_LABEL_SIZE = 10;
+        private const int DEFAULT_LABEL_SIZE = 12;
+        private const string DEFAULT_LABEL_POSITION = "Bottom";
+
+        // Add these constants to PopupWindow class
+
+        private IntPtr _hwnd;
+        private IntPtr _oldWndProc;
+        private NativeMethods.WndProcDelegate _newWndProc; // Keep reference to prevent GC
+
 
         // Static JSON options to prevent redundant creation
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions {
             PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase 
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
         // Member variables
@@ -106,11 +118,11 @@ namespace AppGroup {
         private ItemsPanelTemplate _panelTemplate;
         private ItemsPanelTemplate _panelTemplateWithLabel;
         private ItemsPanelTemplate _panelTemplateHorizontalLabel;
-        private nint hWnd;
 
         // Label settings for current group
         private bool _showLabels = false;
         private int _labelSize = DEFAULT_LABEL_SIZE;
+        private string _labelPosition = DEFAULT_LABEL_POSITION;
         private int _currentColumns = 1;
 
 
@@ -124,9 +136,16 @@ namespace AppGroup {
         private bool _isUISettingsSubscribed = false;
         private readonly List<Task> _backgroundTasks = new List<Task>();
         private readonly List<Task> _iconLoadingTasks = new List<Task>();
+
+        private bool useFileMode = false;
+
+        private NativeMethods.SubclassProc _subclassProc; // Keep reference to prevent GC
+        private const int SUBCLASS_ID = 1;
         // Constructor
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
+
+
 
             _groupFilter = groupFilter;
             this.Title = "Popup Window";
@@ -142,14 +161,20 @@ namespace AppGroup {
             _windowHelper.HasTitleBar = false;
             _windowHelper.IsAlwaysOnTop = true;
 
+            this.Hide();
+
+
             // Initialize templates
 
             InitializeTemplates();
 
             SetWindowIcon();
+            if (!useFileMode) {
+                // Setup custom window procedure AFTER window is created
+                _hwnd = WindowNative.GetWindowHandle(this);
+                SubclassWindow();
 
-
-
+            }
             //InitializeSystemTray();
             this.AppWindow.IsShownInSwitchers = false;
 
@@ -160,7 +185,150 @@ namespace AppGroup {
             // Update the MainGrid background color based on the current settings
             UpdateMainGridBackground(sender);
         }
+        // Add this method to subclass the window
+        //private void SubclassWindow() {
+        //    try {
+        //        // Create delegate and keep reference to prevent GC
+        //        _newWndProc = new NativeMethods.WndProcDelegate(WndProc);
 
+        //        // Replace window procedure
+        //        _oldWndProc = NativeMethods.SetWindowLongPtr(_hwnd,
+        //            NativeMethods.GWL_WNDPROC,
+        //            Marshal.GetFunctionPointerForDelegate(_newWndProc));
+
+        //        Debug.WriteLine("Window subclassed successfully");
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Failed to subclass window: {ex.Message}");
+        //    }
+        //}
+        //// Add this window procedure
+        //private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam) {
+        //    if (msg == WM_UPDATE_GROUP) {
+        //        try {
+        //            // Extract the group ID from the message
+        //            int groupId = (int)wParam;
+
+        //            Debug.WriteLine($"Received WM_UPDATE_GROUP message with groupId: {groupId}");
+
+        //            // Update on UI thread
+        //            this.DispatcherQueue.TryEnqueue(() => {
+        //                try {
+        //                    // Update the group filter with the new group name
+        //                    _groupFilter = JsonConfigHelper.FindGroupNameByKey(groupId);
+
+        //                    Debug.WriteLine($"Updated group filter to: {_groupFilter}");
+
+        //                    // Reload configuration with new group
+        //                    LoadConfiguration();
+        //                }
+        //                catch (Exception ex) {
+        //                    Debug.WriteLine($"Error updating group: {ex.Message}");
+        //                }
+        //            });
+
+        //            return IntPtr.Zero;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"Error in WndProc: {ex.Message}");
+        //        }
+        //    }
+
+        //    // Call the original window procedure
+        //    return NativeMethods.CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+        //}
+
+        private void SubclassWindow() {
+            try {
+                // Create delegate and keep reference to prevent GC
+                _subclassProc = new NativeMethods.SubclassProc(SubclassProc);
+
+                // Use SetWindowSubclass instead of SetWindowLongPtr
+                bool success = NativeMethods.SetWindowSubclass(
+                    _hwnd,
+                    _subclassProc,
+                    SUBCLASS_ID,
+                    IntPtr.Zero);
+
+                if (success) {
+                    Debug.WriteLine("Window subclassed successfully");
+                }
+                else {
+                    Debug.WriteLine($"Failed to subclass window. Error: {Marshal.GetLastWin32Error()}");
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Failed to subclass window: {ex.Message}");
+            }
+        }
+
+        // Subclass procedure
+        private IntPtr SubclassProc(
+     IntPtr hWnd,
+     uint msg,
+     IntPtr wParam,
+     IntPtr lParam,
+     IntPtr uIdSubclass,
+     IntPtr dwRefData) {
+
+            // Handle WM_COPYDATA for string messages
+            if (msg == NativeMethods.WM_COPYDATA) {
+                try {
+                    NativeMethods.COPYDATASTRUCT cds = (NativeMethods.COPYDATASTRUCT)Marshal.PtrToStructure(
+                        lParam, typeof(NativeMethods.COPYDATASTRUCT));
+
+                    // Check the dwData to identify message type
+                    if (cds.dwData == (IntPtr)100) { // Your custom identifier
+                        string groupName = Marshal.PtrToStringUni(cds.lpData);
+                        Debug.WriteLine($"Received WM_COPYDATA message with groupName: {groupName}");
+
+                        // Update on UI thread
+                        this.DispatcherQueue.TryEnqueue(() => {
+                            try {
+                                _groupFilter = groupName;
+                                Debug.WriteLine($"Updated group filter to: {_groupFilter}");
+                                LoadConfiguration();
+                            }
+                            catch (Exception ex) {
+                                Debug.WriteLine($"Error updating group: {ex.Message}");
+                            }
+                        });
+
+                        return (IntPtr)1; // Message handled successfully
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Error in WM_COPYDATA handler: {ex.Message}");
+                }
+            }
+
+            // Keep your existing WM_UPDATE_GROUP handler if you still need it
+            //if (msg == NativeMethods.WM_UPDATE_GROUP) {
+            //    try {
+            //        int groupId = wParam.ToInt32();
+            //        Debug.WriteLine($"Received WM_UPDATE_GROUP message with groupId: {groupId}");
+
+            //        this.DispatcherQueue.TryEnqueue(() =>
+            //        {
+            //            try {
+            //                _groupFilter = JsonConfigHelper.FindGroupNameByKey(groupId);
+            //                Debug.WriteLine($"Updated group filter to: {_groupFilter}");
+            //                LoadConfiguration();
+            //            }
+            //            catch (Exception ex) {
+            //                Debug.WriteLine($"Error updating group: {ex.Message}");
+            //            }
+            //        });
+
+            //        return IntPtr.Zero;
+            //    }
+            //    catch (Exception ex) {
+            //        Debug.WriteLine($"Error in SubclassProc: {ex.Message}");
+            //    }
+            //}
+
+            return NativeMethods.DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
         private void UpdateMainGridBackground(UISettings uiSettings) {
             // Check if the accent color is being shown on Start and taskbar
             if (IsAccentColorOnStartTaskbarEnabled()) {
@@ -316,7 +484,7 @@ namespace AppGroup {
         }
 
         // Load configuration with better error handling and caching
-        private  void LoadConfiguration() {
+        private void LoadConfiguration() {
             try {
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
                 _json = JsonConfigHelper.ReadJsonFromFile(configPath);
@@ -358,6 +526,7 @@ namespace AppGroup {
             // Reset label settings
             _showLabels = false;
             _labelSize = DEFAULT_LABEL_SIZE;
+            _labelPosition = DEFAULT_LABEL_POSITION;
             _currentColumns = 1;
 
             // If we have a group filter, only consider that group
@@ -373,7 +542,10 @@ namespace AppGroup {
                 // Get label settings
                 _showLabels = filteredGroup.Value.ShowLabels;
                 _labelSize = filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE;
+                _labelPosition = filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition : DEFAULT_LABEL_POSITION;
+
                 _currentColumns = maxColumns;
+
 
                 // Create label templates with the actual font size from config
                 if (_showLabels) {
@@ -394,8 +566,8 @@ namespace AppGroup {
             }
 
             // Determine if using horizontal labels (single column with labels)
-            bool useHorizontalLabels = _showLabels && _currentColumns == 1;
-
+            //bool useHorizontalLabels = _showLabels && _currentColumns == 1;
+            bool useHorizontalLabels = _showLabels && _labelPosition == "Right";
             // Use appropriate button size based on label setting and layout
             int buttonWidth, buttonHeight;
             if (useHorizontalLabels) {
@@ -430,7 +602,7 @@ namespace AppGroup {
             if (groupHeader) {
                 scaledHeight += 40;
             }
-           
+
             //var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
 
             //this.AppWindow.SetIcon(iconPath);
@@ -441,15 +613,19 @@ namespace AppGroup {
             int finalHeight = scaledHeight + 20;
 
 
+
             int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height);
             int maxAllowedHeight = screenHeight - 30; // Reserve space for taskbar and window chrome
             if (finalHeight > maxAllowedHeight) {
                 finalHeight = maxAllowedHeight;
             }
 
-            this.AppWindow.Resize(new SizeInt32(finalWidth, finalHeight));
 
-            NativeMethods.PositionWindowAboveTaskbar(hWnd);
+
+
+            _windowHelper.SetSize(finalWidth, finalHeight);
+            NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle());
+
 
 
         }
@@ -549,6 +725,7 @@ namespace AppGroup {
 
 
             foreach (var group in _groups) {
+
                 // Skip this group if filtering is active and this isn't the requested group
                 if (_groupFilter != null && !group.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
                     continue;
@@ -568,7 +745,8 @@ namespace AppGroup {
                 }
 
                 // Configure GridView
-                bool useHorizontalLabels = _showLabels && _currentColumns == 1;
+                //bool useHorizontalLabels = _showLabels && _currentColumns == 1;
+                bool useHorizontalLabels = _showLabels && _labelPosition == "Right";
 
                 DataTemplate selectedItemTemplate;
                 ItemsPanelTemplate selectedPanelTemplate;
@@ -752,7 +930,9 @@ namespace AppGroup {
                     newIconPath, // Use the new grid icon path
                     filteredGroup.Value.GroupCol,
                     filteredGroup.Value.ShowLabels,
-                    filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : 10,
+                    filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE,
+                        filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition : DEFAULT_LABEL_POSITION,
+
                     reorderedPaths
                 );
 
@@ -814,7 +994,8 @@ namespace AppGroup {
                         filteredGroup.Value.GroupIcon,
                         filteredGroup.Value.GroupCol,
                         filteredGroup.Value.ShowLabels,
-                        filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : 10,
+                        filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE,
+                        filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition :DEFAULT_LABEL_POSITION,
                         newPathOrder
                     );
                 }
@@ -861,6 +1042,7 @@ namespace AppGroup {
 
         private void LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
             foreach (var pathEntry in pathsWithProperties) {
+
                 string path = pathEntry.Key;
                 PathData properties = pathEntry.Value;
 
@@ -897,8 +1079,13 @@ namespace AppGroup {
                     iconPath = item.CustomIconPath;
                 }
                 else {
-                    // Fall back to cached icon
-                    iconPath = await IconCache.GetIconPathAsync(path);
+                    if (Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                        iconPath = await IconHelper.GetUrlFileIconAsync(path);
+                    }
+                    else {
+                        iconPath = await IconCache.GetIconPathAsync(path);
+                    }
+        
                 }
 
                 BitmapImage icon = await IconCache.LoadImageFromPathAsync(iconPath);
@@ -982,47 +1169,46 @@ namespace AppGroup {
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
 
-                NativeMethods.PositionWindowOffScreen(hWnd);
+                int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
+                int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
+
+
+
+
+
+
                 if (_groups != null) {
                     foreach (var group in _groups) {
-                        Header.Visibility = Visibility.Collapsed;
-                        HeaderText.Text = "";
-                         PopupItems.Clear();
-                GridPanel.Children.Clear();
-                _anyGroupDisplayed = false;
+
+
+                        // Defer clearing until after the current UI cycle
+                        this.DispatcherQueue.TryEnqueue(() => {
+                            Header.Visibility = Visibility.Collapsed;
+                            HeaderText.Text = "";
+                            PopupItems.Clear();
+                            GridPanel.Children.Clear();
+                            _anyGroupDisplayed = false;
+                        });
+
+
                     }
                 }
                 var settings = await SettingsHelper.LoadSettingsAsync();
 
                 // FIRST: Cleanup UISettings to prevent event handler accumulation
-                CleanupUISettings(); 
+                CleanupUISettings();
 
                 if (!string.IsNullOrEmpty(_originalIconPath) && !string.IsNullOrEmpty(_groupFilter)) {
                     // Hide window immediately
                     this.DispatcherQueue.TryEnqueue(() => {
-                        NativeMethods.PositionWindowOffScreen(hWnd);
+
+
+
 
                         this.Hide();
-                    });
+                        _windowHelper.SetSize(screenWidth, screenHeight);
+                        NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
 
-                    if (settings.UseGrayscaleIcon) {
-                        var task = Task.Run(async () => {
-                            try {
-                                await TaskbarManager.UpdateTaskbarShortcutIcon(_groupFilter, iconGroup);
-                                if (!string.IsNullOrEmpty(_iconWithBackgroundPath)) {
-                                    IconHelper.RemoveBackgroundIcon(_iconWithBackgroundPath);
-                                    _iconWithBackgroundPath = null;
-                                }
-                            }
-                            catch (Exception ex) {
-                                Debug.WriteLine($"Background cleanup error: {ex.Message}");
-                            }
-                        });
-                        _backgroundTasks.Add(task);
-                    }
-
-                    // UI cleanup
-                    this.DispatcherQueue.TryEnqueue(() => {
                         try {
                             if (_gridView != null) {
                                 _gridView.RightTapped -= GridView_RightTapped;
@@ -1062,7 +1248,24 @@ namespace AppGroup {
                         catch (Exception ex) {
                             Debug.WriteLine($"UI cleanup error: {ex.Message}");
                         }
+
                     });
+
+                    if (settings.UseGrayscaleIcon) {
+                        var task = Task.Run(async () => {
+                            try {
+                                await TaskbarManager.UpdateTaskbarShortcutIcon(_groupFilter, iconGroup);
+                                if (!string.IsNullOrEmpty(_iconWithBackgroundPath)) {
+                                    IconHelper.RemoveBackgroundIcon(_iconWithBackgroundPath);
+                                    _iconWithBackgroundPath = null;
+                                }
+                            }
+                            catch (Exception ex) {
+                                Debug.WriteLine($"Background cleanup error: {ex.Message}");
+                            }
+                        });
+                        _backgroundTasks.Add(task);
+                    }
 
                     _ = Task.Run(() => {
                         GC.Collect(0, GCCollectionMode.Optimized);
@@ -1070,26 +1273,31 @@ namespace AppGroup {
                 }
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
+                if (useFileMode) {
+                    Debug.WriteLine("FILE MODE");
+                    if (_cachedAppFolderPath == null) {
+                        string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                        _cachedAppFolderPath = Path.Combine(appDataPath, "AppGroup");
+                        _cachedLastOpenPath = Path.Combine(_cachedAppFolderPath, "lastOpen");
+                    }
 
-                if (_cachedAppFolderPath == null) {
-                    string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    _cachedAppFolderPath = Path.Combine(appDataPath, "AppGroup");
-                    _cachedLastOpenPath = Path.Combine(_cachedAppFolderPath, "lastOpen");
-                }
-
-                // Read group filter from file each time window is activated
-                try {
-                    if (File.Exists(_cachedLastOpenPath)) {
-                        string fileGroupFilter = File.ReadAllText(_cachedLastOpenPath).Trim();
-                        if (!string.IsNullOrEmpty(fileGroupFilter)) {
-                            _groupFilter = fileGroupFilter;
+                    // Read group filter from file each time window is activated
+                    try {
+                        if (File.Exists(_cachedLastOpenPath)) {
+                            string fileGroupFilter = File.ReadAllText(_cachedLastOpenPath).Trim();
+                            if (!string.IsNullOrEmpty(fileGroupFilter)) {
+                                _groupFilter = fileGroupFilter;
+                            }
                         }
                     }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"Error reading group name from file: {ex.Message}");
+                    }
                 }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Error reading group name from file: {ex.Message}");
-                }
+                else {
+                    Debug.WriteLine("MESSAGE MODE");
 
+                }
                 // Subscribe to UISettings only once
                 if (!_isUISettingsSubscribed) {
                     _uiSettings ??= new UISettings();
@@ -1099,7 +1307,7 @@ namespace AppGroup {
 
                 // Initial update to set the background color based on the current settings
                 UpdateMainGridBackground(_uiSettings);
-                LoadConfiguration();
+                //LoadConfiguration();
 
                 // Do heavy operations in background after window is shown
 

@@ -17,7 +17,7 @@ namespace AppGroup {
         private static bool isVisible = false;
 
         // Add this field to store the TaskbarCreated message ID
-        private static uint WM_TASKBARCREATED;
+        private static int WM_TASKBARCREATED;
 
         public static void Initialize(Action showCallback, Action exitCallback) {
             onShowCallback = showCallback;

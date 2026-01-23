@@ -150,7 +150,7 @@ namespace AppGroup {
                 // Store the current GroupId to compare against
                 int previousGroupId = GroupId;
                 int newGroupId = -1; // Default value
-
+                ExpanderLabel.IsExpanded = false;
                 // Read group filter from file each time window is activated
 
                 try {
@@ -513,7 +513,11 @@ namespace AppGroup {
                                 string filePath = path.Key;
                                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                     Debug.WriteLine($"Icon : {filePath}");
-                                    var icon = await IconCache.GetIconPathAsync(filePath);
+                                    string icon;
+                                    if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                                        icon = await IconHelper.GetUrlFileIconAsync(filePath);
+                                    }
+                                    else { icon = await IconCache.GetIconPathAsync(filePath); }
                                     await Task.Delay(10);
 
                                     if (path.Value.AsObject().TryGetPropertyValue("icon", out JsonNode? iconNode)
@@ -702,8 +706,12 @@ namespace AppGroup {
                 if (file != null) {
                     selectedIconPath = file.Path;
                     BitmapImage bitmapImage = new BitmapImage();
+                    string iconPath;
+                    if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                        iconPath = await IconHelper.GetUrlFileIconAsync(file.Path);
+                    } else 
                     if (file.FileType == ".exe") {
-                        var iconPath = await IconCache.GetIconPathAsync(file.Path);
+                         iconPath = await IconCache.GetIconPathAsync(file.Path);
                         if (!string.IsNullOrEmpty(iconPath)) {
                             using (var stream = File.OpenRead(iconPath)) {
                                 await bitmapImage.SetSourceAsync(stream.AsRandomAccessStream());
@@ -1113,7 +1121,7 @@ if (isPinned) {
 
                     // Update your AddGroupToJson method signature and implementation to handle icon
                     JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, showLabels, labelSize,labelPosition, paths);
-                    ExpanderLabel.IsExpanded = false;
+            
 
 
                     if (tempIcon != null) {

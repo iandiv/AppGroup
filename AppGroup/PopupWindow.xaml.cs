@@ -150,6 +150,8 @@ namespace AppGroup {
             _groupFilter = groupFilter;
             this.Title = "Popup Window";
 
+
+
             // Setup window
             _windowHelper = new WindowHelper(this);
 
@@ -795,6 +797,7 @@ namespace AppGroup {
                         HorizontalAlignment = HorizontalAlignment.Center,
                         TextAlignment = TextAlignment.Center
                     };
+
                     GridPanel.Children.Add(noGroupsText);
 
                     this.AppWindow.Resize(new SizeInt32(250, 120));
@@ -1273,7 +1276,9 @@ namespace AppGroup {
                 }
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
+                
                 if (useFileMode) {
+
                     Debug.WriteLine("FILE MODE");
                     if (_cachedAppFolderPath == null) {
                         string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

@@ -323,7 +323,7 @@
 
                     <Grid Grid.Row="2" Margin="10,0,10,10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ListView x:Name="ExeListView" Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
+                            <ListView x:Name="ExeListView" ScrollViewer.IsDeferredScrollingEnabled="True"  Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
                                 <ListView.Resources>
                                     <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
                                 </ListView.Resources>

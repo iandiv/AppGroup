@@ -36,6 +36,7 @@ namespace AppGroup {
                 var version = assembly.GetName().Version;
                 if (version != null) {
                     // Return major.minor.build format (e.g., "1.1.0")
+                    Console.WriteLine($"{version.Major}.{version.Minor}.{version.Build}");
                     return $"{version.Major}.{version.Minor}.{version.Build}";
                 }
             }

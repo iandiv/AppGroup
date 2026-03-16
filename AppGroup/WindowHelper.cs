@@ -176,7 +176,14 @@ namespace AppGroup {
             //TrySetMicaBackdrop();
             UpdateTitleBarColors();
         }
-
+        public void SyncBackdropTheme(bool isDark) {
+            if (_configurationSource != null) {
+                _configurationSource.Theme = isDark
+                    ? SystemBackdropTheme.Dark
+                    : SystemBackdropTheme.Light;
+            }
+            UpdateTitleBarColors();
+        }
 
         public static float GetDpiScaleForMonitor(IntPtr hMonitor) {
             try {

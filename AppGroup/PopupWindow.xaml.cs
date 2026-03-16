@@ -1,40 +1,24 @@
 ﻿using IWshRuntimeLibrary;
-using Microsoft.UI;
-using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Drawing.Printing;
 using System.IO;
 using System.Linq;
-using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
-using Windows.ApplicationModel.Background;
-using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI.ViewManagement;
-using Windows.UI.WindowManagement;
 using WinRT.Interop;
 using WinUIEx;
-using static AppGroup.WindowHelper;
 using File = System.IO.File;
 
 namespace AppGroup {
@@ -75,6 +59,9 @@ namespace AppGroup {
             }
         }
         public event PropertyChangedEventHandler PropertyChanged;
+
+        public bool IsSubgroup { get; set; }
+        public string SubgroupName { get; set; }
     }
     public sealed partial class PopupWindow : Window {
 
@@ -141,6 +128,11 @@ namespace AppGroup {
 
         private NativeMethods.SubclassProc _subclassProc; // Keep reference to prevent GC
         private const int SUBCLASS_ID = 1;
+        // Change from static to instance
+        private readonly Dictionary<string, PopupWindow> _openSubPopups = new Dictionary<string, PopupWindow>();
+        private PopupWindow _parentPopup = null;
+       
+
         // Constructor
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
@@ -163,8 +155,12 @@ namespace AppGroup {
             _windowHelper.HasTitleBar = false;
             _windowHelper.IsAlwaysOnTop = true;
 
-            this.Hide();
+            int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
+            int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
 
+            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+            this.AppWindow.Resize(new Windows.Graphics.SizeInt32(screenWidth, screenHeight));
+            this.Hide();
 
             // Initialize templates
 
@@ -183,7 +179,13 @@ namespace AppGroup {
             // Load on activation
             this.Activated += Window_Activated;
         }
-        private void UiSettings_ColorValuesChanged(UISettings sender, object args) {
+
+
+
+
+
+
+         private void UiSettings_ColorValuesChanged(UISettings sender, object args) {
             // Update the MainGrid background color based on the current settings
             UpdateMainGridBackground(sender);
         }
@@ -239,7 +241,15 @@ namespace AppGroup {
         //    // Call the original window procedure
         //    return NativeMethods.CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         //}
-
+        private bool IsAlreadyOpenInChain(string groupName) {
+            foreach (var sub in _openSubPopups.Values) {
+                if (sub._groupFilter?.Equals(groupName, StringComparison.OrdinalIgnoreCase) == true)
+                    return true;
+                if (sub.IsAlreadyOpenInChain(groupName))
+                    return true;
+            }
+            return false;
+        }
         private void SubclassWindow() {
             try {
                 // Create delegate and keep reference to prevent GC
@@ -280,13 +290,18 @@ namespace AppGroup {
                         lParam, typeof(NativeMethods.COPYDATASTRUCT));
 
                     // Check the dwData to identify message type
-                    if (cds.dwData == (IntPtr)100) { // Your custom identifier
+                    if (cds.dwData == (IntPtr)100) {
                         string groupName = Marshal.PtrToStringUni(cds.lpData);
                         Debug.WriteLine($"Received WM_COPYDATA message with groupName: {groupName}");
 
-                        // Update on UI thread
                         this.DispatcherQueue.TryEnqueue(() => {
                             try {
+                                // ← ADD: ignore if already open as sub-popup in chain
+                                if (IsAlreadyOpenInChain(groupName)) {
+                                    Debug.WriteLine($"Ignoring WM_COPYDATA for '{groupName}' - already open as sub-popup");
+                                    return;
+                                }
+
                                 _groupFilter = groupName;
                                 Debug.WriteLine($"Updated group filter to: {_groupFilter}");
                                 LoadConfiguration();
@@ -296,7 +311,7 @@ namespace AppGroup {
                             }
                         });
 
-                        return (IntPtr)1; // Message handled successfully
+                        return (IntPtr)1;
                     }
                 }
                 catch (Exception ex) {
@@ -346,6 +361,7 @@ namespace AppGroup {
                     ? "SystemAccentColorDark2"
                     : "SystemAccentColorDark2";
 
+
                 if (Application.Current.Resources.TryGetValue(accentResourceKey, out object accentColor)) {
                     var acrylicBrush = new Microsoft.UI.Xaml.Media.AcrylicBrush {
                         TintColor = (Windows.UI.Color)accentColor,
@@ -357,6 +373,20 @@ namespace AppGroup {
             }
             else {
                 MainGrid.Background = null;
+
+                // Follow window mode theme (not app mode)
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")) {
+                    if (key != null) {
+                        object value = key.GetValue("SystemUsesLightTheme"); // window mode registry key
+                        bool isWindowLightTheme = value != null && (int)value == 1;
+
+                        if (Content is FrameworkElement rootElement) {
+                            rootElement.RequestedTheme = isWindowLightTheme
+                                ? ElementTheme.Light
+                                : ElementTheme.Dark;
+                        }
+                    }
+                }
             }
         }
 
@@ -509,12 +539,20 @@ namespace AppGroup {
 
         private string GetDefaultJsonConfiguration() {
             return @"{
-            ""Group1NameHere"": {
-                ""groupCol"": 3,
-                ""groupIcon"": ""test.png"",
-                ""path"": [""C:\\Windows\\System32\\notepad.exe"", ""C:\\Windows\\System32\\calc.exe"", ""C:\\Windows\\System32\\mspaint.exe""]
+        ""1"": {
+            ""groupCol"": 3,
+            ""groupIcon"": ""AppGroup.ico"",
+            ""groupName"": ""Group1NameHere"",
+            ""groupHeader"": false,
+            ""showLabels"": false,
+            ""labelSize"": 12,
+            ""labelPosition"": ""Bottom"",
+            ""path"": {
+                ""C:\\Windows\\System32\\notepad.exe"": { ""tooltip"": """", ""args"": """", ""icon"": """" },
+                ""C:\\Windows\\System32\\calc.exe"": { ""tooltip"": """", ""args"": """", ""icon"": """" }
             }
-        }";
+        }
+    }";
         }
 
         // Non-async window initialization for faster loading
@@ -568,9 +606,7 @@ namespace AppGroup {
             }
 
             // Determine if using horizontal labels (single column with labels)
-            //bool useHorizontalLabels = _showLabels && _currentColumns == 1;
             bool useHorizontalLabels = _showLabels && _labelPosition == "Right";
-            // Use appropriate button size based on label setting and layout
             int buttonWidth, buttonHeight;
             if (useHorizontalLabels) {
                 buttonWidth = BUTTON_WIDTH_HORIZONTAL_LABEL;
@@ -605,9 +641,7 @@ namespace AppGroup {
                 scaledHeight += 40;
             }
 
-            //var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
 
-            //this.AppWindow.SetIcon(iconPath);
 
             MainGrid.Margin = new Thickness(0, 0, -5, -15);
 
@@ -622,10 +656,12 @@ namespace AppGroup {
                 finalHeight = maxAllowedHeight;
             }
 
-
-
-
+            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+           
+           
             _windowHelper.SetSize(finalWidth, finalHeight);
+
+
             NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle());
 
 
@@ -656,74 +692,13 @@ namespace AppGroup {
         }
 
         private void CreateDynamicContent() {
+
             // Clear existing items
             PopupItems.Clear();
             GridPanel.Children.Clear();
             HeaderText.Text = "";
             _anyGroupDisplayed = false;
 
-            //foreach (var group in _groups) {
-            //    // Skip this group if filtering is active and this isn't the requested group
-            //    if (_groupFilter != null && !group.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
-            //        continue;
-            //    }
-
-            //    _anyGroupDisplayed = true;
-
-            //    // Set header visibility
-            //    if (group.Value.GroupHeader) {
-            //        Header.Visibility = Visibility.Visible;
-            //        HeaderText.Text = group.Value.GroupName;
-            //        ScrollView.Margin = new Thickness(0, 0, 0, 5);
-            //    }
-            //    else {
-            //        Header.Visibility = Visibility.Collapsed;
-            //        ScrollView.Margin = new Thickness(0, 5, 0, 5);
-            //    }
-
-            //    // Configure GridView - select template based on labels and column count
-            //    // Auto: horizontal labels for 1 column, vertical labels for 2+
-            //    bool useHorizontalLabels = _showLabels && _currentColumns == 1;
-
-            //    DataTemplate selectedItemTemplate;
-            //    ItemsPanelTemplate selectedPanelTemplate;
-
-            //    if (useHorizontalLabels) {
-            //        selectedItemTemplate = _itemTemplateHorizontalLabel;
-            //        selectedPanelTemplate = _panelTemplateHorizontalLabel;
-            //    }
-            //    else if (_showLabels) {
-            //        selectedItemTemplate = _itemTemplateWithLabel;
-            //        selectedPanelTemplate = _panelTemplateWithLabel;
-            //    }
-            //    else {
-            //        selectedItemTemplate = _itemTemplate;
-            //        selectedPanelTemplate = _panelTemplate;
-            //    }
-
-            //    _gridView = new GridView {
-            //        SelectionMode = ListViewSelectionMode.Extended,
-            //        IsItemClickEnabled = true,
-            //        HorizontalAlignment = HorizontalAlignment.Left,
-            //        CanDragItems = true,
-            //        CanReorderItems = true,
-            //        AllowDrop = true,
-            //        ItemTemplate = selectedItemTemplate,
-            //        ItemsPanel = selectedPanelTemplate
-            //    };
-
-
-            //    // Set up events
-            //    _gridView.RightTapped += GridView_RightTapped;
-            //    _gridView.DragItemsCompleted += GridView_DragItemsCompleted;
-            //    _gridView.ItemClick += GridView_ItemClick;
-
-            //    // Load items
-            //    LoadGridItems(group.Value.path);
-
-            //    _gridView.ItemsSource = PopupItems;
-            //    GridPanel.Children.Add(_gridView);
-            //}
 
 
             foreach (var group in _groups) {
@@ -767,14 +742,15 @@ namespace AppGroup {
                 }
 
                 _gridView = new GridView {
-                    SelectionMode = ListViewSelectionMode.Extended,
+                    SelectionMode = ListViewSelectionMode.None,
                     IsItemClickEnabled = true,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     CanDragItems = true,
                     CanReorderItems = true,
                     AllowDrop = true,
                     ItemTemplate = selectedItemTemplate,
-                    ItemsPanel = selectedPanelTemplate
+                     ItemsPanel = selectedPanelTemplate,
+                 
                 };
 
                 // Set up events
@@ -808,7 +784,6 @@ namespace AppGroup {
         // Add these fields to your PopupWindow class
         //private string _originalIconPath;
         private string _currentGridIconPath;
-        private bool _isGridIcon = false;
 
         // Add this method to PopupWindow class
         private async Task CreateGridIconFromReorder() {
@@ -998,7 +973,7 @@ namespace AppGroup {
                         filteredGroup.Value.GroupCol,
                         filteredGroup.Value.ShowLabels,
                         filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE,
-                        filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition :DEFAULT_LABEL_POSITION,
+                        filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition : DEFAULT_LABEL_POSITION,
                         newPathOrder
                     );
                 }
@@ -1068,6 +1043,21 @@ namespace AppGroup {
                     IconPath = customIconPath,
                     CustomIconPath = customIconPath
                 };
+                if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                    try {
+                        IWshShell shell = new WshShell();
+                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+                        string comment = shortcut.Description;
+                        Debug.WriteLine($"Shortcut comment: '{comment}' | Path: '{path}'");
+                        if (!string.IsNullOrEmpty(comment) && comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
+                            popupItem.IsSubgroup = true;
+                            popupItem.SubgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
+                    }
+                }
 
                 PopupItems.Add(popupItem);
                 _ = LoadIconAsync(popupItem, path);
@@ -1088,7 +1078,7 @@ namespace AppGroup {
                     else {
                         iconPath = await IconCache.GetIconPathAsync(path);
                     }
-        
+
                 }
 
                 BitmapImage icon = await IconCache.LoadImageFromPathAsync(iconPath);
@@ -1105,9 +1095,137 @@ namespace AppGroup {
                 });
             }
         }
+
+        private System.Threading.Timer _focusTimer = null;
+
+        private DateTime _lastSubPopupOpenTime = DateTime.MinValue;
+
+        private void OpenSubPopup(string groupName) {
+            if (_openSubPopups.TryGetValue(groupName, out var existing)) {
+                // Close and remove existing before recreating
+                NativeMethods.PositionWindowOffScreen(existing.GetWindowHandle());
+                existing.Hide();
+                existing._isLoaded = false;
+                existing._openSubPopups.Clear();
+                existing._parentPopup = null;
+                _openSubPopups.Remove(groupName);
+            }
+
+            var subPopup = new PopupWindow(groupName);
+            subPopup._parentPopup = this;
+            _openSubPopups[groupName] = subPopup;
+
+            int disableTransitions = 1;
+            NativeMethods.DwmSetWindowAttribute(
+                subPopup.GetWindowHandle(),
+                NativeMethods.DWMWA_TRANSITIONS_FORCEDISABLED,
+                ref disableTransitions,
+                sizeof(int));
+            UpdateLastOpenTime();
+
+            var root = this;
+            while (root._parentPopup != null) root = root._parentPopup;
+            root._focusTimer?.Dispose();
+            root._focusTimer = null;
+            root.StartFocusTimer();
+
+            subPopup.Activate();
+        }
+        private void UpdateLastOpenTime() {
+            _lastSubPopupOpenTime = DateTime.Now;
+            Debug.WriteLine($"UpdateLastOpenTime on {this.GetWindowHandle()}, parent={_parentPopup?.GetWindowHandle()}");
+            _parentPopup?.UpdateLastOpenTime();
+        }
+
+        private void StartFocusTimer() {
+            if (_parentPopup != null) {
+                _parentPopup.StartFocusTimer();
+                return;
+            }
+
+            _focusTimer?.Dispose();
+            _focusTimer = new System.Threading.Timer(_ => {
+                if ((DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds < 400)
+                    return;
+
+                IntPtr foreground = NativeMethods.GetForegroundWindow();
+                bool isInChain = IsAnywhereInChain(foreground);
+
+                if (!isInChain) {
+                    DispatcherQueue.TryEnqueue(() => {
+                        StopFocusTimer();
+                        CloseAllChildrenRecursive(_openSubPopups);
+                        _openSubPopups.Clear();
+                        _isLoaded = false;
+                        this.Hide();
+                    });
+                }
+                // Do NOT close children when clicking a popup in chain
+                // Let Window_Activated handle that via natural focus
+            }, null, 50, 50);
+        }
+      
+
+        private bool IsAnywhereInChain(IntPtr hwnd) {
+            if (this.GetWindowHandle() == hwnd) return true;
+            foreach (var sub in _openSubPopups.Values) {
+                if (sub.IsAnywhereInChain(hwnd)) return true;
+            }
+            return false;
+        }
+        int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
+        int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
+        private void CloseAllChildrenRecursive(Dictionary<string, PopupWindow> subs) {
+            foreach (var sub in subs.Values.ToList()) {
+                CloseAllChildrenRecursive(sub._openSubPopups);
+                sub._openSubPopups.Clear();
+                sub._parentPopup = null; // ← clear parent reference
+                sub._isLoaded = false;
+                NativeMethods.PositionWindowOffScreen(sub.GetWindowHandle());
+
+                sub.AppWindow.Resize(new Windows.Graphics.SizeInt32(screenWidth, screenHeight));
+
+                sub.Hide();
+            }
+        }
+
+        private void StopFocusTimer() {
+            if (_parentPopup != null) {
+                _parentPopup.StopFocusTimer();
+                return;
+            }
+            _focusTimer?.Dispose();
+            _focusTimer = null;
+        }
+       
+       
+
+
+       
         private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
             if (e.ClickedItem is PopupItem popupItem) {
-                TryLaunchApp(popupItem.Path, popupItem.Args);
+
+                Debug.WriteLine($"ItemClick: path={popupItem.Path} IsSubgroup={popupItem.IsSubgroup} SubgroupName={popupItem.SubgroupName}");
+                if (popupItem.IsSubgroup) {
+                    OpenSubPopup(popupItem.SubgroupName);
+                }
+                else {
+                    TryLaunchApp(popupItem.Path, popupItem.Args);
+
+                    // Close sub-popups first
+                    foreach (var sub in _openSubPopups.Values.ToList())
+                        sub.Hide();
+                    _openSubPopups.Clear();
+
+
+                    // Close parent if this is a sub-popup
+                    _parentPopup?.DispatcherQueue.TryEnqueue(() => {
+                        _parentPopup._openSubPopups.Clear(); // ← fix: _parentPopup._openSubPopups not _openSubPopups
+                        _parentPopup.Hide();
+                    });
+
+                    this.Hide();
+                }
             }
         }
 
@@ -1122,60 +1240,24 @@ namespace AppGroup {
         }
 
 
-        //private void GridView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
-        //    try {
-        //        if (_groups == null || string.IsNullOrEmpty(_groupFilter)) {
-        //            Debug.WriteLine("Error: Unable to deserialize groups or group filter is not set");
-        //            return;
-        //        }
-
-        //        var filteredGroup = _groups.FirstOrDefault(g => g.Value.groupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
-
-        //        if (filteredGroup.Key == null) {
-        //            Debug.WriteLine($"Error: Group '{_groupFilter}' not found in configuration");
-        //            return;
-        //        }
-
-        //        // Create a new dictionary to hold the reordered paths with their properties INCLUDING custom icons
-        //        Dictionary<string, (string tooltip, string args, string icon)> newPathOrder = new Dictionary<string, (string tooltip, string args, string icon)>();
-        //        foreach (var item in PopupItems) {
-        //            // Include the custom icon path when reordering
-        //            string customIcon = !string.IsNullOrEmpty(item.CustomIconPath) ? item.CustomIconPath : "";
-        //            newPathOrder[item.Path] = (item.ToolTip, item.Args, customIcon);
-        //        }
-
-        //        if (!int.TryParse(filteredGroup.Key, out int groupId)) {
-        //            Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
-        //            return;
-        //        }
-
-        //        JsonConfigHelper.AddGroupToJson(
-        //            JsonConfigHelper.GetDefaultConfigPath(),
-        //            groupId,
-        //            filteredGroup.Value.groupName,
-        //            filteredGroup.Value.groupHeader,
-        //            filteredGroup.Value.groupIcon,
-        //            filteredGroup.Value.groupCol,
-        //            newPathOrder
-        //        );
-
-        //        _json = File.ReadAllText(JsonConfigHelper.GetDefaultConfigPath());
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Error in GridView_DragItemsCompleted: {ex.Message}");
-        //        ShowErrorDialog($"Failed to save new item order: {ex.Message}");
-        //    }
-        //}
-
-
-
+        private bool _isLoaded = false;
+      
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
-
                 int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
                 int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
 
 
+               
+                // Sub-popups never self-cleanup
+                if (_parentPopup != null) return;
+
+                // Root: don't cleanup if timer is running (sub-popups are open)
+                if (_focusTimer != null) return;
+
+                _isLoaded = false;
+
+              
 
 
 
@@ -1210,6 +1292,7 @@ namespace AppGroup {
 
                         this.Hide();
                         _windowHelper.SetSize(screenWidth, screenHeight);
+                       
                         NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
 
                         try {
@@ -1276,7 +1359,13 @@ namespace AppGroup {
                 }
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
-                
+
+
+                if (!_isLoaded) {
+                    LoadConfiguration();
+                    _isLoaded = true;
+                }
+                Debug.WriteLine($"Activated: _isLoaded={_isLoaded}");
                 if (useFileMode) {
 
                     Debug.WriteLine("FILE MODE");
@@ -1312,8 +1401,19 @@ namespace AppGroup {
 
                 // Initial update to set the background color based on the current settings
                 UpdateMainGridBackground(_uiSettings);
-                //LoadConfiguration();
 
+                // ↓ ADD THIS
+                if (_openSubPopups.Count > 0 &&
+                    (DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds > 400) {
+                    CloseAllChildrenRecursive(_openSubPopups);
+                    _openSubPopups.Clear();
+                }
+                // ↑ END ADD
+
+                if (!_isLoaded) {
+                    LoadConfiguration();
+                    _isLoaded = true;
+                }
                 // Do heavy operations in background after window is shown
 
 
@@ -1375,15 +1475,17 @@ namespace AppGroup {
         }
 
 
-
+        // Use CMD Wrapper 
         private void TryLaunchApp(string path, string args) {
             try {
                 ProcessStartInfo psi = new ProcessStartInfo {
-                    FileName = path,
-                    Arguments = args,
-                    UseShellExecute = true
+                    FileName = "cmd.exe",
+                    Arguments = $"/c start \"\" \"{path}\" {args}",
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
                 };
-                Process.Start(psi);
+                Process process = Process.Start(psi);
+                process?.Close();
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Failed to launch {path}: {ex.Message}");
@@ -1392,22 +1494,28 @@ namespace AppGroup {
         }
 
 
+        // Use  COM Elavation
         private void TryRunAsAdmin(string path, string args) {
             try {
-                ProcessStartInfo psi = new ProcessStartInfo {
-                    FileName = path,
-                    Arguments = args,
-                    Verb = "runas",
-                    UseShellExecute = true
-                };
-                Process.Start(psi);
+                Type shellType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellType == null)
+                    throw new InvalidOperationException("Shell.Application COM object not found.");
+
+                dynamic shell = Activator.CreateInstance(shellType);
+                if (shell == null)
+                    throw new InvalidOperationException("Failed to create Shell.Application instance.");
+
+                shell.ShellExecute(path, args, "", "runas", 1);
+            }
+            catch (UnauthorizedAccessException) {
+                Debug.WriteLine("Access denied.Try launching as administrator.");
+
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Failed to run as admin {path}: {ex.Message}");
                 ShowErrorDialog($"Failed to run as admin {path}: {ex.Message}");
             }
         }
-
         private void OpenFileLocation(string path) {
             try {
                 string directory = Path.GetDirectoryName(path);
@@ -1417,6 +1525,7 @@ namespace AppGroup {
                 }
                 else {
                     throw new Exception("Directory does not exist.");
+
                 }
             }
             catch (Exception ex) {
@@ -1427,13 +1536,16 @@ namespace AppGroup {
 
         // UI Helpers
         private void ShowErrorDialog(string message) {
-            ContentDialog dialog = new ContentDialog {
-                Title = "Error",
-                Content = message,
-                CloseButtonText = "OK",
-                XamlRoot = this.Content.XamlRoot
-            };
-            _ = dialog.ShowAsync();
+            var dialog = new DialogWindow("Error", message);
+            _ = dialog.ShowDialogAsync();
+            //ContentDialog dialog = new ContentDialog {
+            //    Title = "Error",
+            //    Content = message,
+            //    CloseButtonText = "OK",
+            //    XamlRoot = this.Content.XamlRoot
+            //};
+            //_ = dialog.ShowAsync();
+
         }
 
         private MenuFlyout CreateItemFlyout() {

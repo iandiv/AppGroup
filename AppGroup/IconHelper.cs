@@ -10,13 +10,10 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using Windows.Storage;
-using Windows.Storage.FileProperties;
-using Windows.Storage.Streams;
 using Image = Microsoft.UI.Xaml.Controls.Image;
 
 namespace AppGroup {
@@ -144,169 +141,169 @@ namespace AppGroup {
         /// Creates a single icon with white background using the same System.Drawing approach as CreateGridIconAsync
         /// Add this method to your existing class that contains CreateGridIconAsync
         /// </summary>
-       // Option 1: Convert PNG icon to black and white (grayscale)
-public static async Task<string> CreateBlackWhiteIconAsync(string originalIconPath) {
-    try {
-        if (string.IsNullOrEmpty(originalIconPath) || !File.Exists(originalIconPath)) {
-            Console.WriteLine("Invalid path or file doesn't exist");
-            return originalIconPath;
-        }
+        // Option 1: Convert PNG icon to black and white (grayscale)
+        public static async Task<string> CreateBlackWhiteIconAsync(string originalIconPath) {
+            try {
+                if (string.IsNullOrEmpty(originalIconPath) || !File.Exists(originalIconPath)) {
+                    Console.WriteLine("Invalid path or file doesn't exist");
+                    return originalIconPath;
+                }
 
-        string directory = Path.GetDirectoryName(originalIconPath);
-        string filenameWithoutExtension = Path.GetFileNameWithoutExtension(originalIconPath);
+                string directory = Path.GetDirectoryName(originalIconPath);
+                string filenameWithoutExtension = Path.GetFileNameWithoutExtension(originalIconPath);
 
-        Console.WriteLine($"Converting PNG to B&W: {originalIconPath}");
+                Console.WriteLine($"Converting PNG to B&W: {originalIconPath}");
 
-        // Load the PNG directly
-        System.Drawing.Bitmap originalBitmap;
-        try {
-            originalBitmap = new System.Drawing.Bitmap(originalIconPath);
-            Console.WriteLine($"✅ PNG loaded: {originalBitmap.Width}x{originalBitmap.Height}");
-        }
-        catch (Exception ex) {
-            Console.WriteLine($"❌ Failed to load PNG: {ex.Message}");
-            return originalIconPath;
-        }
+                // Load the PNG directly
+                System.Drawing.Bitmap originalBitmap;
+                try {
+                    originalBitmap = new System.Drawing.Bitmap(originalIconPath);
+                    Console.WriteLine($"✅ PNG loaded: {originalBitmap.Width}x{originalBitmap.Height}");
+                }
+                catch (Exception ex) {
+                    Console.WriteLine($"❌ Failed to load PNG: {ex.Message}");
+                    return originalIconPath;
+                }
 
-        string pngPath;
-        using (var bwBitmap = new System.Drawing.Bitmap(originalBitmap.Width, originalBitmap.Height)) {
-            // Convert to black and white pixel by pixel
-            for (int x = 0; x < originalBitmap.Width; x++) {
-                for (int y = 0; y < originalBitmap.Height; y++) {
-                    System.Drawing.Color originalColor = originalBitmap.GetPixel(x, y);
-                    
-                    // Convert to grayscale using luminance formula
-                    int grayValue = (int)(originalColor.R * 0.299 + originalColor.G * 0.587 + originalColor.B * 0.114);
-                    
-                    // Keep the original alpha channel for transparency
-                    System.Drawing.Color grayColor = System.Drawing.Color.FromArgb(originalColor.A, grayValue, grayValue, grayValue);
-                    bwBitmap.SetPixel(x, y, grayColor);
+                string pngPath;
+                using (var bwBitmap = new System.Drawing.Bitmap(originalBitmap.Width, originalBitmap.Height)) {
+                    // Convert to black and white pixel by pixel
+                    for (int x = 0; x < originalBitmap.Width; x++) {
+                        for (int y = 0; y < originalBitmap.Height; y++) {
+                            System.Drawing.Color originalColor = originalBitmap.GetPixel(x, y);
+
+                            // Convert to grayscale using luminance formula
+                            int grayValue = (int)(originalColor.R * 0.299 + originalColor.G * 0.587 + originalColor.B * 0.114);
+
+                            // Keep the original alpha channel for transparency
+                            System.Drawing.Color grayColor = System.Drawing.Color.FromArgb(originalColor.A, grayValue, grayValue, grayValue);
+                            bwBitmap.SetPixel(x, y, grayColor);
+                        }
+                    }
+
+                    // Save as PNG
+                    pngPath = Path.Combine(directory, $"{filenameWithoutExtension}_bw.png");
+                    bwBitmap.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine($"✅ B&W PNG saved to: {pngPath}");
+                }
+
+                originalBitmap.Dispose();
+
+                // Convert PNG to ICO using your existing method
+                string icoPath = Path.Combine(directory, $"{filenameWithoutExtension}_bw.ico");
+                bool iconSuccess = await ConvertToIco(pngPath, icoPath);
+
+                if (iconSuccess) {
+                    Console.WriteLine($"✅ B&W ICO created successfully: {icoPath}");
+                    return icoPath;
+                }
+                else {
+                    Console.WriteLine("⚠️  Failed to convert PNG to ICO, returning PNG path");
+                    return pngPath;
                 }
             }
-
-            // Save as PNG
-            pngPath = Path.Combine(directory, $"{filenameWithoutExtension}_bw.png");
-            bwBitmap.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
-            Console.WriteLine($"✅ B&W PNG saved to: {pngPath}");
+            catch (Exception ex) {
+                Console.WriteLine($"❌ Error creating B&W icon: {ex.Message}");
+                return originalIconPath;
+            }
         }
 
-        originalBitmap.Dispose();
+        // Option 2: Add bottom border to PNG icon
+        public static async Task<string> CreateIconWithBottomBorderAsync(string originalIconPath, System.Drawing.Color borderColor = default, int borderHeight = 10) {
+            try {
+                if (string.IsNullOrEmpty(originalIconPath) || !File.Exists(originalIconPath)) {
+                    Console.WriteLine("Invalid path or file doesn't exist");
+                    return originalIconPath;
+                }
 
-        // Convert PNG to ICO using your existing method
-        string icoPath = Path.Combine(directory, $"{filenameWithoutExtension}_bw.ico");
-        bool iconSuccess = await ConvertToIco(pngPath, icoPath);
+                // Default to white border if no color specified
+                if (borderColor == default) {
+                    borderColor = System.Drawing.Color.White;
+                }
 
-        if (iconSuccess) {
-            Console.WriteLine($"✅ B&W ICO created successfully: {icoPath}");
-            return icoPath;
-        }
-        else {
-            Console.WriteLine("⚠️  Failed to convert PNG to ICO, returning PNG path");
-            return pngPath;
-        }
-    }
-    catch (Exception ex) {
-        Console.WriteLine($"❌ Error creating B&W icon: {ex.Message}");
-        return originalIconPath;
-    }
-}
+                string directory = Path.GetDirectoryName(originalIconPath);
+                string filenameWithoutExtension = Path.GetFileNameWithoutExtension(originalIconPath);
 
-// Option 2: Add bottom border to PNG icon
-public static async Task<string> CreateIconWithBottomBorderAsync(string originalIconPath, System.Drawing.Color borderColor = default, int borderHeight = 10) {
-    try {
-        if (string.IsNullOrEmpty(originalIconPath) || !File.Exists(originalIconPath)) {
-            Console.WriteLine("Invalid path or file doesn't exist");
-            return originalIconPath;
-        }
+                Console.WriteLine($"Adding bottom border to PNG: {originalIconPath}");
+                Console.WriteLine($"Border color: {borderColor}, Height: {borderHeight}px");
 
-        // Default to white border if no color specified
-        if (borderColor == default) {
-            borderColor = System.Drawing.Color.White;
-        }
+                // Load the PNG directly
+                System.Drawing.Bitmap originalBitmap;
+                try {
+                    originalBitmap = new System.Drawing.Bitmap(originalIconPath);
+                    Console.WriteLine($"✅ PNG loaded: {originalBitmap.Width}x{originalBitmap.Height}");
+                }
+                catch (Exception ex) {
+                    Console.WriteLine($"❌ Failed to load PNG: {ex.Message}");
+                    return originalIconPath;
+                }
 
-        string directory = Path.GetDirectoryName(originalIconPath);
-        string filenameWithoutExtension = Path.GetFileNameWithoutExtension(originalIconPath);
+                // Create new bitmap with extra height for bottom border
+                int newWidth = originalBitmap.Width;
+                int newHeight = originalBitmap.Height + borderHeight;
 
-        Console.WriteLine($"Adding bottom border to PNG: {originalIconPath}");
-        Console.WriteLine($"Border color: {borderColor}, Height: {borderHeight}px");
+                string pngPath;
+                using (var newBitmap = new System.Drawing.Bitmap(newWidth, newHeight)) {
+                    using (var graphics = System.Drawing.Graphics.FromImage(newBitmap)) {
+                        // Set high quality rendering
+                        graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
 
-        // Load the PNG directly
-        System.Drawing.Bitmap originalBitmap;
-        try {
-            originalBitmap = new System.Drawing.Bitmap(originalIconPath);
-            Console.WriteLine($"✅ PNG loaded: {originalBitmap.Width}x{originalBitmap.Height}");
-        }
-        catch (Exception ex) {
-            Console.WriteLine($"❌ Failed to load PNG: {ex.Message}");
-            return originalIconPath;
-        }
+                        // Fill entire image with transparent background first
+                        graphics.Clear(System.Drawing.Color.Transparent);
 
-        // Create new bitmap with extra height for bottom border
-        int newWidth = originalBitmap.Width;
-        int newHeight = originalBitmap.Height + borderHeight;
+                        // Draw the original PNG at the top
+                        graphics.DrawImage(originalBitmap, 0, 0, originalBitmap.Width, originalBitmap.Height);
+                        Console.WriteLine("✓ Original PNG drawn at top");
 
-        string pngPath;
-        using (var newBitmap = new System.Drawing.Bitmap(newWidth, newHeight)) {
-            using (var graphics = System.Drawing.Graphics.FromImage(newBitmap)) {
-                // Set high quality rendering
-                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
+                        // Draw the bottom border
+                        using (var borderBrush = new System.Drawing.SolidBrush(borderColor)) {
+                            graphics.FillRectangle(borderBrush, 0, originalBitmap.Height, newWidth, borderHeight);
+                            Console.WriteLine($"✓ Bottom border added: {borderColor} ({borderHeight}px high)");
+                        }
+                    }
 
-                // Fill entire image with transparent background first
-                graphics.Clear(System.Drawing.Color.Transparent);
+                    // Save as PNG
+                    pngPath = Path.Combine(directory, $"{filenameWithoutExtension}_border.png");
+                    newBitmap.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                    Console.WriteLine($"✅ Border PNG saved to: {pngPath}");
+                }
 
-                // Draw the original PNG at the top
-                graphics.DrawImage(originalBitmap, 0, 0, originalBitmap.Width, originalBitmap.Height);
-                Console.WriteLine("✓ Original PNG drawn at top");
+                originalBitmap.Dispose();
 
-                // Draw the bottom border
-                using (var borderBrush = new System.Drawing.SolidBrush(borderColor)) {
-                    graphics.FillRectangle(borderBrush, 0, originalBitmap.Height, newWidth, borderHeight);
-                    Console.WriteLine($"✓ Bottom border added: {borderColor} ({borderHeight}px high)");
+                // Convert PNG to ICO using your existing method
+                string icoPath = Path.Combine(directory, $"{filenameWithoutExtension}_border.ico");
+                bool iconSuccess = await ConvertToIco(pngPath, icoPath);
+
+                if (iconSuccess) {
+                    Console.WriteLine($"✅ Border ICO created successfully: {icoPath}");
+                    return icoPath;
+                }
+                else {
+                    Console.WriteLine("⚠️  Failed to convert PNG to ICO, returning PNG path");
+                    return pngPath;
                 }
             }
-
-            // Save as PNG
-            pngPath = Path.Combine(directory, $"{filenameWithoutExtension}_border.png");
-            newBitmap.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
-            Console.WriteLine($"✅ Border PNG saved to: {pngPath}");
+            catch (Exception ex) {
+                Console.WriteLine($"❌ Error creating icon with border: {ex.Message}");
+                return originalIconPath;
+            }
         }
 
-        originalBitmap.Dispose();
-
-        // Convert PNG to ICO using your existing method
-        string icoPath = Path.Combine(directory, $"{filenameWithoutExtension}_border.ico");
-        bool iconSuccess = await ConvertToIco(pngPath, icoPath);
-
-        if (iconSuccess) {
-            Console.WriteLine($"✅ Border ICO created successfully: {icoPath}");
-            return icoPath;
-        }
-        else {
-            Console.WriteLine("⚠️  Failed to convert PNG to ICO, returning PNG path");
-            return pngPath;
-        }
-    }
-    catch (Exception ex) {
-        Console.WriteLine($"❌ Error creating icon with border: {ex.Message}");
-        return originalIconPath;
-    }
-}
-
-// Usage examples:
-// 
-// Option 1 - Convert PNG to black and white:
-// string bwIconPath = await CreateBlackWhiteIconAsync("C:\\path\\to\\icon.png");
-//
-// Option 2 - Add white bottom border (10px default):
-// string borderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png");
-//
-// Option 2 - Add red bottom border (20px):
-// string redBorderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png", System.Drawing.Color.Red, 20);
-//
-// Option 2 - Add black bottom border (15px):
-// string blackBorderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png", System.Drawing.Color.Black, 15);
+        // Usage examples:
+        // 
+        // Option 1 - Convert PNG to black and white:
+        // string bwIconPath = await CreateBlackWhiteIconAsync("C:\\path\\to\\icon.png");
+        //
+        // Option 2 - Add white bottom border (10px default):
+        // string borderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png");
+        //
+        // Option 2 - Add red bottom border (20px):
+        // string redBorderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png", System.Drawing.Color.Red, 20);
+        //
+        // Option 2 - Add black bottom border (15px):
+        // string blackBorderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png", System.Drawing.Color.Black, 15);
         private static async Task<Bitmap> ExtractWindowsAppIconAsync(string shortcutPath, string outputDirectory) {
             try {
                 // Get the shortcut target using Shell COM objects
@@ -491,7 +488,7 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                         }
                         else {
                             iconBitmap = ExtractIconWithoutArrow(filePath);
-                           
+
                         }
                         if (iconBitmap == null) {
                             Debug.WriteLine($"No icon found for file: {filePath}");
@@ -499,21 +496,21 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                         }
 
                         //using (Bitmap resizedIcon = ResizeAndCropImageToSquare(iconBitmap, 200)) {
-                            Directory.CreateDirectory(outputDirectory);
-                            string iconFileName = GenerateUniqueIconFileName(filePath, iconBitmap);
-                            string iconFilePath = Path.Combine(outputDirectory, iconFileName);
+                        Directory.CreateDirectory(outputDirectory);
+                        string iconFileName = GenerateUniqueIconFileName(filePath, iconBitmap);
+                        string iconFilePath = Path.Combine(outputDirectory, iconFileName);
 
-                            if (File.Exists(iconFilePath)) {
-                                return iconFilePath;
-                            }
-
-                            using (var stream = new FileStream(iconFilePath, FileMode.Create)) {
-                                cancellationTokenSource.Token.ThrowIfCancellationRequested();
-                            iconBitmap.Save(stream, ImageFormat.Png);
-                            }
-
-                            Debug.WriteLine($"Icon saved to: {iconFilePath}");
+                        if (File.Exists(iconFilePath)) {
                             return iconFilePath;
+                        }
+
+                        using (var stream = new FileStream(iconFilePath, FileMode.Create)) {
+                            cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                            iconBitmap.Save(stream, ImageFormat.Png);
+                        }
+
+                        Debug.WriteLine($"Icon saved to: {iconFilePath}");
+                        return iconFilePath;
                         //}
                     }
                     catch (OperationCanceledException) {
@@ -528,8 +525,42 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
             }
         }
 
+        public static Bitmap ExtractJumboIcon(string filePath) {
+            try {
+                var shfi = new NativeMethods.SHFILEINFO();
+                var result = NativeMethods.SHGetFileInfo(
+                    filePath, 0, ref shfi,
+                    (uint)Marshal.SizeOf(shfi),
+                    NativeMethods.SHGFI_SYSICONINDEX  // index only, no icon handle
+                );
 
+                if (result == IntPtr.Zero) return null;
 
+                Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+                NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
+
+                if (imageList == null) return null;
+
+                IntPtr hIcon = IntPtr.Zero;
+                imageList.GetIcon(shfi.iIcon, 1, ref hIcon); // 1 = ILD_TRANSPARENT
+
+                if (hIcon == IntPtr.Zero) return null;
+
+                using (var icon = Icon.FromHandle(hIcon)) {
+                    var bmp = new Bitmap(256, 256);
+                    using (var g = Graphics.FromImage(bmp)) {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.DrawIcon(icon, new Rectangle(0, 0, 256, 256));
+                    }
+                    NativeMethods.DestroyIcon(hIcon);
+                    return bmp;
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"ExtractJumboIcon failed: {ex.Message}");
+                return null;
+            }
+        }
 
 
         private static string GenerateUniqueIconFileName(string filePath, Bitmap iconBitmap) {
@@ -665,21 +696,23 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
 
         private static Bitmap ExtractIconWithoutArrow(string targetPath) {
             try {
-                IntPtr[] hIcons = new IntPtr[1];
-                uint iconCount = NativeMethods.ExtractIconEx(targetPath, 0, hIcons, null, 1);
+                var jumbo = ExtractJumboIcon(targetPath);
+                if (jumbo != null) return jumbo;
 
-                if (iconCount > 0 && hIcons[0] != IntPtr.Zero) {
+                // fallback
+                IntPtr[] hIcons = new IntPtr[1];
+                uint count = NativeMethods.ExtractIconEx(targetPath, 0, hIcons, null, 1);
+                if (count > 0 && hIcons[0] != IntPtr.Zero) {
                     using (var icon = Icon.FromHandle(hIcons[0])) {
-                        var bitmap = new Bitmap(icon.ToBitmap());
+                        var bmp = new Bitmap(icon.ToBitmap());
                         NativeMethods.DestroyIcon(hIcons[0]);
-                        return bitmap;
+                        return bmp;
                     }
                 }
-
                 return Icon.ExtractAssociatedIcon(targetPath)?.ToBitmap();
             }
             catch (Exception ex) {
-                Debug.WriteLine($"Error extracting icon without arrow: {ex.Message}");
+                Debug.WriteLine($"ExtractIconWithoutArrow failed: {ex.Message}");
                 return null;
             }
         }
@@ -812,11 +845,18 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                         List<byte[]> imageDataList = new List<byte[]>();
 
                         foreach (Size size in sizes) {
-                            using (Bitmap bitmap = new Bitmap(originalImage, size)) {
-                                using (MemoryStream ms = new MemoryStream()) {
-                                    bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                                    byte[] imageData = ms.ToArray();
-                                    imageDataList.Add(imageData);
+                            using (var bmp = new Bitmap(size.Width, size.Height)) {
+                                using (var g = Graphics.FromImage(bmp)) {
+                                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                                    g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                                    g.Clear(System.Drawing.Color.Transparent);
+                                    g.DrawImage(originalImage, new Rectangle(0, 0, size.Width, size.Height));
+                                }
+                                using (var ms = new MemoryStream()) {
+                                    bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                                    imageDataList.Add(ms.ToArray());
                                 }
                             }
                         }
@@ -1142,11 +1182,7 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                 throw;
             }
         }
-        public async Task<string> CreateGridIconAsync(
-    List<ExeFileModel> selectedItems,
-    int selectedSize,
-    Image iconPreviewImage,
-    Border iconPreviewBorder) {
+        public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
             try {
                 if (selectedItems == null || selectedSize <= 0) {
                     throw new ArgumentException("Invalid selected items or grid size.");
@@ -1170,20 +1206,19 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                 using (var bitmap = new System.Drawing.Bitmap(finalSize, finalSize)) {
                     using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) {
                         graphics.Clear(System.Drawing.Color.Transparent);
+                        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                        graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+
                         for (int i = 0; i < selectedItems.Count; i++) {
                             var item = selectedItems[i];
                             string iconPath = !string.IsNullOrEmpty(item.IconPath) ? item.IconPath : item.Icon;
+                            string filePath = item.FilePath;
 
                             int x, y;
                             if (selectedItems.Count == 2) {
-                                if (i == 0) {
-                                    x = 0;
-                                    y = cellSize;
-                                }
-                                else {
-                                    x = cellSize;
-                                    y = 0;
-                                }
+                                if (i == 0) { x = 0; y = cellSize; }
+                                else { x = cellSize; y = 0; }
                             }
                             else {
                                 int row = i / gridSize;
@@ -1193,39 +1228,37 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                             }
 
                             System.Drawing.Bitmap iconBitmap = null;
-                            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
-                                // Use the custom icon path if available
+
+                            // 1. Always try jumbo first from actual file (native 256x256)
+                            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+                                iconBitmap = ExtractJumboIcon(filePath);
+                            }
+
+                            // 2. Fallback: custom icon path
+                            if (iconBitmap == null && !string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
                                 iconBitmap = new System.Drawing.Bitmap(iconPath);
                             }
-                            else {
-                                // Fallback: Extract icon from the file path
-                                string filePath = item.FilePath;
-                                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
-                                    Debug.WriteLine($"File not found: {filePath}");
-                                    continue;
-                                }
 
+                            // 3. Fallback: .lnk / standard extraction
+                            if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                 if (Path.GetExtension(filePath).ToLower() == ".lnk") {
                                     iconBitmap = await ExtractWindowsAppIconAsync(filePath, tempFolder);
-                                    dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
-                                    dynamic shortcut = shell.CreateShortcut(filePath);
-                                    string shortcutIconPath = shortcut.IconLocation;
-                                    string targetPath = shortcut.TargetPath;
-                                    if (!string.IsNullOrEmpty(shortcutIconPath) && shortcutIconPath != ",") {
-                                        string[] iconInfo = shortcutIconPath.Split(',');
-                                        string actualIconPath = iconInfo[0].Trim();
-                                        int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
-                                        if (File.Exists(actualIconPath)) {
-                                            iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
-                                        }
-                                    }
-                                    if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
-                                        iconBitmap = ExtractIconWithoutArrow(targetPath);
-                                    }
-                                    // Use the Icon with arrow as fallback
                                     if (iconBitmap == null) {
-                                        Icon icon = Icon.ExtractAssociatedIcon(filePath);
-                                        iconBitmap = icon.ToBitmap();
+                                        dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
+                                        dynamic shortcut = shell.CreateShortcut(filePath);
+                                        string shortcutIconPath = shortcut.IconLocation;
+                                        string targetPath = shortcut.TargetPath;
+                                        if (!string.IsNullOrEmpty(shortcutIconPath) && shortcutIconPath != ",") {
+                                            string[] iconInfo = shortcutIconPath.Split(',');
+                                            string actualIconPath = iconInfo[0].Trim();
+                                            int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                                            if (File.Exists(actualIconPath))
+                                                iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
+                                        }
+                                        if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath))
+                                            iconBitmap = ExtractIconWithoutArrow(targetPath);
+                                        if (iconBitmap == null)
+                                            iconBitmap = Icon.ExtractAssociatedIcon(filePath)?.ToBitmap();
                                     }
                                 }
                                 else {
@@ -1251,6 +1284,7 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                                 Debug.WriteLine($"Failed to get icon for file: {item.FilePath}");
                             }
                         }
+
                         bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
                     }
                 }
@@ -1269,8 +1303,6 @@ public static async Task<string> CreateIconWithBottomBorderAsync(string original
                 return null;
             }
         }
-
-
     }
 
 

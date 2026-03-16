@@ -69,6 +69,19 @@ namespace AppGroup {
         // Constants for SHAppBarMessage
         public const uint ABM_GETSTATE = 0x4;
         public const uint ABM_GETTASKBARPOS = 0x5;
+        public delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType,
+    IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax,
+            IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc,
+            uint idProcess, uint idThread, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+        public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+        public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
 
         // Constants for taskbar edge positions
         public const int ABE_LEFT = 0;
@@ -492,24 +505,21 @@ namespace AppGroup {
 
                 // Set position based on taskbar position
                 switch (taskbarPosition) {
-                     case TaskbarPosition.Top:
+                    case TaskbarPosition.Top:
                     case TaskbarPosition.Bottom:
-                        // Check if cursor is on the taskbar
                         if (IsCursorOnTaskbar(cursorPos, monitorInfo, taskbarPosition)) {
-                            // Position above/below taskbar
                             if (taskbarPosition == TaskbarPosition.Top)
-                                y = monitorInfo.rcWork.top  + spacing;
+                                y = monitorInfo.rcWork.top + spacing;
                             else
                                 y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         }
                         else {
-                            // Cursor is NOT on taskbar (desktop/explorer) - position near cursor
+                            // Always position above cursor
                             y = cursorPos.Y - windowHeight - spacing;
-                            // Clamp to work area
+
+                            // Only clamp if it goes off the top
                             if (y < monitorInfo.rcWork.top + spacing)
                                 y = monitorInfo.rcWork.top + spacing;
-                            if (y + windowHeight > monitorInfo.rcWork.bottom - spacing)
-                                y = monitorInfo.rcWork.bottom - windowHeight - spacing;
                         }
                         break;
                     case TaskbarPosition.Left:
@@ -721,25 +731,21 @@ namespace AppGroup {
                 Debug.WriteLine($"Error positioning window off-screen: {ex.Message}");
             }
         }
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+        public const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
 
 
         private static bool IsCursorOnTaskbar(POINT cursorPos, MONITORINFO monitorInfo, TaskbarPosition taskbarPosition) {
-            float dpiScale = GetDpiScaleForMonitor(MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST));
-            int taskbarThickness = (int)(52 * dpiScale); // Base taskbar height/width scaled
-
             switch (taskbarPosition) {
                 case TaskbarPosition.Top:
-                    return cursorPos.Y >= monitorInfo.rcMonitor.top &&
-                           cursorPos.Y <= monitorInfo.rcWork.top + taskbarThickness;
+                    return cursorPos.Y < monitorInfo.rcWork.top;
                 case TaskbarPosition.Bottom:
-                    return cursorPos.Y >= monitorInfo.rcWork.bottom - taskbarThickness &&
-                           cursorPos.Y <= monitorInfo.rcMonitor.bottom;
+                    return cursorPos.Y >= monitorInfo.rcWork.bottom;
                 case TaskbarPosition.Left:
-                    return cursorPos.X >= monitorInfo.rcMonitor.left &&
-                           cursorPos.X <= monitorInfo.rcWork.left + taskbarThickness;
+                    return cursorPos.X < monitorInfo.rcWork.left;
                 case TaskbarPosition.Right:
-                    return cursorPos.X >= monitorInfo.rcWork.right - taskbarThickness &&
-                           cursorPos.X <= monitorInfo.rcMonitor.right;
+                    return cursorPos.X >= monitorInfo.rcWork.right;
                 default:
                     return false;
             }
@@ -901,5 +907,36 @@ namespace AppGroup {
         public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
 
+
+        public const uint SHGFI_SYSICONINDEX = 0x4000;
+
+        [DllImport("shell32.dll", EntryPoint = "#727")]
+        public static extern int SHGetImageList(int iImageList, ref Guid riid, out IImageList ppv);
+
+        public const int SHIL_JUMBO = 0x4;
+
+        [ComImport]
+        [Guid("46EB5926-582E-4017-9FDF-E8998DAA0950")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IImageList {
+            [PreserveSig] int Add(IntPtr hbmImage, IntPtr hbmMask, ref int pi);
+            [PreserveSig] int ReplaceIcon(int i, IntPtr hicon, ref int pi);
+            [PreserveSig] int SetOverlayImage(int iImage, int iOverlay);
+            [PreserveSig] int Replace(int i, IntPtr hbmImage, IntPtr hbmMask);
+            [PreserveSig] int AddMasked(IntPtr hbmImage, int crMask, ref int pi);
+            [PreserveSig] int Draw(ref IMAGELISTDRAWPARAMS pimldp);
+            [PreserveSig] int Remove(int i);
+            [PreserveSig] int GetIcon(int i, int flags, ref IntPtr picon);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct IMAGELISTDRAWPARAMS {
+            public int cbSize;
+            public IntPtr himl;
+            public int i;
+            public IntPtr hdcDst;
+            public int x, y, cx, cy, xBitmap, yBitmap;
+            public int rgbBk, rgbFg, fStyle, dwRop, fState, Frame, crEffect;
+        }
     }
 }

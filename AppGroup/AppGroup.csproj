@@ -30,6 +30,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Remove="DialogWindow.xaml" />
 		<None Remove="EditGroupWindow.xaml" />
 		<None Remove="MainWindow.xaml" />
 		<None Remove="PopupWindow.xaml" />
@@ -143,6 +144,24 @@
 	</ItemGroup>
 	<ItemGroup>
 		<None Include="C:\Users\dvine\source\repos\AppGroup\AppGroup\.editorconfig" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Compile Update="Properties\Resources.Designer.cs">
+	    <DesignTime>True</DesignTime>
+	    <AutoGen>True</AutoGen>
+	    <DependentUpon>Resources.resx</DependentUpon>
+	  </Compile>
+	</ItemGroup>
+	<ItemGroup>
+	  <EmbeddedResource Update="Properties\Resources.resx">
+	    <Generator>ResXFileCodeGenerator</Generator>
+	    <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+	  </EmbeddedResource>
+	</ItemGroup>
+	<ItemGroup>
+	  <Page Update="DialogWindow.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
 	</ItemGroup>
 	<ItemGroup>
 		<Page Update="SettingsDialog.xaml">

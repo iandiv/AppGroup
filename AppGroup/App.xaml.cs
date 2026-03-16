@@ -393,8 +393,11 @@ namespace AppGroup {
                 m_window.InitializeComponent();
 
                 // Create PopupWindow (hidden)
+                int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
+                int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
+
                 popupWindow = new PopupWindow("Popup Window");
-                popupWindow.AppWindow.Resize(new SizeInt32(0,0));
+                popupWindow.AppWindow.Resize(new SizeInt32(screenWidth, screenHeight));
 
                 popupWindow.InitializeComponent();
 

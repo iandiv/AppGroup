@@ -264,36 +264,47 @@ namespace AppGroup
                 string filePath = GetDefaultConfigPath();
                 string jsonContent = await ReadJsonFromFileAsync(filePath);
                 JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
-
                 foreach (var group in jsonObject.AsObject()) {
                     if (group.Value["groupName"]?.GetValue<string>() == groupName) {
                         JsonObject paths = group.Value["path"]?.AsObject();
-
                         if (paths != null) {
                             var allTasks = new List<Task>();
-
                             foreach (var pathEntry in paths) {
                                 string path = pathEntry.Key;
-                                string args = pathEntry.Value?["args"]?.GetValue<string>() ?? string.Empty;
 
+                                // Skip sub-popup shortcuts
+                                if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                                    try {
+                                        IWshShell shell = new WshShell();
+                                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+                                        if (shortcut.Description.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase))
+                                            continue;
+                                    }
+                                    catch { }
+                                }
+
+                                string args = pathEntry.Value?["args"]?.GetValue<string>() ?? string.Empty;
                                 allTasks.Add(Task.Run(() =>
                                 {
+
+                                    // CMD wrapper
                                     try {
-                                        ProcessStartInfo startInfo = new ProcessStartInfo(path) {
-                                            Arguments = args,
-                                            UseShellExecute = true
+                                        ProcessStartInfo psi = new ProcessStartInfo {
+                                            FileName = "cmd.exe",
+                                            Arguments = $"/c start \"\" \"{path}\" {args}",
+                                            UseShellExecute = true,
+                                            WindowStyle = ProcessWindowStyle.Hidden
                                         };
-                                        Process.Start(startInfo);
+                                        Process process = Process.Start(psi);
+                                        process?.Close();
                                     }
                                     catch (Exception ex) {
-                                        Debug.WriteLine($"Error launching process: {ex.Message}");
+                                        Debug.WriteLine($"Failed to launch {path}: {ex.Message}");
                                     }
                                 }));
                             }
-
                             await Task.WhenAll(allTasks);
                         }
-
                         break;
                     }
                 }
@@ -302,7 +313,6 @@ namespace AppGroup
                 Debug.WriteLine($"Error launching all paths under group '{groupName}': {ex.Message}");
             }
         }
-
         private static void CopyDirectory(string sourceDir, string destinationDir, string originalGroupName, string newGroupName) {
             Directory.CreateDirectory(destinationDir);
 

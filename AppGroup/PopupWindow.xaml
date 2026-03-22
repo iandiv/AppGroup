@@ -12,15 +12,52 @@
         <winuiex:TransparentTintBackdrop />
         <!--<MicaBackdrop />-->
     </Window.SystemBackdrop>
-    
-    <Grid x:Name="MainGrid" >
+
+    <!--SINGEL TONE TOP HEADER (DEFAULT)--> 
+
+    <Grid x:Name="MainGrid"    >
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel  Grid.Row="0">
-            <Grid x:Name="Header" Margin="10,5,10,5" Visibility="Collapsed">
+
+
+        <ScrollViewer 
+                 Grid.Row="1" VerticalScrollMode="Auto" CornerRadius="0"  x:Name="ScrollView"  VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
+              VerticalScrollBarVisibility="Auto" >
+            <StackPanel x:Name="GridPanel" Width="Auto"  Height="Auto"   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+        </ScrollViewer>
+        <StackPanel  Grid.Row="0" >
+            <Grid x:Name="Header"  Visibility="Collapsed" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontSize="12" />
+                <Button x:Name="HeaderEditButton" Grid.Column="1" Padding="7" VerticalAlignment="Center" Click="EditGroup_Click" BorderThickness="0" Background="Transparent">
+                    <FontIcon Glyph="&#xe70f;" FontSize="13"/>
+                </Button>
+
+            </Grid>
+        </StackPanel>
+    </Grid>
+    <!--TWO TONE TOP HEADER-->
+    <!--<Grid x:Name="MainGrid"  Margin="0,0,0,-5"  >
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+
+
+        <ScrollView  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}"
+                     Grid.Row="1" VerticalScrollMode="Auto" CornerRadius="0"  x:Name="ScrollView"  VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="GridPanel" Width="Auto" Height="Auto" Margin="0,0,-5,-15"  VerticalAlignment="Center" HorizontalAlignment="Center"/>
+        </ScrollView>
+        <StackPanel  Grid.Row="0" >
+            <Grid x:Name="Header" Margin="10,5,5,5" Padding="0" Visibility="Collapsed" >
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -32,10 +69,78 @@
 
             </Grid>
         </StackPanel>
+    </Grid>-->
+    <!--TWO TONE BOTTOM HEADER-->
+    <!--<Grid x:Name="MainGrid"   >
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
 
-        <ScrollView Grid.Row="1" VerticalScrollMode="Auto" x:Name="ScrollView"  VerticalAlignment="Center" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
+            <RowDefinition Height="Auto"/>
+
+
+
+        </Grid.RowDefinitions>
+
+
+
+        <ScrollViewer x:Name="ScrollView" 
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+              Background="{ThemeResource CardBackgroundFillColorDefault}"
+              Grid.Row="0"
+              VerticalScrollMode="Auto"
+              CornerRadius="0"
+              VerticalAlignment="Stretch"
+              HorizontalAlignment="Stretch"
+              HorizontalScrollMode="Disabled"
+              VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="GridPanel" Width="Auto" Height="Auto" Margin="0,0,-5,-15"
+                VerticalAlignment="Center" HorizontalAlignment="Center"/>
+        </ScrollViewer>
+        <StackPanel  Grid.Row="1" >
+            <Grid x:Name="Header" Margin="10,0,5,5" Padding="0" Visibility="Collapsed" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <Button Grid.Column="1" Padding="7" VerticalAlignment="Center" Click="EditGroup_Click" BorderThickness="0" Background="Transparent">
+                    <FontIcon Glyph="&#xe70f;" FontSize="13"/>
+                </Button>
+
+            </Grid>
+        </StackPanel>
+    </Grid>-->
+    
+    <!--SINGLE TONE BOTTOM HEADER-->
+    <!--<Grid x:Name="MainGrid"  >
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+
+            <RowDefinition Height="Auto"/>
+
+
+
+        </Grid.RowDefinitions>
+
+
+
+        <ScrollView 
+                     Grid.Row="0" VerticalScrollMode="Auto" CornerRadius="0"  x:Name="ScrollView"  VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
                     VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="GridPanel" Width="Auto" HorizontalAlignment="Center"/>
+            <StackPanel x:Name="GridPanel" Width="Auto" Height="Auto"  Margin="0,0,-5,-20"  VerticalAlignment="Center" HorizontalAlignment="Center"/>
         </ScrollView>
-    </Grid>
+        <StackPanel  Grid.Row="1" >
+            <Grid x:Name="Header" Margin="10,0,5,5"  Padding="0" Visibility="Collapsed" >
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="HeaderText" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <Button Grid.Column="1" Padding="7" VerticalAlignment="Center" Click="EditGroup_Click" BorderThickness="0" Background="Transparent">
+                    <FontIcon Glyph="&#xe70f;" FontSize="13"/>
+                </Button>
+
+            </Grid>
+        </StackPanel>
+    </Grid>-->
 </Window>

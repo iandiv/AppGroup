@@ -112,7 +112,7 @@ namespace AppGroup
 
             return Path.Combine(appDataPath, fileName);
         }
-        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, bool showLabels, int labelSize, string labelPosition, Dictionary<string, (string tooltip, string args, string icon)> paths) {
+        public static void AddGroupToJson(string filePath, int groupId, string groupName, bool groupHeader, string groupIcon, int groupCol, bool showLabels, int labelSize, string labelPosition, string headerPosition, string layout, Dictionary<string, (string tooltip, string args, string icon)> paths) {
             try {
                 string directory = Path.GetDirectoryName(filePath);
                 if (!Directory.Exists(directory)) {
@@ -125,16 +125,14 @@ namespace AppGroup
                 JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
                 JsonObject jsonPaths = new JsonObject();
                 foreach (var path in paths) {
-                    JsonObject pathDetails = new JsonObject
-                    {
+                    JsonObject pathDetails = new JsonObject {
                 { "tooltip", path.Value.tooltip },
                 { "args", path.Value.args },
                 { "icon", path.Value.icon }
             };
                     jsonPaths[path.Key] = pathDetails;
                 }
-                JsonObject newGroup = new JsonObject
-                {
+                JsonObject newGroup = new JsonObject {
             { "groupName", groupName },
             { "groupHeader", groupHeader },
             { "groupCol", groupCol },
@@ -142,6 +140,8 @@ namespace AppGroup
             { "showLabels", showLabels },
             { "labelSize", labelSize },
             { "labelPosition", labelPosition },
+            { "headerPosition", headerPosition },
+            { "layout", layout },
             { "path", jsonPaths }
         };
                 jsonObject[groupId.ToString()] = newGroup;
@@ -151,8 +151,6 @@ namespace AppGroup
                 throw new Exception($"Error adding group to JSON file: {ex.Message}", ex);
             }
         }
-
-
         public static void DeleteGroupFromJson(string filePath, int groupId) {
             try {
                 string jsonContent = ReadJsonFromFile(filePath);

@@ -1,34 +1,23 @@
-
-using Microsoft.UI;
-using Microsoft.UI.Composition.SystemBackdrops;
-using Microsoft.UI.Dispatching;
+﻿using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Graphics;
-using Windows.Graphics.Imaging;
 using Windows.Storage;
-using Windows.Storage.FileProperties;
-using Windows.Storage.Streams;
 using WinRT.Interop;
 using WinUIEx;
 
@@ -109,9 +98,14 @@ namespace AppGroup {
         private readonly IconHelper _iconHelper;
         private DispatcherTimer debounceTimer;
         private SupportDialogHelper _supportDialogHelper;
+        private IntPtr _hwnd;
+        private NativeMethods.SubclassProc _subclassProc;
+        private const int SUBCLASS_ID = 2;
+        private bool _wasHidden = false;
         public MainWindow() {
             InitializeComponent();
-
+            _hwnd = WindowNative.GetWindowHandle(this);
+            SubclassWindow();
             _backupHelper = new BackupHelper(this);
 
             GroupItems = new ObservableCollection<GroupItem>();
@@ -138,14 +132,114 @@ namespace AppGroup {
             _supportDialogHelper = new SupportDialogHelper(this);
             NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.Main");
             // Load on activation
-            //this.Activated += Window_Activated;
+            this.Activated += Window_Activated;
             this.AppWindow.Closing += AppWindow_Closing;
             SetWindowIcon();
 
             // Check for updates on startup if enabled
             _ = CheckForUpdatesOnStartupAsync();
+
+
+        }
+        private void PlayContentScaleUp() {
+            var content = this.Content as FrameworkElement;
+            if (content == null) return;
+
+            content.Opacity = 0;
+
+            // Set transform origin to center
+            content.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+            content.RenderTransform = new Microsoft.UI.Xaml.Media.ScaleTransform {
+                ScaleX = 0.95,
+                ScaleY = 0.95
+            };
+
+            var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+
+            // Fade in
+            var fadeAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0,
+                To = 1,
+                Duration = new Duration(TimeSpan.FromMilliseconds(100)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnim, content);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnim, "Opacity");
+
+            // Scale X
+            var scaleXAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0.95,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(scaleXAnim, content.RenderTransform);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(scaleXAnim, "ScaleX");
+
+            // Scale Y
+            var scaleYAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0.95,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(scaleYAnim, content.RenderTransform);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(scaleYAnim, "ScaleY");
+
+            sb.Children.Add(fadeAnim);
+            sb.Children.Add(scaleXAnim);
+            sb.Children.Add(scaleYAnim);
+            sb.Begin();
         }
 
+        private void Window_Activated(object sender, WindowActivatedEventArgs e) {
+
+
+            if (e.WindowActivationState == WindowActivationState.CodeActivated) {
+                if (_wasHidden) {
+                    PlayContentScaleUp();
+                    _wasHidden = false; // ← reset after animation
+                }
+            }
+        }
+        private void SubclassWindow() {
+            _subclassProc = new NativeMethods.SubclassProc(SubclassProc);
+            NativeMethods.SetWindowSubclass(_hwnd, _subclassProc, SUBCLASS_ID, IntPtr.Zero);
+        }
+
+        private IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData) {
+            if (msg == NativeMethods.WM_COPYDATA) {
+                try {
+                    NativeMethods.COPYDATASTRUCT cds = (NativeMethods.COPYDATASTRUCT)Marshal.PtrToStructure(
+                        lParam, typeof(NativeMethods.COPYDATASTRUCT));
+
+                    if (cds.dwData == (IntPtr)100) {
+                        string command = Marshal.PtrToStringUni(cds.lpData);
+
+                        if (command == "__SHOW_MAIN__") {
+                            DispatcherQueue.TryEnqueue(() => {
+
+                                NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_RESTORE);
+                                NativeMethods.SetForegroundWindow(_hwnd);
+                                this.AppWindow.IsShownInSwitchers = true;
+
+                            });
+                            return (IntPtr)1;
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"MainWindow SubclassProc error: {ex.Message}");
+                }
+            }
+            return NativeMethods.DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
         private async Task CheckForUpdatesOnStartupAsync() {
             try {
                 // Wait for window to be fully loaded and settings to be available
@@ -219,22 +313,52 @@ namespace AppGroup {
                 System.Diagnostics.Debug.WriteLine($"Failed to set window icon: {ex.Message}");
             }
         }
-
-        private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args) {
+        private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args) {
             args.Cancel = true;
             try {
                 var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(this.Content.XamlRoot);
                 foreach (var popup in popups) {
-                    if (popup.Child is ContentDialog dialog) {
-                        dialog.Hide();
-                    }
+                    if (popup.Child is ContentDialog dialog) dialog.Hide();
                 }
             }
-            catch {
-                // Fallback - some dialogs might not be in popups
-            }
-            this.Hide();        // Just hide the window
+            catch { }
+            // Save cursor position
+            NativeMethods.GetCursorPos(out NativeMethods.POINT cursorPos);
+
+            // Move to far right off-screen to clear hover state
+            int screenWidth = NativeMethods.GetSystemMetrics(0); // SM_CXSCREEN
+            NativeMethods.SetCursorPos(screenWidth - 1, cursorPos.Y);
+
+            this.Hide();
+            _wasHidden = true;
+            await Task.Delay(10);
+
+            // Restore cursor position
+            NativeMethods.SetCursorPos(cursorPos.X, cursorPos.Y);
+
+            //await Task.Delay(100);
+
+
+            //NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_MINIMIZE);
+            this.AppWindow.IsShownInSwitchers = false;
+
+
         }
+        //private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args) {
+        //    args.Cancel = true;
+        //    try {
+        //        var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(this.Content.XamlRoot);
+        //        foreach (var popup in popups) {
+        //            if (popup.Child is ContentDialog dialog) {
+        //                dialog.Hide();
+        //            }
+        //        }
+        //    }
+        //    catch {
+        //        // Fallback - some dialogs might not be in popups
+        //    }
+        //    this.Hide();        // Just hide the window
+        //}
         private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e) {
             debounceTimer.Stop();
             debounceTimer.Start();
@@ -542,12 +666,10 @@ namespace AppGroup {
                 NotifyFilter = NotifyFilters.LastWrite
             };
 
-            _fileWatcher.Changed += (s, e) =>
-            {
+            _fileWatcher.Changed += (s, e) => {
                 // Skip file watcher updates during reordering to prevent conflicts
                 if (!_isReordering) {
-                    DispatcherQueue.TryEnqueue(async () =>
-                    {
+                    DispatcherQueue.TryEnqueue(async () => {
                         if (!IsFileInUse(jsonFilePath)) {
                             await UpdateGroupItemAsync(jsonFilePath);
                         }
@@ -587,7 +709,7 @@ namespace AppGroup {
         private readonly SemaphoreSlim _loadingSemaphore = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _loadCancellationSource = new CancellationTokenSource();
 
-      
+
 
 
         private async Task<List<GroupItem>> ProcessGroupsInParallelAsync(
@@ -660,8 +782,7 @@ namespace AppGroup {
                 using var cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_loadCancellationSource.Token);
                 cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(5));
 
-                DispatcherQueue.TryEnqueue(() =>
-                {
+                DispatcherQueue.TryEnqueue(() => {
                     GroupItems.Clear();
                 });
 
@@ -679,8 +800,7 @@ namespace AppGroup {
                 var updatedGroupItems = await processingStrategy
                     .ConfigureAwait(false);
 
-                DispatcherQueue.TryEnqueue(async () =>
-                {
+                DispatcherQueue.TryEnqueue(async () => {
                     GroupItems.Clear();
                     foreach (var item in updatedGroupItems) {
                         // Check if the item already exists in GroupItems
@@ -693,7 +813,7 @@ namespace AppGroup {
                                 EmptyView.Visibility = Visibility.Collapsed;
                             }
                         }
-                       
+
 
                     }
                     GroupsCount.Text = GroupListView.Items.Count > 1
@@ -701,7 +821,7 @@ namespace AppGroup {
                         : GroupListView.Items.Count == 1
                             ? "1 Group"
                             : "";
-                   
+
 
                 });
             }
@@ -808,8 +928,8 @@ namespace AppGroup {
             return null;
         }
 
-      
-        
+
+
         private async void ExportBackupButton_Click(object sender, RoutedEventArgs e) {
             await _backupHelper.ExportBackupAsync();
         }
@@ -820,7 +940,7 @@ namespace AppGroup {
 
         private void ForceTaskbarUpdate_Click(object sender, RoutedEventArgs e) {
 
-             TaskbarManager.ForceTaskbarUpdateAsync();
+            TaskbarManager.ForceTaskbarUpdateAsync();
 
         }
 
@@ -931,7 +1051,7 @@ namespace AppGroup {
         }
 
 
-      
+
 
         private void GroupListView_SelectionChanged(object sender, SelectionChangedEventArgs e) {
             if (GroupListView.SelectedItem is GroupItem selectedGroup) {

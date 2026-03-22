@@ -1,4 +1,10 @@
-﻿using System;
+﻿using IWshRuntimeLibrary;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -7,22 +13,12 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using Microsoft.UI;
-using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 using WinUIEx;
-using IWshRuntimeLibrary;
-using Windows.ApplicationModel.DataTransfer;
 using File = System.IO.File;
-using System.Text.RegularExpressions;
-using WinUIEx.Messaging;
-using System.Drawing;
-using Microsoft.UI.Xaml.Media;
 
 namespace AppGroup {
     public class ExeFileModel {
@@ -60,11 +56,16 @@ namespace AppGroup {
 
         private const int DEFAULT_LABEL_SIZE = 12;
         private const string DEFAULT_LABEL_POSITION = "Bottom";
-
+        private IntPtr _hwnd;
+        private NativeMethods.SubclassProc _subclassProc;
+        private const int SUBCLASS_ID = 3;
+        private bool _isFirstActivation = true;
+        private bool _wasHidden = true;
         public EditGroupWindow(int groupId) {
-   
-            this.InitializeComponent();
 
+            this.InitializeComponent();
+            _hwnd = WindowNative.GetWindowHandle(this);
+            SubclassWindow();
             GroupId = groupId;
 
             this.CenterOnScreen();
@@ -78,31 +79,15 @@ namespace AppGroup {
                 Directory.CreateDirectory(appDataPath);
             }
 
-            //groupIdFilePath = Path.Combine(appDataPath, "gid");
-
-            //if (!File.Exists(groupIdFilePath)) {
-            //    File.WriteAllText(groupIdFilePath, groupId.ToString());
-            //}
-            //else {
-            //    string existingGroupIdText = File.ReadAllText(groupIdFilePath);
-            //    if (int.TryParse(existingGroupIdText, out int existingGroupId)) {
-            //        GroupId = existingGroupId;
-            //    }
-            //}
-
-            //fileWatcher = new FileSystemWatcher(Path.GetDirectoryName(groupIdFilePath));
-            //fileWatcher.Filter = Path.GetFileName(groupIdFilePath);
-            //fileWatcher.Changed += OnGroupIdFileChanged;
-            //fileWatcher.EnableRaisingEvents = true;
-
+            
 
             ExeListView.ItemsSource = ExeFiles;
 
             MinHeight = 600;
             MinWidth = 530;
             ExtendsContentIntoTitleBar = true;
-           
-           
+
+
             ThemeHelper.UpdateTitleBarColors(this);
             _ = LoadGroupDataAsync(GroupId);
             Closed += MainWindow_Closed;
@@ -111,47 +96,182 @@ namespace AppGroup {
             ApplicationCount.Text = "Item";
             NativeMethods.SetCurrentProcessExplicitAppUserModelID("AppGroup.EditGroup");
             Activated += EditGroupWindow_Activated;
-            //this.AppWindow.Changed += AppWindow_Changed;
 
             this.SizeChanged += EditGroupWindow_SizeChanged;
         }
 
+        private void SubclassWindow() {
+            _subclassProc = new NativeMethods.SubclassProc(SubclassProc);
+            NativeMethods.SetWindowSubclass(_hwnd, _subclassProc, SUBCLASS_ID, IntPtr.Zero);
+        }
 
+        private IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData) {
+            if (msg == NativeMethods.WM_COPYDATA) {
+                try {
+                    NativeMethods.COPYDATASTRUCT cds = (NativeMethods.COPYDATASTRUCT)Marshal.PtrToStructure(
+                        lParam, typeof(NativeMethods.COPYDATASTRUCT));
+
+                    if (cds.dwData == (IntPtr)100) {
+                        string command = Marshal.PtrToStringUni(cds.lpData);
+
+                        if (command.StartsWith("__SHOW_EDIT__|")) {
+                            string[] parts = command.Split('|');
+                            if (parts.Length == 2 && int.TryParse(parts[1], out int newGroupId)) {
+                                DispatcherQueue.TryEnqueue(async () => {
+                                    GroupId = newGroupId;
+
+
+
+                                    NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_RESTORE);
+                                    NativeMethods.SetForegroundWindow(_hwnd);
+                                    this.AppWindow.IsShownInSwitchers = true;
+                                    await LoadGroupDataAsync(-1);
+
+                                    await Task.Delay(50);
+                                    await LoadGroupDataAsync(newGroupId);
+                                });
+                            }
+                            return (IntPtr)1;
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"EditGroupWindow SubclassProc error: {ex.Message}");
+                }
+            }
+            return NativeMethods.DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
         private async void EditGroupWindow_SizeChanged(object sender, WindowSizeChangedEventArgs args) {
 
             await HideAllDialogsAsync();
-            //if (EditItemDialog.Visibility == Visibility.Visible && !_isDialogRepositioning) {
-            //    _isDialogRepositioning = true;
-            //    System.Diagnostics.Debug.WriteLine("Dialog was visible, hiding and reshowing...");
-
-            //    try {
-            //        EditItemDialog.Hide();
-            //        EditItemDialog.XamlRoot = this.Content.XamlRoot;
-            //        //await Task.Delay(100);
-            //        //_= EditItemDialog.ShowAsync();
-            //    }
-            //    finally {
-            //        _isDialogRepositioning = false;
-            //    }
-            //}
+           
         }
 
+        private int GetRefreshIntervalMs(IntPtr hWnd) {
+            try {
+                IntPtr monitor = NativeMethods.MonitorFromWindow(hWnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX();
+                monitorInfo.cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFOEX));
+                NativeMethods.GetMonitorInfo(monitor, ref monitorInfo);
+
+                NativeMethods.DEVMODE devMode = new NativeMethods.DEVMODE();
+                devMode.dmSize = (short)Marshal.SizeOf(typeof(NativeMethods.DEVMODE));
+                if (NativeMethods.EnumDisplaySettings(monitorInfo.szDevice, -1, ref devMode)) {
+                    int refreshRate = (int)devMode.dmDisplayFrequency;
+                    if (refreshRate > 0) return 1000 / refreshRate;
+                }
+            }
+            catch { }
+            return 16; // fallback 60hz
+        }
+
+
+        private void PlayWindowFadeIn() {
+            IntPtr hWnd = _hwnd;
+
+            // Make window layered to support opacity
+            int exStyle = NativeMethods.GetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE);
+            NativeMethods.SetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE,
+                exStyle | NativeMethods.WS_EX_LAYERED);
+
+            int intervalMs = GetRefreshIntervalMs(hWnd);
+            int durationMs = 200;
+            int steps = durationMs / intervalMs;
+            int currentStep = 0;
+
+            var timer = new System.Threading.Timer(_ => {
+                currentStep++;
+                double t = (double)currentStep / steps;
+                double ease = 1 - Math.Pow(2, -10 * t);
+                byte alpha = (byte)(ease * 255);
+
+                NativeMethods.SetLayeredWindowAttributes(hWnd, 0, alpha, NativeMethods.LWA_ALPHA);
+
+                if (currentStep >= steps) {
+                    NativeMethods.SetLayeredWindowAttributes(hWnd, 0, 255, NativeMethods.LWA_ALPHA);
+                    // Remove layered flag after animation
+                    NativeMethods.SetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE, exStyle);
+                }
+            }, null, intervalMs, intervalMs);
+
+            Task.Delay(durationMs + intervalMs * 2).ContinueWith(_ => timer.Dispose());
+        }
+
+        private void PlayContentScaleUp() {
+            var content = this.Content as FrameworkElement;
+            if (content == null) return;
+
+            content.Opacity = 0;
+
+            // Set transform origin to center
+            content.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+            content.RenderTransform = new Microsoft.UI.Xaml.Media.ScaleTransform {
+                ScaleX = 0.95,
+                ScaleY = 0.95
+            };
+
+            var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+
+            // Fade in
+            var fadeAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0,
+                To = 1,
+                Duration = new Duration(TimeSpan.FromMilliseconds(100)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnim, content);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnim, "Opacity");
+
+            // Scale X
+            var scaleXAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0.95,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(scaleXAnim, content.RenderTransform);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(scaleXAnim, "ScaleX");
+
+            // Scale Y
+            var scaleYAnim = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation {
+                From = 0.95,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(scaleYAnim, content.RenderTransform);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(scaleYAnim, "ScaleY");
+
+            sb.Children.Add(fadeAnim);
+            sb.Children.Add(scaleXAnim);
+            sb.Children.Add(scaleYAnim);
+            sb.Begin();
+        }
         private async void EditGroupWindow_Activated(object sender, WindowActivatedEventArgs e) {
 
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
-               
+
                 _ = Task.Run(() => {
                     GC.Collect(0, GCCollectionMode.Optimized);
                 });
-                //NativeMethods.EmptyWorkingSet(Process.GetCurrentProcess().Handle);
             }
 
             if (e.WindowActivationState == WindowActivationState.CodeActivated) {
-                // Store the current GroupId to compare against
+
+                if (_wasHidden) {
+                    PlayContentScaleUp();
+                    _wasHidden = false; // ← reset after animation
+                }
+               
                 int previousGroupId = GroupId;
                 int newGroupId = -1; // Default value
                 ExpanderLabel.IsExpanded = false;
-                // Read group filter from file each time window is activated
 
                 try {
                     string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -182,61 +302,30 @@ namespace AppGroup {
             }
         }
 
-        private async void ShowActivationDialog(string id) {
-            try {
-                var dialog = new ContentDialog() {
-                    Title = "Window Activated",
-                    Content = "The group id is " +id,
-                    CloseButtonText = "OK",
-                    XamlRoot = this.Content.XamlRoot // Assuming 'this' is your MainWindow
-                };
-
-                await dialog.ShowAsync();
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"Error showing dialog: {ex.Message}");
-            }
-        }
-
-        private async void OnGroupIdFileChanged(object sender, FileSystemEventArgs e) {
-            try {
-                if (File.Exists(groupIdFilePath)) {
-                    using (FileStream stream = new FileStream(groupIdFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    using (StreamReader reader = new StreamReader(stream)) {
-                        string newGroupIdText = await reader.ReadToEndAsync();
-
-                        if (int.TryParse(newGroupIdText, out int newGroupId)) {
-                            if (lastGroupId != newGroupId)
-                            {
-                                lastGroupId = newGroupId;
-                                GroupId = newGroupId;
-
-                                DispatcherQueue.TryEnqueue(() => {
-                                    ExeFiles.Clear();
-                                     LoadGroupDataAsync(GroupId);
-                           
-                                });
-
-                               
-                            }
-                        }
-                    }
-                }
-            }
-            catch (IOException ex) {
-                Debug.WriteLine("File read error: " + ex.Message);
-            }
-            catch (Exception ex) {
-                Debug.WriteLine("Unexpected error: " + ex.Message);
-            }
-        }
-
+   
+       
         private async void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args) {
             args.Cancel = true;
             GroupId = -1;
             await HideAllDialogsAsync();
-            this.Hide();        // Just hide the window
+            // Save cursor position
+            NativeMethods.GetCursorPos(out NativeMethods.POINT cursorPos);
+
+            // Move to far right off-screen to clear hover state
+            int screenWidth = NativeMethods.GetSystemMetrics(0); // SM_CXSCREEN
+            NativeMethods.SetCursorPos(screenWidth - 1, cursorPos.Y);
+
+            this.Hide();
+            _wasHidden = true;
+            await Task.Delay(10);
+
+            // Restore cursor position
+            NativeMethods.SetCursorPos(cursorPos.X, cursorPos.Y);
+            //await Task.Delay(100);
+            //NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_MINIMIZE);
+            this.AppWindow.IsShownInSwitchers = false; // after minimize
         }
+      
 
         private async Task HideAllDialogsAsync() {
             var dialogs = FindVisualChildren<ContentDialog>(this.Content);
@@ -265,7 +354,7 @@ namespace AppGroup {
         }
         private void MainWindow_Closed(object sender, WindowEventArgs args) {
 
-        
+
 
 
 
@@ -279,7 +368,7 @@ namespace AppGroup {
             }
         }
 
-     
+
         private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
             try {
                 if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
@@ -331,15 +420,15 @@ namespace AppGroup {
                         ? "1 Item"
                         : "";
                     IconGridComboBox.Items.Clear();
-                    if (ExeFiles.Count >= 9) {
-                        IconGridComboBox.Items.Add("2");
-                        IconGridComboBox.Items.Add("3");
-                        IconGridComboBox.SelectedItem = "3";
-                    }
-                    else {
+                    //if (ExeFiles.Count >= 9) {
+                    //    IconGridComboBox.Items.Add("2");
+                    //    IconGridComboBox.Items.Add("3");
+                    //    IconGridComboBox.SelectedItem = "3";
+                    //}
+                    //else {
                         IconGridComboBox.Items.Add("2");
                         IconGridComboBox.SelectedItem = "2";
-                    }
+                    //}
 
                     GroupColComboBox.Items.Clear();
                     for (int i = 1; i <= ExeFiles.Count; i++) {
@@ -371,7 +460,20 @@ namespace AppGroup {
                 Debug.WriteLine($"Drop Error: {ex.Message}");
             }
         }
+        private void EnforceLayoutConstraints() {
+            bool headerOff = !GroupHeader.IsOn;
+            bool singleColumn = GroupColComboBox.SelectedItem?.ToString() == "1";
 
+            if (headerOff || singleColumn) {
+                //LayoutComboBox.SelectedItem = LayoutComboBox.Items
+                //    .OfType<ComboBoxItem>()
+                //    .FirstOrDefault(i => i.Content.ToString() == "Default");
+                LayoutComboBox.IsEnabled = false;
+            }
+            else {
+                LayoutComboBox.IsEnabled = true;
+            }
+        }
 
         private void GroupColComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
             if (GroupColComboBox.SelectedItem != null && GroupColComboBox.SelectedItem.ToString() == "1") {
@@ -383,8 +485,20 @@ namespace AppGroup {
                 HeaderPanel.Opacity = 1.0;
 
             }
+            EnforceLayoutConstraints();
         }
 
+        private void GroupHeader_Toggled(object sender, RoutedEventArgs e) {
+            if (GroupHeader.IsOn) {
+                HeaderPositionComboBox.IsEnabled = true;
+                HeaderPositionPanel.Opacity = 1.0;
+            }
+            else {
+                HeaderPositionComboBox.IsEnabled = false;
+                HeaderPositionPanel.Opacity = 0.5;
+            }
+            EnforceLayoutConstraints();
+        }
         private void ShowLabels_Toggled(object sender, RoutedEventArgs e) {
             if (ShowLabels.IsOn) {
                 LabelSizePanel.Opacity = 1.0;
@@ -415,12 +529,11 @@ namespace AppGroup {
 
             LabelPositionComboBox.Items.Add("Right");
             LabelPositionComboBox.Items.Add("Bottom");
-            LabelPositionComboBox.SelectedItem = DEFAULT_LABEL_POSITION; 
+            LabelPositionComboBox.SelectedItem = DEFAULT_LABEL_POSITION;
         }
 
         private async Task LoadGroupDataAsync(int groupId) {
-            await Task.Run(async () =>
-            {
+            await Task.Run(async () => {
                 string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
                 if (File.Exists(jsonFilePath)) {
                     string jsonContent = await File.ReadAllTextAsync(jsonFilePath);
@@ -435,7 +548,8 @@ namespace AppGroup {
                         int labelSize = groupNode["labelSize"]?.GetValue<int>() ?? int.Parse(DEFAULT_LABEL_SIZE.ToString());
                         string labelPosition = groupNode["labelPosition"]?.GetValue<string>() ?? DEFAULT_LABEL_POSITION;
                         JsonObject paths = groupNode["path"]?.AsObject();
-
+                        string headerPosition = groupNode["headerPosition"]?.GetValue<string>() ?? "Top";
+                        string layout = groupNode["layout"]?.GetValue<string>() ?? "Default";
                         string tempSubfolderPath = Path.Combine(Path.GetTempPath(), "AppGroup");
                         if (!Directory.Exists(tempSubfolderPath)) {
                             Directory.CreateDirectory(tempSubfolderPath);
@@ -451,8 +565,7 @@ namespace AppGroup {
 
                         Console.WriteLine("Temporary file path: " + tempIcon);
 
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
+                        DispatcherQueue.TryEnqueue(() => {
                             GroupHeader.IsOn = groupHeader;
                             if (!string.IsNullOrEmpty(groupName)) {
                                 GroupNameTextBox.Text = groupName;
@@ -465,7 +578,15 @@ namespace AppGroup {
                             LabelSizeComboBox.SelectedItem = labelSize.ToString();
                             LabelPositionComboBox.SelectedItem = labelPosition.ToString();
                             // Update label size panel state
-                        
+                            // ← Add here
+                            HeaderPositionComboBox.SelectedItem = HeaderPositionComboBox.Items
+                                .OfType<ComboBoxItem>()
+                                .FirstOrDefault(i => i.Content.ToString() == headerPosition);
+
+                            LayoutComboBox.SelectedItem = LayoutComboBox.Items
+                                .OfType<ComboBoxItem>()
+                                .FirstOrDefault(i => i.Content.ToString() == layout);
+
                             if (showLabels) {
                                 LabelSizePanel.Opacity = 1.0;
                                 LabelSizeComboBox.IsEnabled = true;
@@ -479,12 +600,19 @@ namespace AppGroup {
                                 LabelPositionPanel.Opacity = 0.5;
                                 LabelPositionComboBox.IsEnabled = false;
                             }
+
+                            HeaderPositionComboBox.SelectedItem = HeaderPositionComboBox.Items
+      .OfType<ComboBoxItem>()
+      .FirstOrDefault(i => i.Content.ToString() == headerPosition);
+
+                            LayoutComboBox.SelectedItem = LayoutComboBox.Items
+                                .OfType<ComboBoxItem>()
+                                .FirstOrDefault(i => i.Content.ToString() == layout);
                         });
 
                         if (groupCol > 0) {
                             if (paths != null) {
-                                DispatcherQueue.TryEnqueue(() =>
-                                {
+                                DispatcherQueue.TryEnqueue(() => {
                                     for (int i = 1; i <= paths.Count; i++) {
                                         GroupColComboBox.Items.Add(i.ToString());
                                     }
@@ -494,8 +622,7 @@ namespace AppGroup {
                         }
 
                         if (!string.IsNullOrEmpty(groupIcon)) {
-                            DispatcherQueue.TryEnqueue(() =>
-                            {
+                            DispatcherQueue.TryEnqueue(() => {
                                 selectedIconPath = tempIcon;
                                 BitmapImage bitmapImage = new BitmapImage(new Uri(tempIcon));
                                 IconPreviewImage.Source = bitmapImage;
@@ -526,8 +653,7 @@ namespace AppGroup {
                                         icon = iconNode.GetValue<string>();
                                     }
 
-                                    DispatcherQueue.TryEnqueue(() =>
-                                    {
+                                    DispatcherQueue.TryEnqueue(() => {
                                         ExeFiles.Add(new ExeFileModel {
                                             FileName = Path.GetFileName(filePath),
                                             Icon = icon,
@@ -540,18 +666,17 @@ namespace AppGroup {
                                 }
                             }
 
-                            DispatcherQueue.TryEnqueue(() =>
-                            {
+                            DispatcherQueue.TryEnqueue(() => {
                                 IconGridComboBox.Items.Clear();
-                                if (ExeFiles.Count >= 9) {
-                                    IconGridComboBox.Items.Add("2");
-                                    IconGridComboBox.Items.Add("3");
-                                    IconGridComboBox.SelectedItem = "3";
-                                }
-                                else {
+                                //if (ExeFiles.Count >= 9) {
+                                //    IconGridComboBox.Items.Add("2");
+                                //    IconGridComboBox.Items.Add("3");
+                                //    IconGridComboBox.SelectedItem = "3";
+                                //}
+                                //else {
                                     IconGridComboBox.Items.Add("2");
                                     IconGridComboBox.SelectedItem = "2";
-                                }
+                                //}
                                 if (groupIcon.Contains("grid")) {
                                     IconGridComboBox.SelectedItem = groupIcon.Contains("grid3") ? "3" : "2";
                                     regularIcon = false;
@@ -561,8 +686,7 @@ namespace AppGroup {
                         }
                     }
                     else {
-                        DispatcherQueue.TryEnqueue(() =>
-                        {
+                        DispatcherQueue.TryEnqueue(() => {
                             groupName = "";
                             GroupHeader.IsOn = false;
                             GroupNameTextBox.Text = string.Empty;
@@ -590,8 +714,7 @@ namespace AppGroup {
                 }
                 else {
                     // Config file doesn't exist (fresh install) - initialize with defaults
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
+                    DispatcherQueue.TryEnqueue(() => {
                         groupName = "";
                         GroupHeader.IsOn = false;
                         GroupNameTextBox.Text = string.Empty;
@@ -616,8 +739,7 @@ namespace AppGroup {
 
                 await Task.Run(() => Task.Delay(10));
 
-                DispatcherQueue.TryEnqueue(() =>
-                {
+                DispatcherQueue.TryEnqueue(() => {
                     // Final UI state setup
                     if (CustomDialog != null && CustomDialog.XamlRoot == null) {
                         CustomDialog.XamlRoot = this.Content.XamlRoot;
@@ -659,7 +781,7 @@ namespace AppGroup {
 
         private async void BrowseIconButton_Click(object sender, RoutedEventArgs e) {
             ContentDialogResult result = await CustomDialog.ShowAsync();
-            
+
         }
 
         private void CloseDialog(object sender, RoutedEventArgs e) {
@@ -709,9 +831,10 @@ namespace AppGroup {
                     string iconPath;
                     if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
                         iconPath = await IconHelper.GetUrlFileIconAsync(file.Path);
-                    } else 
+                    }
+                    else
                     if (file.FileType == ".exe") {
-                         iconPath = await IconCache.GetIconPathAsync(file.Path);
+                        iconPath = await IconCache.GetIconPathAsync(file.Path);
                         if (!string.IsNullOrEmpty(iconPath)) {
                             using (var stream = File.OpenRead(iconPath)) {
                                 await bitmapImage.SetSourceAsync(stream.AsRandomAccessStream());
@@ -758,8 +881,10 @@ namespace AppGroup {
             foreach (var file in files) {
                 if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
                     icon = await IconHelper.GetUrlFileIconAsync(file.Path);
-                }else{ icon = await IconCache.GetIconPathAsync(file.Path);
-                    }
+                }
+                else {
+                    icon = await IconCache.GetIconPathAsync(file.Path);
+                }
                 ExeFiles.Add(new ExeFileModel { FileName = file.Name, Icon = icon, FilePath = file.Path, Tooltip = "", Args = "" });
             }
 
@@ -780,8 +905,8 @@ namespace AppGroup {
             //    IconGridComboBox.SelectedItem = "3";
             //}
             //else {
-                IconGridComboBox.Items.Add("2");
-                IconGridComboBox.SelectedItem = "2";
+            IconGridComboBox.Items.Add("2");
+            IconGridComboBox.SelectedItem = "2";
             //}
 
             GroupColComboBox.Items.Clear();
@@ -810,7 +935,7 @@ namespace AppGroup {
                 }
             }
         }
-    
+
         private void ExeListView_SelectionChanged(object sender, SelectionChangedEventArgs e) {
 
 
@@ -945,8 +1070,8 @@ namespace AppGroup {
             //    IconGridComboBox.SelectedItem = "3";
             //}
             //else {
-                IconGridComboBox.Items.Add("2");
-                IconGridComboBox.SelectedItem = "2";
+            IconGridComboBox.Items.Add("2");
+            IconGridComboBox.SelectedItem = "2";
             //}
 
             lastSelectedItem = GroupColComboBox.SelectedItem as string;
@@ -1007,7 +1132,9 @@ namespace AppGroup {
                     await ShowDialog("Error", "Please select an icon.");
                     return;
                 }
-                
+
+                string headerPosition = (HeaderPositionComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Top";
+                string layout = (LayoutComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Default";
 
 
                 string exeDirectory = Path.GetDirectoryName(Environment.ProcessPath);
@@ -1097,14 +1224,14 @@ namespace AppGroup {
 
 
 
-             
-           bool isPinned = await TaskbarManager.IsShortcutPinnedToTaskbar(oldGroupName ?? newGroupName);
 
-if (isPinned) {
-    await TaskbarManager.UpdateTaskbarShortcutIcon(oldGroupName ?? newGroupName, newGroupName, icoFilePath);
-   
-    TaskbarManager.TryRefreshTaskbarWithoutRestartAsync();
-}
+                bool isPinned = await TaskbarManager.IsShortcutPinnedToTaskbar(oldGroupName ?? newGroupName);
+
+                if (isPinned) {
+                    await TaskbarManager.UpdateTaskbarShortcutIcon(oldGroupName ?? newGroupName, newGroupName, icoFilePath);
+
+                    TaskbarManager.TryRefreshTaskbarWithoutRestartAsync();
+                }
 
                 bool groupHeader = GroupHeader.IsEnabled ? GroupHeader.IsOn : false;
                 if (GroupColComboBox.SelectedItem != null && int.TryParse(GroupColComboBox.SelectedItem.ToString(), out int groupCol) && groupCol > 0) {
@@ -1120,10 +1247,15 @@ if (isPinned) {
                     string? labelPosition = LabelPositionComboBox.SelectedItem != null ? LabelPositionComboBox.SelectedItem.ToString() : DEFAULT_LABEL_POSITION;
 
                     // Update your AddGroupToJson method signature and implementation to handle icon
-                    JsonConfigHelper.AddGroupToJson(JsonConfigHelper.GetDefaultConfigPath(), GroupId, newGroupName, groupHeader, icoFilePath, groupCol, showLabels, labelSize,labelPosition, paths);
-            
-
-
+                
+                    JsonConfigHelper.AddGroupToJson(
+                        JsonConfigHelper.GetDefaultConfigPath(),
+                        GroupId, newGroupName, groupHeader, icoFilePath, groupCol,
+                        showLabels, labelSize, labelPosition,
+                        headerPosition,
+                        layout,        
+                        paths
+                    );
                     if (tempIcon != null) {
                         try {
                             File.Delete(tempIcon);
@@ -1148,6 +1280,7 @@ if (isPinned) {
                     GroupId = -1;
 
                     this.Hide();
+                    _wasHidden = true;
                 }
                 else {
                     await ShowDialog("Error", "Please select a valid group column value.");
@@ -1162,8 +1295,8 @@ if (isPinned) {
             }
         }
 
-       
-           private string GetOldGroupName() {
+
+        private string GetOldGroupName() {
             return groupName ?? "";
         }
         private void SaveGroupIdToFile(string groupId) {

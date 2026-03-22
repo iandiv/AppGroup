@@ -21,18 +21,7 @@ namespace AppGroup {
         public EditGroupHelper(string windowTitle, int groupId) {
             this.windowTitle = windowTitle;
             this.groupId = groupId;
-            // Define the local application data path
-            //string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            //string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
-
-            //// Ensure the directory exists
-            //if (!Directory.Exists(appDataPath)) {
-            //    Directory.CreateDirectory(appDataPath);
-            //}
-
-            //groupIdFilePath = Path.Combine(appDataPath, "gid");
-
-
+            
         }
 
         public bool IsExist() {
@@ -43,48 +32,21 @@ namespace AppGroup {
         public void Activate() {
             IntPtr hWnd = NativeMethods.FindWindow(null, windowTitle);
             if (hWnd != IntPtr.Zero) {
-                NativeMethods.ShowWindow(hWnd, NativeMethods.SW_RESTORE);
-                NativeMethods.SetForegroundWindow(hWnd);
-                //UpdateFile();
-
+                // Write to file FIRST so EditGroupWindow_Activated reads correct id
+                SaveGroupIdToFile(groupId.ToString());
+                NativeMethods.SendString(hWnd, $"__SHOW_EDIT__|{groupId}");
             }
-            else {
-                 //editWindow = new EditGroupWindow(groupId);
-                //editWindow.InitializeComponent();
-                //string executablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.exe");
-
-                //using (Process process = new Process()) {
-                //    process.StartInfo = new ProcessStartInfo {
-                //        FileName = executablePath,
-                //        Arguments = "EditGroupWindow",
-                //        UseShellExecute = false,
-                //        RedirectStandardOutput = true,
-                //        RedirectStandardError = true,
-                //        CreateNoWindow = true
-                //    };
-
-                //    process.Start();
-                //}
-
-
-                //UpdateFile();
-
-            }
-
-
         }
 
-        private bool UpdateFile() {
-
+        private void SaveGroupIdToFile(string groupId) {
             try {
-                File.WriteAllText(groupIdFilePath, groupId.ToString());
-
-                return true;
+                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string filePath = Path.Combine(appDataPath, "AppGroup", "lastEdit");
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? "");
+                File.WriteAllText(filePath, groupId);
             }
             catch (Exception ex) {
-                Debug.WriteLine($"Direct file update failed: {ex.Message}");
-
-                return false;
+                Debug.WriteLine($"Failed to save group ID: {ex.Message}");
             }
         }
 

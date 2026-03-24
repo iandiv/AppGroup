@@ -368,6 +368,15 @@ namespace AppGroup {
             }
         }
 
+        private void ExeListView_DragOver(object sender, DragEventArgs e) {
+            if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
+                e.AcceptedOperation = DataPackageOperation.Copy;
+            }
+            else {
+                e.AcceptedOperation = DataPackageOperation.None;
+            }
+        }
+
 
         private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
             try {
@@ -420,15 +429,15 @@ namespace AppGroup {
                         ? "1 Item"
                         : "";
                     IconGridComboBox.Items.Clear();
-                    //if (ExeFiles.Count >= 9) {
-                    //    IconGridComboBox.Items.Add("2");
-                    //    IconGridComboBox.Items.Add("3");
-                    //    IconGridComboBox.SelectedItem = "3";
-                    //}
-                    //else {
+                    if (ExeFiles.Count >= 9) {
+                        IconGridComboBox.Items.Add("2");
+                        IconGridComboBox.Items.Add("3");
+                        IconGridComboBox.SelectedItem = "2";
+                    }
+                    else {
                         IconGridComboBox.Items.Add("2");
                         IconGridComboBox.SelectedItem = "2";
-                    //}
+                    }
 
                     GroupColComboBox.Items.Clear();
                     for (int i = 1; i <= ExeFiles.Count; i++) {
@@ -533,6 +542,7 @@ namespace AppGroup {
         }
 
         private async Task LoadGroupDataAsync(int groupId) {
+
             await Task.Run(async () => {
                 string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
                 if (File.Exists(jsonFilePath)) {
@@ -644,7 +654,9 @@ namespace AppGroup {
                                     if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
                                         icon = await IconHelper.GetUrlFileIconAsync(filePath);
                                     }
-                                    else { icon = await IconCache.GetIconPathAsync(filePath); }
+                                    else {
+                                        icon = await IconCache.GetIconPathAsync(filePath);
+                                    }
                                     await Task.Delay(10);
 
                                     if (path.Value.AsObject().TryGetPropertyValue("icon", out JsonNode? iconNode)
@@ -668,15 +680,15 @@ namespace AppGroup {
 
                             DispatcherQueue.TryEnqueue(() => {
                                 IconGridComboBox.Items.Clear();
-                                //if (ExeFiles.Count >= 9) {
-                                //    IconGridComboBox.Items.Add("2");
-                                //    IconGridComboBox.Items.Add("3");
-                                //    IconGridComboBox.SelectedItem = "3";
-                                //}
-                                //else {
-                                    IconGridComboBox.Items.Add("2");
+                            if (ExeFiles.Count >= 9) {
+                                IconGridComboBox.Items.Add("2");
+                                IconGridComboBox.Items.Add("3");
+                                IconGridComboBox.SelectedItem = "2";
+                                }
+                            else {
+                                IconGridComboBox.Items.Add("2");
                                     IconGridComboBox.SelectedItem = "2";
-                                //}
+                                }
                                 if (groupIcon.Contains("grid")) {
                                     IconGridComboBox.SelectedItem = groupIcon.Contains("grid3") ? "3" : "2";
                                     regularIcon = false;
@@ -747,6 +759,8 @@ namespace AppGroup {
                 });
             });
         }
+     
+        
         private async void CreateGridIcon() {
             var selectedItem = IconGridComboBox.SelectedItem;
             int selectedGridSize = 2;
@@ -801,9 +815,10 @@ namespace AppGroup {
             }
             else {
                 regularIcon = false;
-                CreateGridIcon();
-                IconGridComboBox.Visibility = Visibility.Visible;
                 CustomDialog.Hide();
+                IconGridComboBox.Visibility = Visibility.Visible;
+                CreateGridIcon();
+
             }
         }
 
@@ -866,6 +881,8 @@ namespace AppGroup {
         }
 
         private async void BrowseFiles() {
+            Debug.WriteLine($"BrowseFiles thread: {System.Threading.Thread.CurrentThread.ManagedThreadId}, IsBackground: {System.Threading.Thread.CurrentThread.IsBackground}, IsThreadPoolThread: {System.Threading.Thread.CurrentThread.IsThreadPoolThread}");
+
             var openPicker = new FileOpenPicker();
             openPicker.SuggestedStartLocation = PickerLocationId.Desktop;
             openPicker.FileTypeFilter.Add(".exe");
@@ -898,16 +915,16 @@ namespace AppGroup {
 
 
             IconGridComboBox.Items.Clear();
-            //if (ExeFiles.Count >= 9) {
-            //    IconGridComboBox.Items.Add("2");
-            //    IconGridComboBox.Items.Add("3");
+            if (ExeFiles.Count >= 9) {
+                IconGridComboBox.Items.Add("2");
+                IconGridComboBox.Items.Add("3");
 
-            //    IconGridComboBox.SelectedItem = "3";
-            //}
-            //else {
-            IconGridComboBox.Items.Add("2");
+                IconGridComboBox.SelectedItem = "2";
+            }
+            else {
+                IconGridComboBox.Items.Add("2");
             IconGridComboBox.SelectedItem = "2";
-            //}
+            }
 
             GroupColComboBox.Items.Clear();
             for (int i = 1; i <= ExeFiles.Count; i++) {
@@ -1063,16 +1080,16 @@ namespace AppGroup {
       ? ExeListView.Items.Count.ToString() + " Items"
       : "Item";
 
-            //if (ExeFiles.Count >= 9) {
-            //    IconGridComboBox.Items.Add("2");
-            //    IconGridComboBox.Items.Add("3");
+            if (ExeFiles.Count >= 9) {
+                IconGridComboBox.Items.Add("2");
+                IconGridComboBox.Items.Add("3");
 
-            //    IconGridComboBox.SelectedItem = "3";
-            //}
-            //else {
-            IconGridComboBox.Items.Add("2");
+                IconGridComboBox.SelectedItem = "2";
+            }
+            else {
+                IconGridComboBox.Items.Add("2");
             IconGridComboBox.SelectedItem = "2";
-            //}
+            }
 
             lastSelectedItem = GroupColComboBox.SelectedItem as string;
             GroupColComboBox.Items.Clear();
@@ -1374,6 +1391,7 @@ namespace AppGroup {
                 await dialog.ShowAsync();
             }
         }
+      
         private async Task<bool> ConfirmOverwrite(string path) {
             ContentDialog dialog = new ContentDialog {
                 Title = "Overwrite",

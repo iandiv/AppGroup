@@ -133,7 +133,7 @@ namespace AppGroup {
         private readonly Dictionary<string, PopupWindow> _openSubPopups = new Dictionary<string, PopupWindow>();
         private PopupWindow _parentPopup = null;
         private Storyboard _entranceStoryboard;
-
+        private bool _wasLaunchedFromTaskbar = false;
         // Constructor
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
@@ -173,18 +173,42 @@ namespace AppGroup {
             this.Activated += Window_Activated;
         }
 
+
         private void AnimateWindowSlideUp(IntPtr hWnd, bool isSubPopup = false) {
             NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
             int finalX = rect.left;
             int finalY = rect.top;
-            int startY = finalY + 60;
+            int windowWidth = rect.right - rect.left;
+            int windowHeight = rect.bottom - rect.top;
+
+            NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+            IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+            bool workEqualsMonitor =
+                mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+            int startX = finalX;
+            int startY = finalY;
+
+            if (!workEqualsMonitor) {
+                if (mi.rcWork.left > mi.rcMonitor.left) startX = finalX - windowWidth;  // taskbar left  → slide from left
+                else if (mi.rcWork.right < mi.rcMonitor.right) startX = finalX + windowWidth;  // taskbar right → slide from right
+                else if (mi.rcWork.top > mi.rcMonitor.top) startY = finalY - windowHeight; // taskbar top   → slide from top
+                else startY = finalY + windowHeight; // taskbar bottom→ slide from bottom
+            }
+            else {
+                startY = finalY + windowHeight; // auto-hide fallback
+            }
 
             if (!isSubPopup) {
                 NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
                     NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
             }
 
-            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, finalX, startY, 0, 0,
+            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, startX, startY, 0, 0,
                 NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
             NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOWNOACTIVATE);
 
@@ -197,9 +221,10 @@ namespace AppGroup {
                 currentStep++;
                 double t = (double)currentStep / steps;
                 double ease = Math.Sqrt(1 - Math.Pow(t - 1, 2));
+                int currentX = (int)(startX + (finalX - startX) * ease);
                 int currentY = (int)(startY + (finalY - startY) * ease);
 
-                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, finalX, currentY, 0, 0,
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, currentX, currentY, 0, 0,
                     NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
 
                 if (currentStep >= steps) {
@@ -220,9 +245,31 @@ namespace AppGroup {
             NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
             int startX = rect.left;
             int startY = rect.top;
-            int endY = startY + 60;
+            int windowWidth = rect.right - rect.left;
+            int windowHeight = rect.bottom - rect.top;
 
-            // Remove always-on-top so it slides behind taskbar
+            NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+            IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+            bool workEqualsMonitor =
+                mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+            int endX = startX;
+            int endY = startY;
+
+            if (!workEqualsMonitor) {
+                if (mi.rcWork.left > mi.rcMonitor.left) endX = startX - windowWidth;  // taskbar left
+                else if (mi.rcWork.right < mi.rcMonitor.right) endX = startX + windowWidth;  // taskbar right
+                else if (mi.rcWork.top > mi.rcMonitor.top) endY = startY - windowHeight; // taskbar top
+                else endY = startY + windowHeight; // taskbar bottom
+            }
+            else {
+                endY = startY + windowHeight;
+            }
+
             NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 
@@ -235,9 +282,10 @@ namespace AppGroup {
                 currentStep++;
                 double t = (double)currentStep / steps;
                 double ease = 1 - Math.Sqrt(1 - Math.Pow(t, 2));
+                int currentX = (int)(startX + (endX - startX) * ease);
                 int currentY = (int)(startY + (endY - startY) * ease);
 
-                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, startX, currentY, 0, 0,
+                NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, currentX, currentY, 0, 0,
                     NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
 
                 if (currentStep >= steps) {
@@ -247,6 +295,130 @@ namespace AppGroup {
 
             Task.Delay(durationMs + intervalMs * 2).ContinueWith(_ => timer.Dispose());
         }
+        //private void AnimateWindowSlideUp(IntPtr hWnd, bool isSubPopup = false) {
+        //    NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
+        //    int finalX = rect.left;
+        //    int finalY = rect.top;
+
+        //    // Detect taskbar position to determine slide direction
+        //    NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+        //    IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        //    var mi = new NativeMethods.MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        //    NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+        //    // Reuse the same taskbar-position logic already in NativeMethods
+        //    bool workEqualsMonitor =
+        //        mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+        //        mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+        //    // Determine slide offset direction
+        //    int startX = finalX;
+        //    int startY = finalY;
+        //    const int SLIDE_DIST = 60;
+
+        //    if (!workEqualsMonitor) {
+        //        if (mi.rcWork.left > mi.rcMonitor.left) startX = finalX - SLIDE_DIST; // taskbar left  → slide from left
+        //        else if (mi.rcWork.right < mi.rcMonitor.right) startX = finalX + SLIDE_DIST; // taskbar right → slide from right
+        //        else if (mi.rcWork.top > mi.rcMonitor.top) startY = finalY - SLIDE_DIST; // taskbar top   → slide from top
+        //        else startY = finalY + SLIDE_DIST; // taskbar bottom→ slide from bottom
+        //    }
+        //    else {
+        //        startY = finalY + SLIDE_DIST; // auto-hide fallback
+        //    }
+
+        //    if (!isSubPopup) {
+        //        NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
+        //            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        //    }
+
+        //    NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, startX, startY, 0, 0,
+        //        NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        //    NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOWNOACTIVATE);
+
+        //    int intervalMs = GetRefreshIntervalMs(hWnd);
+        //    int durationMs = 200;
+        //    int steps = durationMs / intervalMs;
+        //    int currentStep = 0;
+
+        //    var timer = new System.Threading.Timer(_ => {
+        //        currentStep++;
+        //        double t = (double)currentStep / steps;
+        //        double ease = Math.Sqrt(1 - Math.Pow(t - 1, 2));
+        //        int currentX = (int)(startX + (finalX - startX) * ease);
+        //        int currentY = (int)(startY + (finalY - startY) * ease);
+
+        //        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, currentX, currentY, 0, 0,
+        //            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+        //        if (currentStep >= steps) {
+        //            NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, finalX, finalY, 0, 0,
+        //                NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+        //            if (!isSubPopup) {
+        //                NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+        //                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        //            }
+        //        }
+        //    }, null, intervalMs, intervalMs);
+
+        //    Task.Delay(durationMs + intervalMs * 2).ContinueWith(_ => timer.Dispose());
+        //}
+
+        //private void AnimateWindowSlideDown(IntPtr hWnd, Action onComplete) {
+        //    NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
+        //    int startX = rect.left;
+        //    int startY = rect.top;
+
+        //    NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+        //    IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        //    var mi = new NativeMethods.MONITORINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        //    NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+        //    bool workEqualsMonitor =
+        //        mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+        //        mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+        //    const int SLIDE_DIST = 60;
+        //    int endX = startX;
+        //    int endY = startY;
+
+        //    if (!workEqualsMonitor) {
+        //        if (mi.rcWork.left > mi.rcMonitor.left) endX = startX - SLIDE_DIST; // taskbar left
+        //        else if (mi.rcWork.right < mi.rcMonitor.right) endX = startX + SLIDE_DIST; // taskbar right
+        //        else if (mi.rcWork.top > mi.rcMonitor.top) endY = startY - SLIDE_DIST; // taskbar top
+        //        else endY = startY + SLIDE_DIST; // taskbar bottom
+        //    }
+        //    else {
+        //        endY = startY + SLIDE_DIST;
+        //    }
+
+        //    NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
+        //        NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+
+        //    int intervalMs = GetRefreshIntervalMs(hWnd);
+        //    int durationMs = 150;
+        //    int steps = durationMs / intervalMs;
+        //    int currentStep = 0;
+
+        //    var timer = new System.Threading.Timer(_ => {
+        //        currentStep++;
+        //        double t = (double)currentStep / steps;
+        //        double ease = 1 - Math.Sqrt(1 - Math.Pow(t, 2));
+        //        int currentX = (int)(startX + (endX - startX) * ease);
+        //        int currentY = (int)(startY + (endY - startY) * ease);
+
+        //        NativeMethods.SetWindowPos(hWnd, IntPtr.Zero, currentX, currentY, 0, 0,
+        //            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+        //        if (currentStep >= steps) {
+        //            onComplete?.Invoke();
+        //        }
+        //    }, null, intervalMs, intervalMs);
+
+        //    Task.Delay(durationMs + intervalMs * 2).ContinueWith(_ => timer.Dispose());
+        //}
+
+
         private int GetRefreshIntervalMs(IntPtr hWnd) {
             try {
                 IntPtr monitor = NativeMethods.MonitorFromWindow(hWnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
@@ -349,7 +521,7 @@ namespace AppGroup {
                 }
             }
 
-            
+
 
             return NativeMethods.DefSubclassProc(hWnd, msg, wParam, lParam);
         }
@@ -554,7 +726,7 @@ UseLayoutRounding=""True""
                         if (filteredGroup.Key != null) {
                             string headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
                             string layout = filteredGroup.Value.Layout ?? "Default";
-                            bool groupHeader = filteredGroup.Value.GroupHeader ;
+                            bool groupHeader = filteredGroup.Value.GroupHeader;
                             ApplyGroupLayout(headerPosition, layout, groupHeader);
                         }
                     }
@@ -667,7 +839,7 @@ UseLayoutRounding=""True""
     }";
         }
 
-        // Non-async window initialization for faster loading
+
         private void InitializeWindow() {
 
             int maxPathItems = 1;
@@ -681,7 +853,7 @@ UseLayoutRounding=""True""
             _labelSize = DEFAULT_LABEL_SIZE;
             _labelPosition = DEFAULT_LABEL_POSITION;
             _currentColumns = 1;
-          
+
             // If we have a group filter, only consider that group
             if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g => g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
                 var filteredGroup = _groups.FirstOrDefault(g => g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
@@ -689,7 +861,6 @@ UseLayoutRounding=""True""
                 maxPathItems = filteredGroup.Value.Path.Count;
                 maxColumns = filteredGroup.Value.GroupCol;
                 groupHeader = filteredGroup.Value.GroupHeader;
-                //groupIcon = filteredGroup.Value.groupIcon;
                 iconGroup = filteredGroup.Value.GroupIcon;
 
                 // Get label settings
@@ -698,9 +869,9 @@ UseLayoutRounding=""True""
                 _labelPosition = filteredGroup.Value.LabelPosition != null ? filteredGroup.Value.LabelPosition : DEFAULT_LABEL_POSITION;
 
                 _currentColumns = maxColumns;
-                 headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
-                 layout = filteredGroup.Value.Layout ?? "Default";
-               
+                headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
+                layout = filteredGroup.Value.Layout ?? "Default";
+
                 // Create label templates with the actual font size from config
                 if (_showLabels) {
                     CreateLabelTemplates(_labelSize);
@@ -718,6 +889,7 @@ UseLayoutRounding=""True""
                 }
                 _currentColumns = maxColumns;
             }
+
             DispatcherQueue.TryEnqueue(() => {
                 ApplyGroupLayout(headerPosition, layout, groupHeader);
             });
@@ -743,7 +915,6 @@ UseLayoutRounding=""True""
             if (groupHeader == true && maxColumns < 2 && !useHorizontalLabels) {
                 dynamicWidth = 2 * (buttonWidth + BUTTON_MARGIN * 2);
             }
-            // Ensure minimum width for horizontal labels
             if (useHorizontalLabels) {
                 dynamicWidth = Math.Max(dynamicWidth, BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2));
             }
@@ -758,68 +929,187 @@ UseLayoutRounding=""True""
                 scaledHeight += 40;
             }
 
-
-
-            //MainGrid.Margin = new Thickness(0, 0, -5, -15);
-
             int finalWidth = scaledWidth + 30;
             int finalHeight = scaledHeight + 20;
 
-            finalHeight = layout == "Card"&& groupHeader==true ? finalHeight + 15 : finalHeight;
-
+            finalHeight = layout == "Card" && groupHeader == true ? finalHeight + 15 : finalHeight;
 
             int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height);
-            int maxAllowedHeight = screenHeight - 30; // Reserve space for taskbar and window chrome
+            int maxAllowedHeight = screenHeight - 30;
             if (finalHeight > maxAllowedHeight) {
                 finalHeight = maxAllowedHeight;
             }
 
             NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
-
-
             _windowHelper.SetSize(finalWidth, finalHeight);
 
+            if (_parentPopup != null) {
+                // Sub-popup: position near parent cursor, no Win32 slide animation
+                PositionSubPopupNearParent();
+                NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+            }
+            else if (IsLaunchedFromTaskbar()) {
+                _wasLaunchedFromTaskbar = true;
+                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
+                
+                AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false);
+            }
+            else {
+                _wasLaunchedFromTaskbar = false;
+                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
+                NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+            }
 
-
-            NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
-            AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: _parentPopup != null);
-
-            // Start animation immediately as window becomes visible
+            // --- GridPanel content animation ---
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () => {
-                var transform = new Microsoft.UI.Xaml.Media.TranslateTransform { Y = 40 };
+                // Determine taskbar direction from monitor geometry (works for all windows including sub-popups)
+                NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+                IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                var mi = new NativeMethods.MONITORINFO {
+                    cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>()
+                };
+                NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+                bool workEqualsMonitor =
+                    mi.rcWork.top == mi.rcMonitor.top &&
+                    mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                    mi.rcWork.left == mi.rcMonitor.left &&
+                    mi.rcWork.right == mi.rcMonitor.right;
+
+                bool slideOnX = false;
+                double slideFrom = 40;
+
+                if (_parentPopup != null) {
+                    // Sub-popup: content-only animation, direction based on taskbar position same as root
+                    if (!workEqualsMonitor) {
+                        if (mi.rcWork.left > mi.rcMonitor.left) { slideOnX = true; slideFrom = -40; } // taskbar left  → slide from left
+                        else if (mi.rcWork.right < mi.rcMonitor.right) { slideOnX = true; slideFrom = 40; } // taskbar right → slide from right
+                        else if (mi.rcWork.top > mi.rcMonitor.top) { slideOnX = false; slideFrom = -40; } // taskbar top   → slide from top
+                        else { slideOnX = false; slideFrom = 40; } // taskbar bottom→ slide from bottom
+                    }
+                    else {
+                        // Auto-hide taskbar or no reserved space — default slide up
+                        slideOnX = false;
+                        slideFrom = 40;
+                    }
+                }
+                else {
+                    // Root popup: keep original smart logic
+                    bool fromTaskbar = IsLaunchedFromTaskbar();
+
+                    if (!fromTaskbar) {
+                        slideOnX = false;
+                        slideFrom = 40;
+                    }
+                    else {
+                        if (!workEqualsMonitor) {
+                            if (mi.rcWork.left > mi.rcMonitor.left) { slideOnX = true; slideFrom = -40; }
+                            else if (mi.rcWork.right < mi.rcMonitor.right) { slideOnX = true; slideFrom = 40; }
+                            else if (mi.rcWork.top > mi.rcMonitor.top) { slideOnX = false; slideFrom = -40; }
+                            else { slideOnX = false; slideFrom = 40; }
+                        }
+                    }
+                }
+
+                var transform = new Microsoft.UI.Xaml.Media.TranslateTransform {
+                    X = slideOnX ? slideFrom : 0,
+                    Y = slideOnX ? 0 : slideFrom
+                };
+
                 GridPanel.RenderTransform = transform;
                 GridPanel.Opacity = 0;
 
                 var sb = new Storyboard();
 
                 var slideAnim = new DoubleAnimation {
-                    From = 40,
+                    From = slideFrom,
                     To = 0,
                     Duration = new Duration(TimeSpan.FromMilliseconds(300)),
                     EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut }
                 };
+
                 Storyboard.SetTarget(slideAnim, transform);
-                Storyboard.SetTargetProperty(slideAnim, "Y");
+                Storyboard.SetTargetProperty(slideAnim, slideOnX ? "X" : "Y");
 
                 var fadeAnim = new DoubleAnimation {
                     From = 0,
                     To = 1,
                     Duration = new Duration(TimeSpan.FromMilliseconds(150))
                 };
+
                 Storyboard.SetTarget(fadeAnim, GridPanel);
                 Storyboard.SetTargetProperty(fadeAnim, "Opacity");
 
                 sb.Children.Add(slideAnim);
                 sb.Children.Add(fadeAnim);
+
                 _entranceStoryboard = sb;
                 sb.Begin();
-
             });
-
-
         }
 
+        private void PositionSubPopupNearParent() {
+            try {
+                if (!NativeMethods.GetWindowRect(this.GetWindowHandle(), out NativeMethods.RECT wr)) return;
 
+                int subWidth = wr.right - wr.left;
+                int subHeight = wr.bottom - wr.top;
+
+                NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+                IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                var mi = new NativeMethods.MONITORINFO { cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+                NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+                bool workEqualsMonitor =
+                    mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                    mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+                bool taskbarOnTop = !workEqualsMonitor && mi.rcWork.top > mi.rcMonitor.top;
+                bool taskbarOnLeft = !workEqualsMonitor && mi.rcWork.left > mi.rcMonitor.left;
+                bool taskbarOnRight = !workEqualsMonitor && mi.rcWork.right < mi.rcMonitor.right;
+
+                int x, y;
+
+                if (taskbarOnLeft) {
+                    // taskbar on left → popup is to the right of taskbar → subpopup to the right of cursor
+                    x = cursor.X + 10;
+                    if (x + subWidth > mi.rcWork.right)
+                        x = cursor.X - subWidth - 10;
+                    y = cursor.Y - subHeight / 2;
+                }
+                else if (taskbarOnRight) {
+                    // taskbar on right → popup is to the left of taskbar → subpopup to the left of cursor
+                    x = cursor.X - subWidth - 10;
+                    if (x < mi.rcWork.left)
+                        x = cursor.X + 10;
+                    y = cursor.Y - subHeight / 2;
+                }
+                else if (taskbarOnTop) {
+                    x = cursor.X - subWidth / 2;
+                    y = cursor.Y + 10;
+                    if (y + subHeight > mi.rcWork.bottom)
+                        y = mi.rcWork.bottom - subHeight;
+                }
+                else {
+                    // taskbar bottom (default)
+                    x = cursor.X - subWidth / 2;
+                    y = cursor.Y - subHeight - 10;
+                    if (y < mi.rcWork.top)
+                        y = mi.rcWork.top;
+                }
+
+                if (x < mi.rcWork.left) x = mi.rcWork.left;
+                if (x + subWidth > mi.rcWork.right) x = mi.rcWork.right - subWidth;
+                if (y < mi.rcWork.top) y = mi.rcWork.top;
+                if (y + subHeight > mi.rcWork.bottom) y = mi.rcWork.bottom - subHeight;
+
+                NativeMethods.SetWindowPos(this.GetWindowHandle(), IntPtr.Zero, x, y, 0, 0,
+                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"PositionSubPopupNearParent error: {ex.Message}");
+            }
+        }
         private void SetWindowIcon() {
             try {
                 // Get the window handle
@@ -964,13 +1254,13 @@ UseLayoutRounding=""True""
                 MainGrid.Margin = groupHeader
                     ? new Thickness(0, 0, -1, -5)
                     : new Thickness(0, -10, -1, -10);
-                Header.Margin = layout == "Card" ? new Thickness(15, 5, 5, 5): new Thickness(10, 5, 5, 5);
+                Header.Margin = layout == "Card" ? new Thickness(15, 5, 5, 5) : new Thickness(10, 5, 5, 5);
 
-                HeaderEditButton.Padding = layout == "Card" ? new Thickness(10): new Thickness(7);
-                GridPanel.Padding = groupHeader ? new Thickness(0,0,0,0) : new Thickness(0, 10, 0, 15);
+                HeaderEditButton.Padding = layout == "Card" ? new Thickness(10) : new Thickness(7);
+                GridPanel.Padding = groupHeader ? new Thickness(0, 0, 0, 0) : new Thickness(0, 10, 0, 15);
                 GridPanel.Margin = layout == "Card"
                     ? new Thickness(0, 0, -5, -15)
-                    : new Thickness(0, -5, -5, -15);
+                    : new Thickness(0, -5, -5, -25);
             }
             else {
                 Grid.SetRow(ScrollView, 0);
@@ -979,11 +1269,11 @@ UseLayoutRounding=""True""
                 MainGrid.RowDefinitions[1].Height = GridLength.Auto;
 
                 MainGrid.Margin = groupHeader
-                    ? new Thickness(0,0,-1,0)
+                    ? new Thickness(0, 0, -1, 0)
                     : new Thickness(0, -10, -1, -10);
                 Header.Margin = layout == "Card" ? new Thickness(15, 0, 5, 5) : new Thickness(10, 5, 5, 5);
                 HeaderEditButton.Padding = layout == "Card" ? new Thickness(10) : new Thickness(7);
-                GridPanel.Padding = groupHeader ? new Thickness(0,0,0,0) : new Thickness(0, 10, 0, 15);
+                GridPanel.Padding = groupHeader ? new Thickness(0, 0, 0, 0) : new Thickness(0, 10, 0, 15);
                 GridPanel.Margin = layout == "Card"
                     ? new Thickness(0, 0, -5, -15)
                     : new Thickness(0, 0, -5, -20);
@@ -1099,7 +1389,7 @@ UseLayoutRounding=""True""
             }
         }
 
-      
+
         private string GetDisplayNameBackground(string filePath) {
             if (string.IsNullOrEmpty(filePath)) return "Unknown";
             string extension = Path.GetExtension(filePath).ToLower();
@@ -1163,7 +1453,7 @@ UseLayoutRounding=""True""
                 _ = LoadIconAsync(item, item.Path);
             }
         }
-      
+
 
         private async Task LoadIconAsync(PopupItem item, string path) {
             try {
@@ -1238,6 +1528,31 @@ UseLayoutRounding=""True""
             _parentPopup?.UpdateLastOpenTime();
         }
 
+
+        private bool IsLaunchedFromTaskbar() {
+            NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+            IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO { cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            NativeMethods.GetMonitorInfo(monitor, ref mi);
+
+            bool workEqualsMonitor =
+                mi.rcWork.top == mi.rcMonitor.top && mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
+
+            if (workEqualsMonitor) return NativeMethods.IsTaskbarAutoHide();
+
+            int taskbarThickness = 60;
+            if (mi.rcWork.top > mi.rcMonitor.top)
+                return cursor.Y < mi.rcWork.top + taskbarThickness;
+            if (mi.rcWork.bottom < mi.rcMonitor.bottom)
+                return cursor.Y > mi.rcWork.bottom - taskbarThickness;
+            if (mi.rcWork.left > mi.rcMonitor.left)
+                return cursor.X < mi.rcWork.left + taskbarThickness;
+            if (mi.rcWork.right < mi.rcMonitor.right)
+                return cursor.X > mi.rcWork.right - taskbarThickness;
+
+            return false;
+        }
         private void StartFocusTimer() {
             if (_parentPopup != null) {
                 _parentPopup.StartFocusTimer();
@@ -1258,18 +1573,80 @@ UseLayoutRounding=""True""
                         CloseAllChildrenRecursive(_openSubPopups);
                         _openSubPopups.Clear();
                         _isLoaded = false;
-                        AnimateWindowSlideDown(this.GetWindowHandle(), () => {
-                            DispatcherQueue.TryEnqueue(() => {
-                                this.Hide();
-                                NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+
+                        if (_wasLaunchedFromTaskbar) {
+                            AnimateWindowSlideDown(this.GetWindowHandle(), () => {
+                                DispatcherQueue.TryEnqueue(() => {
+                                    this.Hide();
+                                    NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+                                });
                             });
-                        });
+                        }
+                        else {
+                            _entranceStoryboard?.Stop();
+                            _entranceStoryboard = null;
+                            this.Hide();
+                            _windowHelper.SetSize(screenWidth, screenHeight);
+                            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+                        }
                     });
                 }
-                // Do NOT close children when clicking a popup in chain
-                // Let Window_Activated handle that via natural focus
             }, null, 50, 50);
         }
+
+        //private void StartFocusTimer() {
+        //    if (_parentPopup != null) {
+        //        _parentPopup.StartFocusTimer();
+        //        return;
+        //    }
+
+        //    _focusTimer?.Dispose();
+        //    _focusTimer = new System.Threading.Timer(_ => {
+        //        if ((DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds < 400)
+        //            return;
+
+        //        IntPtr foreground = NativeMethods.GetForegroundWindow();
+        //        bool isInChain = IsAnywhereInChain(foreground);
+
+        //        if (!isInChain) {
+        //            DispatcherQueue.TryEnqueue(() => {
+        //                StopFocusTimer();
+        //                CloseAllChildrenRecursive(_openSubPopups);
+        //                _openSubPopups.Clear();
+        //                _isLoaded = false;
+        //                //AnimateWindowSlideDown(this.GetWindowHandle(), () => {
+        //                //    DispatcherQueue.TryEnqueue(() => {
+        //                //        this.Hide();
+        //                //        NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+        //                //    });
+        //                //});
+
+        //                if (IsLaunchedFromTaskbar()) {
+        //                    AnimateWindowSlideDown(this.GetWindowHandle(), () => {
+        //                        DispatcherQueue.TryEnqueue(() => {
+        //                            this.Hide();
+        //                            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+
+        //                        });
+        //                    });
+        //                }
+        //                else {
+        //                    // no Win32 slide, just hide directly
+        //                    DispatcherQueue.TryEnqueue(() => {
+        //                        _entranceStoryboard?.Stop();
+        //                        _entranceStoryboard = null;
+        //                        this.Hide();
+        //                        _windowHelper.SetSize(screenWidth, screenHeight);
+        //                        NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+
+        //                    });
+        //                }
+        //            });
+        //        }
+        //        // Do NOT close children when clicking a popup in chain
+        //        // Let Window_Activated handle that via natural focus
+        //    }, null, 50, 50);
+        //}
 
 
         private bool IsAnywhereInChain(IntPtr hwnd) {
@@ -1349,78 +1726,77 @@ UseLayoutRounding=""True""
 
 
         private bool _isLoaded = false;
+
+
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
                 int screenHeight = (int)(DisplayArea.Primary.WorkArea.Height) * 2;
                 int screenWidth = (int)(DisplayArea.Primary.WorkArea.Width) * 2;
 
-                // Sub-popups never self-cleanup
                 if (_parentPopup != null) return;
-
-                // Root: don't cleanup if timer is running (sub-popups are open)
                 if (_focusTimer != null) return;
 
                 _isLoaded = false;
 
                 var settings = await SettingsHelper.LoadSettingsAsync();
-
                 CleanupUISettings();
 
                 if (_hasBeenLoaded && !string.IsNullOrEmpty(_groupFilter)) {
                     this.DispatcherQueue.TryEnqueue(() => {
 
-                        AnimateWindowSlideDown(this.GetWindowHandle(), () => {
-                            DispatcherQueue.TryEnqueue(() => {
-                                _entranceStoryboard?.Stop();
-                                _entranceStoryboard = null;
+                        void DoCleanup() {
+                            _entranceStoryboard?.Stop();
+                            _entranceStoryboard = null;
+                            _wasLaunchedFromTaskbar = false;
 
-                                this.Hide();
-                                _windowHelper.SetSize(screenWidth, screenHeight);
-                                NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+                            this.Hide();
+                            _windowHelper.SetSize(screenWidth, screenHeight);
+                            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
 
-                                try {
-                                    if (_gridView != null) {
-                                        _gridView.RightTapped -= GridView_RightTapped;
-                                        _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
-                                        _gridView.ItemClick -= GridView_ItemClick;
-                                    }
-
-                                    foreach (var item in PopupItems) {
-                                        if (item.Icon != null) {
-                                            item.Icon.UriSource = null;
-                                            item.Icon = null;
-                                        }
-                                    }
-                                    PopupItems.Clear();
-                                    GridPanel.Children.Clear();
-                                    Header.Visibility = Visibility.Collapsed;
-                                    HeaderText.Text = "";
-                                    _anyGroupDisplayed = false;
-
-                                    foreach (var task in _backgroundTasks.ToList()) {
-                                        if (task.IsCompleted) {
-                                            task.Dispose();
-                                            _backgroundTasks.Remove(task);
-                                        }
-                                    }
-                                    foreach (var task in _iconLoadingTasks.ToList()) {
-                                        if (task.IsCompleted) {
-                                            task.Dispose();
-                                            _iconLoadingTasks.Remove(task);
-                                        }
-                                    }
-
-                                    _groups = null;
-                                    _json = "";
-                                    _clickedItem = null;
-                                    _gridView = null;
+                            try {
+                                if (_gridView != null) {
+                                    _gridView.RightTapped -= GridView_RightTapped;
+                                    _gridView.DragItemsCompleted -= GridView_DragItemsCompleted;
+                                    _gridView.ItemClick -= GridView_ItemClick;
                                 }
-                                catch (Exception ex) {
-                                    Debug.WriteLine($"UI cleanup error: {ex.Message}");
+
+                                foreach (var item in PopupItems) {
+                                    if (item.Icon != null) {
+                                        item.Icon.UriSource = null;
+                                        item.Icon = null;
+                                    }
                                 }
+                                PopupItems.Clear();
+                                GridPanel.Children.Clear();
+                                Header.Visibility = Visibility.Collapsed;
+                                HeaderText.Text = "";
+                                _anyGroupDisplayed = false;
+
+                                foreach (var task in _backgroundTasks.ToList()) {
+                                    if (task.IsCompleted) { task.Dispose(); _backgroundTasks.Remove(task); }
+                                }
+                                foreach (var task in _iconLoadingTasks.ToList()) {
+                                    if (task.IsCompleted) { task.Dispose(); _iconLoadingTasks.Remove(task); }
+                                }
+
+                                _groups = null;
+                                _json = "";
+                                _clickedItem = null;
+                                _gridView = null;
+                            }
+                            catch (Exception ex) {
+                                Debug.WriteLine($"UI cleanup error: {ex.Message}");
+                            }
+                        }
+
+                        if (_wasLaunchedFromTaskbar) {
+                            AnimateWindowSlideDown(this.GetWindowHandle(), () => {
+                                DispatcherQueue.TryEnqueue(() => DoCleanup());
                             });
-                        });
-
+                        }
+                        else {
+                            DoCleanup();
+                        }
                     });
 
                     if (settings.UseGrayscaleIcon) {
@@ -1439,12 +1815,11 @@ UseLayoutRounding=""True""
                         _backgroundTasks.Add(task);
                     }
 
-                    _ = Task.Run(() => {
-                        GC.Collect(0, GCCollectionMode.Optimized);
-                    });
+                    _ = Task.Run(() => { GC.Collect(0, GCCollectionMode.Optimized); });
                 }
             }
-            else if (e.WindowActivationState == WindowActivationState.CodeActivated || e.WindowActivationState == WindowActivationState.PointerActivated) {
+            else if (e.WindowActivationState == WindowActivationState.CodeActivated ||
+                     e.WindowActivationState == WindowActivationState.PointerActivated) {
 
                 if (!_isLoaded) {
                     GridPanel.Opacity = 0;
@@ -1510,7 +1885,6 @@ UseLayoutRounding=""True""
                 });
             }
         }
-
 
         private void CleanupUISettings() {
             if (_isUISettingsSubscribed && _uiSettings != null) {
@@ -1730,7 +2104,7 @@ UseLayoutRounding=""True""
             }
             else if (extension == ".lnk") {
                 Path.GetFileNameWithoutExtension(filePath);
-              
+
             }
 
             return Path.GetFileNameWithoutExtension(filePath);

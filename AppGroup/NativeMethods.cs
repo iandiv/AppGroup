@@ -123,7 +123,13 @@ namespace AppGroup {
         #endregion
 
         #region Shell Icon
+        [DllImport("ole32.dll")]
+public static extern int CoInitializeEx(IntPtr pvReserved, int dwCoInit);
 
+[DllImport("ole32.dll")]
+public static extern void CoUninitialize();
+
+public const int COINIT_APARTMENTTHREADED = 0x2;
         public const uint IMAGE_ICON = 1;
         public const uint LR_LOADFROMFILE = 0x00000010;
         public const uint LR_DEFAULTSIZE = 0x00000040;
@@ -134,6 +140,7 @@ namespace AppGroup {
         public const uint SHGFI_ICON = 0x000000100;
         public const uint SHGFI_LARGEICON = 0x000000000;
         public const uint SHGFI_SMALLICON = 0x000000001;
+        public const uint SHGFI_USEFILEATTRIBUTES = 0x10;
         public const uint SHGFI_SYSICONINDEX = 0x4000;
         public const int SHIL_JUMBO = 0x4;
 
@@ -174,7 +181,7 @@ namespace AppGroup {
         public delegate IntPtr SubclassProc(
             IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
             IntPtr uIdSubclass, IntPtr dwRefData);
-
+        
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────
@@ -303,6 +310,11 @@ namespace AppGroup {
 
         // ─────────────────────────────────────────────────────────────────────
         #region P/Invoke — user32.dll
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool DrawIconEx(
+    IntPtr hdc, int xLeft, int yTop,
+    IntPtr hIcon, int cxWidth, int cyHeight,
+    int istepIfAniCur, IntPtr hbrFlickerFreeDraw, int diFlags);
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
@@ -791,17 +803,25 @@ namespace AppGroup {
                         }
                         break;
                     case TaskbarPosition.Left:
-                        x = autoHide
-                            ? mi.rcMonitor.left + spacing
-                            : mi.rcWork.left + spacing;
+                        x = mi.rcWork.left + spacing;
                         y = cursor.Y - windowHeight / 2;
+                        // Clamp vertically within work area
+                        if (y < mi.rcWork.top + spacing)
+                            y = mi.rcWork.top + spacing;
+                        if (y + windowHeight > mi.rcWork.bottom - spacing)
+                            y = mi.rcWork.bottom - windowHeight - spacing;
                         break;
+
                     case TaskbarPosition.Right:
-                        x = autoHide
-                            ? mi.rcMonitor.right - windowWidth - spacing
-                            : mi.rcWork.right - windowWidth - spacing;
+                        x = mi.rcWork.right - windowWidth - spacing;
                         y = cursor.Y - windowHeight / 2;
+                        // Clamp vertically within work area
+                        if (y < mi.rcWork.top + spacing)
+                            y = mi.rcWork.top + spacing;
+                        if (y + windowHeight > mi.rcWork.bottom - spacing)
+                            y = mi.rcWork.bottom - windowHeight - spacing;
                         break;
+
                     default:
                         y = autoHide
                             ? mi.rcMonitor.bottom - windowHeight - spacing

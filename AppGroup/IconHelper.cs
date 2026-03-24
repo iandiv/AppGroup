@@ -1,4 +1,5 @@
-﻿using Microsoft.UI.Dispatching;
+﻿using IWshRuntimeLibrary;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -14,6 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using Windows.Storage;
+using File = System.IO.File;
 using Image = Microsoft.UI.Xaml.Controls.Image;
 
 namespace AppGroup {
@@ -442,26 +444,35 @@ namespace AppGroup {
                 return null;
             }
         }
-
-        // Also modify the main ExtractIconAndSaveAsync method to use this resize function for all icons
+      
         public static async Task<string> ExtractIconAndSaveAsync(string filePath, string outputDirectory, TimeSpan? timeout = null) {
             timeout ??= TimeSpan.FromSeconds(3);
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
                 Debug.WriteLine($"File does not exist: {filePath}");
                 return null;
             }
+
             try {
+                // Warm up shell image list on calling thread
+                var shfi = new NativeMethods.SHFILEINFO();
+                NativeMethods.SHGetFileInfo(
+                    filePath, 0, ref shfi,
+                    (uint)Marshal.SizeOf(shfi),
+                    NativeMethods.SHGFI_SYSICONINDEX
+                );
+                Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+                NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
+                IntPtr hIcon = IntPtr.Zero;
+                imageList?.GetIcon(shfi.iIcon, 1, ref hIcon);
+                if (hIcon != IntPtr.Zero) NativeMethods.DestroyIcon(hIcon);
+
                 using var cancellationTokenSource = new CancellationTokenSource(timeout.Value);
                 return await Task.Run(async () => {
                     try {
                         Bitmap iconBitmap = null;
-                        string appName = string.Empty;
                         if (Path.GetExtension(filePath).ToLower() == ".lnk") {
-                            // Try to extract Windows app shortcut icon first
                             iconBitmap = await ExtractWindowsAppIconAsync(filePath, outputDirectory);
 
-
-                            // If Windows app icon extraction failed, fall back to the existing method
                             if (iconBitmap == null) {
                                 dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
                                 dynamic shortcut = shell.CreateShortcut(filePath);
@@ -478,8 +489,6 @@ namespace AppGroup {
                                 if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
                                     iconBitmap = ExtractIconWithoutArrow(targetPath);
                                 }
-
-                                //Use the Icon with arrow as fallback
                                 if (iconBitmap == null) {
                                     Icon icon = Icon.ExtractAssociatedIcon(filePath);
                                     iconBitmap = icon.ToBitmap();
@@ -488,14 +497,13 @@ namespace AppGroup {
                         }
                         else {
                             iconBitmap = ExtractIconWithoutArrow(filePath);
-
                         }
+
                         if (iconBitmap == null) {
                             Debug.WriteLine($"No icon found for file: {filePath}");
                             return null;
                         }
 
-                        //using (Bitmap resizedIcon = ResizeAndCropImageToSquare(iconBitmap, 200)) {
                         Directory.CreateDirectory(outputDirectory);
                         string iconFileName = GenerateUniqueIconFileName(filePath, iconBitmap);
                         string iconFilePath = Path.Combine(outputDirectory, iconFileName);
@@ -511,7 +519,6 @@ namespace AppGroup {
 
                         Debug.WriteLine($"Icon saved to: {iconFilePath}");
                         return iconFilePath;
-                        //}
                     }
                     catch (OperationCanceledException) {
                         Debug.WriteLine($"Icon extraction timed out for: {filePath}");
@@ -531,36 +538,80 @@ namespace AppGroup {
                 var result = NativeMethods.SHGetFileInfo(
                     filePath, 0, ref shfi,
                     (uint)Marshal.SizeOf(shfi),
-                    NativeMethods.SHGFI_SYSICONINDEX  // index only, no icon handle
+                    NativeMethods.SHGFI_SYSICONINDEX
                 );
 
                 if (result == IntPtr.Zero) return null;
 
                 Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
                 NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
-
                 if (imageList == null) return null;
 
                 IntPtr hIcon = IntPtr.Zero;
-                imageList.GetIcon(shfi.iIcon, 1, ref hIcon); // 1 = ILD_TRANSPARENT
-
+                imageList.GetIcon(shfi.iIcon, 1, ref hIcon);
                 if (hIcon == IntPtr.Zero) return null;
 
-                using (var icon = Icon.FromHandle(hIcon)) {
-                    var bmp = new Bitmap(256, 256);
-                    using (var g = Graphics.FromImage(bmp)) {
-                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                        g.DrawIcon(icon, new Rectangle(0, 0, 256, 256));
+                // DON'T use Icon.FromHandle().ToBitmap() — it always returns 32x32
+                // Instead draw via GDI directly at full 256x256
+                var bmp = new Bitmap(256, 256, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(bmp)) {
+                    g.Clear(System.Drawing.Color.Transparent);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+
+                    IntPtr hdc = g.GetHdc();
+                    try {
+                        NativeMethods.DrawIconEx(hdc, 0, 0, hIcon, 256, 256, 0, IntPtr.Zero, 0x0003);
                     }
-                    NativeMethods.DestroyIcon(hIcon);
-                    return bmp;
+                    finally {
+                        g.ReleaseHdc(hdc);
+                    }
                 }
+
+                NativeMethods.DestroyIcon(hIcon);
+                return bmp;
             }
             catch (Exception ex) {
                 Debug.WriteLine($"ExtractJumboIcon failed: {ex.Message}");
                 return null;
             }
         }
+        //public static Bitmap ExtractJumboIcon(string filePath) {
+        //    try {
+        //        var shfi = new NativeMethods.SHFILEINFO();
+        //        var result = NativeMethods.SHGetFileInfo(
+        //            filePath, 0, ref shfi,
+        //            (uint)Marshal.SizeOf(shfi),
+        //            NativeMethods.SHGFI_SYSICONINDEX  // index only, no icon handle
+        //        );
+
+        //        if (result == IntPtr.Zero) return null;
+
+        //        Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+        //        NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
+
+        //        if (imageList == null) return null;
+
+        //        IntPtr hIcon = IntPtr.Zero;
+        //        imageList.GetIcon(shfi.iIcon, 1, ref hIcon); // 1 = ILD_TRANSPARENT
+
+        //        if (hIcon == IntPtr.Zero) return null;
+
+        //        using (var icon = Icon.FromHandle(hIcon)) {
+        //            var bmp = new Bitmap(256, 256);
+        //            using (var g = Graphics.FromImage(bmp)) {
+        //                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        //                g.DrawIcon(icon, new Rectangle(0, 0, 256, 256));
+        //            }
+        //            NativeMethods.DestroyIcon(hIcon);
+        //            return bmp;
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"ExtractJumboIcon failed: {ex.Message}");
+        //        return null;
+        //    }
+        //}
 
 
         private static string GenerateUniqueIconFileName(string filePath, Bitmap iconBitmap) {
@@ -696,10 +747,25 @@ namespace AppGroup {
 
         private static Bitmap ExtractIconWithoutArrow(string targetPath) {
             try {
-                var jumbo = ExtractJumboIcon(targetPath);
-                if (jumbo != null) return jumbo;
+                Bitmap result = null;
 
-                // fallback
+                // SHGetImageList requires STA — force it
+                var thread = new System.Threading.Thread(() => {
+                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                    try {
+                        result = ExtractJumboIcon(targetPath);
+                    }
+                    finally {
+                        NativeMethods.CoUninitialize();
+                    }
+                });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                thread.Start();
+                thread.Join();
+
+                if (result != null) return result;
+
+                // Fallback: ExtractIconEx
                 IntPtr[] hIcons = new IntPtr[1];
                 uint count = NativeMethods.ExtractIconEx(targetPath, 0, hIcons, null, 1);
                 if (count > 0 && hIcons[0] != IntPtr.Zero) {
@@ -716,7 +782,6 @@ namespace AppGroup {
                 return null;
             }
         }
-
 
         private static BitmapImage CreateBitmapImageFromBitmap(Bitmap bitmap, DispatcherQueue dispatcher) {
             if (bitmap == null) return null;
@@ -1182,6 +1247,468 @@ namespace AppGroup {
                 throw;
             }
         }
+
+        //public static async Task<string> GetLnkIconAsync(string lnkPath) {
+        //    return await Task.Run(() => {
+        //        try {
+        //            var shell = new WshShell();
+        //            var shortcut = (IWshShortcut)shell.CreateShortcut(lnkPath);
+        //            string targetPath = Environment.ExpandEnvironmentVariables(shortcut.TargetPath?.Trim() ?? "");
+        //            string ext = Path.GetExtension(targetPath).ToLowerInvariant();
+
+        //            Bitmap result = null;
+
+        //            // For .exe targets use jumbo on the exe
+        //            if (ext == ".exe" && File.Exists(targetPath)) {
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        result = ExtractJumboIcon(targetPath);
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+
+        //            // For .msc/.cpl or if jumbo failed, use SHGetFileInfo on the resolved target
+        //            if (result == null) {
+        //                // Use resolved target if it exists, otherwise fall back to lnk
+        //                string iconSource = File.Exists(targetPath) ? targetPath : lnkPath;
+
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        result = ExtractJumboIcon(iconSource);
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+
+        //            // Final fallback — SHGFI on resolved target
+        //            if (result == null) {
+        //                string iconSource = File.Exists(targetPath) ? targetPath : lnkPath;
+        //                var shfi = new NativeMethods.SHFILEINFO();
+        //                IntPtr res = NativeMethods.SHGetFileInfo(
+        //                    iconSource, 0, ref shfi,
+        //                    (uint)Marshal.SizeOf(shfi),
+        //                    NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON);
+
+        //                if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+        //                    using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+        //                    result = icon.ToBitmap();
+        //                    NativeMethods.DestroyIcon(shfi.hIcon);
+        //                }
+        //            }
+
+        //            if (result == null) return null;
+
+        //            string outputDir = Path.Combine(
+        //                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        //                "AppGroup", "Icons");
+        //            Directory.CreateDirectory(outputDir);
+
+        //            string outPath = Path.Combine(outputDir,
+        //                Path.GetFileNameWithoutExtension(lnkPath) + "_shell.png");
+        //            result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            result.Dispose();
+        //            return outPath;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //    });
+        //}
+
+
+
+        //public static async Task<string> GetLnkIconAsync(string lnkPath) {
+        //    return await Task.Run(() => {
+        //        try {
+        //            var shell = new WshShell();
+        //            var shortcut = (IWshShortcut)shell.CreateShortcut(lnkPath);
+        //            string targetPath = Environment.ExpandEnvironmentVariables(shortcut.TargetPath?.Trim() ?? "");
+
+        //            // If TargetPath is empty, try resolving via IShellLink
+        //            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+        //                targetPath = ResolveLnkViaShellLink(lnkPath);
+        //            }
+
+        //            string ext = Path.GetExtension(targetPath).ToLowerInvariant();
+        //            string outputDir = Path.Combine(
+        //                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        //                "AppGroup", "Icons");
+        //            Directory.CreateDirectory(outputDir);
+
+        //            // Use target exe name for output, not lnk name + "_shell"
+        //            string baseName = File.Exists(targetPath)
+        //                ? Path.GetFileNameWithoutExtension(targetPath)
+        //                : Path.GetFileNameWithoutExtension(lnkPath);
+        //            string outPath = Path.Combine(outputDir, baseName + ".png");
+
+        //            if (File.Exists(outPath)) return outPath; // reuse if already extracted
+
+        //            Bitmap result = null;
+
+        //            if (ext == ".exe" && File.Exists(targetPath)) {
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        result = ExtractJumboIcon(targetPath);
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+        //            else {
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        var shfi = new NativeMethods.SHFILEINFO();
+        //                        uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON | 0x000008000;
+        //                        IntPtr res = NativeMethods.SHGetFileInfo(
+        //                            lnkPath, 0, ref shfi,
+        //                            (uint)Marshal.SizeOf(shfi), flags);
+        //                        if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+        //                            using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+        //                            result = new Bitmap(icon.ToBitmap());
+        //                            NativeMethods.DestroyIcon(shfi.hIcon);
+        //                        }
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+
+        //            if (result == null) return null;
+        //            result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            result.Dispose();
+        //            return outPath;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //    });
+        //}
+        public static async Task<string> GetLnkIconAsync(string lnkPath) {
+            return await Task.Run(() => {
+                try {
+                    var shell = new WshShell();
+                    var shortcut = (IWshShortcut)shell.CreateShortcut(lnkPath);
+                    string targetPath = Environment.ExpandEnvironmentVariables(shortcut.TargetPath?.Trim() ?? "");
+
+                    if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                        targetPath = ResolveLnkViaShellLink(lnkPath);
+                    }
+
+                    string ext = Path.GetExtension(targetPath).ToLowerInvariant();
+
+                    // For .exe targets — look up existing cache entry by target path
+                    if (ext == ".exe" && File.Exists(targetPath)) {
+                        string cacheKey = IconCache.ComputeFileCacheKey(targetPath);
+                        if (IconCache._iconCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath)) {
+                            return cachedPath;
+                        }
+
+                        // Not cached yet — extract and store under target's cache key
+                        Bitmap result = null;
+                        var thread = new System.Threading.Thread(() => {
+                            NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                            try {
+                                result = ExtractJumboIcon(targetPath);
+                            }
+                            finally {
+                                NativeMethods.CoUninitialize();
+                            }
+                        });
+                        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                        thread.Start();
+                        thread.Join();
+
+                        if (result == null) return null;
+
+                        string outputDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "AppGroup", "Icons");
+                        Directory.CreateDirectory(outputDir);
+
+                        string outPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(targetPath) + ".png");
+                        result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+                        result.Dispose();
+
+                        IconCache._iconCache[cacheKey] = outPath;
+                        IconCache.SaveIconCache();
+
+                        return outPath;
+                    }
+                    else {
+                        // Non-EXE (.msc, .cpl, etc.) — use lnk cache key
+                        string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
+                        if (IconCache._iconCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath)) {
+                            return cachedPath;
+                        }
+
+                        Bitmap result = null;
+                        var thread = new System.Threading.Thread(() => {
+                            NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                            try {
+                                var shfi = new NativeMethods.SHFILEINFO();
+                                uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON | 0x000008000;
+                                IntPtr res = NativeMethods.SHGetFileInfo(
+                                    lnkPath, 0, ref shfi,
+                                    (uint)Marshal.SizeOf(shfi), flags);
+                                if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+                                    using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+                                    result = new Bitmap(icon.ToBitmap());
+                                    NativeMethods.DestroyIcon(shfi.hIcon);
+                                }
+                            }
+                            finally {
+                                NativeMethods.CoUninitialize();
+                            }
+                        });
+                        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                        thread.Start();
+                        thread.Join();
+
+                        if (result == null) return null;
+
+                        string outputDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "AppGroup", "Icons");
+                        Directory.CreateDirectory(outputDir);
+
+                        string outPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(lnkPath) + ".png");
+                        result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+                        result.Dispose();
+
+                        IconCache._iconCache[cacheKey] = outPath;
+                        IconCache.SaveIconCache();
+
+                        return outPath;
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+                    return null;
+                }
+            });
+        }
+
+        // Resolves .lnk target via COM IShellLink when WshShortcut fails
+        private static string ResolveLnkViaShellLink(string lnkPath) {
+            try {
+                var shellLinkType = Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"));
+                dynamic shellLink = Activator.CreateInstance(shellLinkType);
+                var persistFile = (System.Runtime.InteropServices.ComTypes.IPersistFile)shellLink;
+                persistFile.Load(lnkPath, 0);
+
+                var sb = new System.Text.StringBuilder(260);
+                shellLink.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
+                string resolved = Environment.ExpandEnvironmentVariables(sb.ToString().Trim());
+
+                return File.Exists(resolved) ? resolved : string.Empty;
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"[ResolveLnkViaShellLink] {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        //        public static async Task<string> GetLnkIconAsync(string lnkPath) {
+        //    return await Task.Run(() => {
+        //        try {
+        //            var shell = new WshShell();
+        //            var shortcut = (IWshShortcut)shell.CreateShortcut(lnkPath);
+        //            string targetPath = Environment.ExpandEnvironmentVariables(shortcut.TargetPath?.Trim() ?? "");
+        //            string ext = Path.GetExtension(targetPath).ToLowerInvariant();
+
+        //            string outputDir = Path.Combine(
+        //                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        //                "AppGroup", "Icons");
+        //            Directory.CreateDirectory(outputDir);
+        //            string outPath = Path.Combine(outputDir,
+        //                Path.GetFileNameWithoutExtension(lnkPath) + "_shell.png");
+        //            if (File.Exists(outPath)) File.Delete(outPath);
+
+        //            Bitmap result = null;
+
+        //            if (ext == ".exe" && File.Exists(targetPath)) {
+        //                // EXE target — use jumbo, no arrow
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        result = ExtractJumboIcon(targetPath);
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+        //            else {
+        //                // Non-EXE target (.msc, .cpl, etc.) — use lnk icon with arrow
+        //                var thread = new System.Threading.Thread(() => {
+        //                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                    try {
+        //                        var shfi = new NativeMethods.SHFILEINFO();
+        //                        uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON | 0x000008000; // SHGFI_LINKOVERLAY
+        //                        IntPtr res = NativeMethods.SHGetFileInfo(
+        //                            lnkPath, 0, ref shfi,
+        //                            (uint)Marshal.SizeOf(shfi), flags);
+        //                        if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+        //                            using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+        //                            result = new Bitmap(icon.ToBitmap());
+        //                            NativeMethods.DestroyIcon(shfi.hIcon);
+        //                        }
+        //                    }
+        //                    finally {
+        //                        NativeMethods.CoUninitialize();
+        //                    }
+        //                });
+        //                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //                thread.Start();
+        //                thread.Join();
+        //            }
+
+        //            if (result == null) return null;
+
+        //            result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            result.Dispose();
+        //            return outPath;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //    });
+        //}
+        //public static async Task<string> GetLnkIconAsync(string lnkPath) {
+        //    return await Task.Run(() => {
+        //        try {
+        //            // Delete old cached version to force fresh extraction
+        //            string outputDir = Path.Combine(
+        //                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        //                "AppGroup", "Icons");
+        //            Directory.CreateDirectory(outputDir);
+        //            string outPath = Path.Combine(outputDir,
+        //                Path.GetFileNameWithoutExtension(lnkPath) + "_shell.png");
+        //            if (File.Exists(outPath)) File.Delete(outPath);
+
+        //            Bitmap result = null;
+
+        //            var thread = new System.Threading.Thread(() => {
+        //                NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                try {
+        //                    // Use SHGFI_ICON | SHGFI_LARGEICON | SHGFI_LINKOVERLAY on the .lnk
+        //                    var shfi = new NativeMethods.SHFILEINFO();
+        //                    uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON | 0x000000008000; // SHGFI_LINKOVERLAY
+        //                    IntPtr res = NativeMethods.SHGetFileInfo(
+        //                        lnkPath, 0, ref shfi,
+        //                        (uint)Marshal.SizeOf(shfi), flags);
+
+        //                    if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+        //                        using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+        //                        result = new Bitmap(icon.ToBitmap());
+        //                        NativeMethods.DestroyIcon(shfi.hIcon);
+        //                    }
+        //                }
+        //                finally {
+        //                    NativeMethods.CoUninitialize();
+        //                }
+        //            });
+        //            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //            thread.Start();
+        //            thread.Join();
+
+        //            if (result == null) return null;
+
+        //            result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            result.Dispose();
+        //            return outPath;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //    });
+        //}
+        //public static async Task<string> GetLnkIconAsync(string lnkPath) {
+        //    return await Task.Run(() => {
+        //        try {
+        //            Bitmap result = null;
+
+        //            // Use STA thread — SHGetImageList requires it
+        //            var thread = new System.Threading.Thread(() => {
+        //                NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+        //                try {
+        //                    // Pass the .lnk directly — Windows resolves the correct icon
+        //                    result = ExtractJumboIcon(lnkPath);
+        //                }
+        //                finally {
+        //                    NativeMethods.CoUninitialize();
+        //                }
+        //            });
+        //            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        //            thread.Start();
+        //            thread.Join();
+
+        //            // Fallback
+        //            if (result == null) {
+        //                var shfi = new NativeMethods.SHFILEINFO();
+        //                IntPtr res = NativeMethods.SHGetFileInfo(
+        //                    lnkPath, 0, ref shfi,
+        //                    (uint)Marshal.SizeOf(shfi),
+        //                    NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON);
+
+        //                if (res != IntPtr.Zero && shfi.hIcon != IntPtr.Zero) {
+        //                    using var icon = System.Drawing.Icon.FromHandle(shfi.hIcon);
+        //                    result = icon.ToBitmap();
+        //                    NativeMethods.DestroyIcon(shfi.hIcon);
+        //                }
+        //            }
+
+        //            if (result == null) return null;
+
+        //            string outputDir = Path.Combine(
+        //                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        //                "AppGroup", "Icons");
+        //            Directory.CreateDirectory(outputDir);
+
+        //            string outPath = Path.Combine(outputDir,
+        //                Path.GetFileNameWithoutExtension(lnkPath) + "_shell.png");
+        //            result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            result.Dispose();
+        //            return outPath;
+        //        }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"[LNK Icon] Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //    });
+        //}
+
+
         public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
             try {
                 if (selectedItems == null || selectedSize <= 0) {
@@ -1229,9 +1756,12 @@ namespace AppGroup {
 
                             System.Drawing.Bitmap iconBitmap = null;
 
-                            // 1. Always try jumbo first from actual file (native 256x256)
+                            // 1. Always try cached PNG first (already correct size)
                             if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
-                                iconBitmap = ExtractJumboIcon(filePath);
+                                string cachedPath = await IconCache.GetIconPathAsync(filePath);
+                                if (!string.IsNullOrEmpty(cachedPath) && File.Exists(cachedPath)) {
+                                    iconBitmap = new System.Drawing.Bitmap(cachedPath);
+                                }
                             }
 
                             // 2. Fallback: custom icon path
@@ -1239,31 +1769,9 @@ namespace AppGroup {
                                 iconBitmap = new System.Drawing.Bitmap(iconPath);
                             }
 
-                            // 3. Fallback: .lnk / standard extraction
+                            // 3. Last resort: jumbo extraction
                             if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
-                                if (Path.GetExtension(filePath).ToLower() == ".lnk") {
-                                    iconBitmap = await ExtractWindowsAppIconAsync(filePath, tempFolder);
-                                    if (iconBitmap == null) {
-                                        dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
-                                        dynamic shortcut = shell.CreateShortcut(filePath);
-                                        string shortcutIconPath = shortcut.IconLocation;
-                                        string targetPath = shortcut.TargetPath;
-                                        if (!string.IsNullOrEmpty(shortcutIconPath) && shortcutIconPath != ",") {
-                                            string[] iconInfo = shortcutIconPath.Split(',');
-                                            string actualIconPath = iconInfo[0].Trim();
-                                            int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
-                                            if (File.Exists(actualIconPath))
-                                                iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
-                                        }
-                                        if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath))
-                                            iconBitmap = ExtractIconWithoutArrow(targetPath);
-                                        if (iconBitmap == null)
-                                            iconBitmap = Icon.ExtractAssociatedIcon(filePath)?.ToBitmap();
-                                    }
-                                }
-                                else {
-                                    iconBitmap = ExtractIconWithoutArrow(filePath);
-                                }
+                                iconBitmap = ExtractJumboIcon(filePath);
                             }
 
                             if (iconBitmap != null) {
@@ -1303,6 +1811,138 @@ namespace AppGroup {
                 return null;
             }
         }
+        //public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
+        //    try {
+        //        if (selectedItems == null || selectedSize <= 0) {
+        //            throw new ArgumentException("Invalid selected items or grid size.");
+        //        }
+        //        selectedItems = selectedItems.Take(selectedSize * selectedSize).ToList();
+        //        int finalSize = 256;
+        //        int gridSize;
+        //        int cellSize;
+        //        if (selectedItems.Count == 2) {
+        //            gridSize = 2;
+        //            cellSize = finalSize / 2;
+        //        }
+        //        else {
+        //            gridSize = (int)Math.Ceiling(Math.Sqrt(selectedItems.Count));
+        //            cellSize = finalSize / gridSize;
+        //        }
+        //        string tempFolder = Path.Combine(Path.GetTempPath(), "GridIconTemp");
+        //        Directory.CreateDirectory(tempFolder);
+        //        string outputPath = Path.Combine(tempFolder, "grid_icon.png");
+
+        //        using (var bitmap = new System.Drawing.Bitmap(finalSize, finalSize)) {
+        //            using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) {
+        //                graphics.Clear(System.Drawing.Color.Transparent);
+        //                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        //                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+        //                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+
+        //                for (int i = 0; i < selectedItems.Count; i++) {
+        //                    var item = selectedItems[i];
+        //                    string iconPath = !string.IsNullOrEmpty(item.IconPath) ? item.IconPath : item.Icon;
+        //                    string filePath = item.FilePath;
+
+        //                    int x, y;
+        //                    if (selectedItems.Count == 2) {
+        //                        if (i == 0) { x = 0; y = cellSize; }
+        //                        else { x = cellSize; y = 0; }
+        //                    }
+        //                    else {
+        //                        int row = i / gridSize;
+        //                        int col = i % gridSize;
+        //                        x = col * cellSize;
+        //                        y = row * cellSize;
+        //                    }
+
+        //                    System.Drawing.Bitmap iconBitmap = null;
+
+        //                    // 1. Always try jumbo first from actual file (native 256x256)
+        //                    if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                        iconBitmap = ExtractJumboIcon(filePath);
+        //                    }
+
+        //                    // 2. Fallback: custom icon path
+        //                    if (iconBitmap == null && !string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
+        //                        iconBitmap = new System.Drawing.Bitmap(iconPath);
+        //                    }
+
+        //                    // 3. Fallback: .lnk / standard extraction
+        //                    if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                        if (Path.GetExtension(filePath).ToLower() == ".lnk") {
+        //                            iconBitmap = await ExtractWindowsAppIconAsync(filePath, tempFolder);
+        //                            if (iconBitmap == null) {
+        //                                dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
+        //                                dynamic shortcut = shell.CreateShortcut(filePath);
+        //                                string shortcutIconPath = shortcut.IconLocation;
+        //                                string targetPath = shortcut.TargetPath;
+        //                                if (!string.IsNullOrEmpty(shortcutIconPath) && shortcutIconPath != ",") {
+        //                                    string[] iconInfo = shortcutIconPath.Split(',');
+        //                                    string actualIconPath = iconInfo[0].Trim();
+        //                                    int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+        //                                    if (File.Exists(actualIconPath))
+        //                                        iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
+        //                                }
+        //                                if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath))
+        //                                    iconBitmap = ExtractIconWithoutArrow(targetPath);
+        //                                if (iconBitmap == null)
+        //                                    iconBitmap = Icon.ExtractAssociatedIcon(filePath)?.ToBitmap();
+        //                            }
+        //                        }
+        //                        else {
+        //                            iconBitmap = ExtractIconWithoutArrow(filePath);
+        //                        }
+        //                    }
+        //                    if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                        try {
+        //                            iconBitmap = Icon.ExtractAssociatedIcon(filePath)?.ToBitmap();
+        //                        }
+        //                        catch (Exception ex) {
+        //                            Debug.WriteLine($"Final fallback icon extraction failed: {ex.Message}");
+        //                        }
+        //                    }
+
+        //                    if (iconBitmap != null) {
+        //                        try {
+        //                            int padding = 5;
+        //                            int drawSize = cellSize - (padding * 2);
+        //                            graphics.DrawImage(iconBitmap, new System.Drawing.Rectangle(
+        //                                x + padding, y + padding, drawSize, drawSize));
+        //                        }
+        //                        catch (Exception ex) {
+        //                            Debug.WriteLine($"Error processing icon {i}: {ex.Message}");
+        //                        }
+        //                        finally {
+        //                            iconBitmap?.Dispose();
+        //                        }
+        //                    }
+        //                    else {
+        //                        Debug.WriteLine($"Failed to get icon for file: {item.FilePath}");
+        //                    }
+        //                }
+
+        //                bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            }
+        //        }
+
+        //        StorageFile iconFile = await StorageFile.GetFileFromPathAsync(outputPath);
+        //        BitmapImage gridIcon = new BitmapImage();
+        //        using (var stream = await iconFile.OpenReadAsync()) {
+        //            await gridIcon.SetSourceAsync(stream);
+        //        }
+        //        iconPreviewImage.Source = gridIcon;
+        //        iconPreviewBorder.Visibility = Visibility.Visible;
+        //        return outputPath;
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Grid icon creation error: {ex.Message}");
+        //        return null;
+        //    }
+        //}
+
+
+
     }
 
 

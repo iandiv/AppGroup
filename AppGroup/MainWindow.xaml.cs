@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -98,10 +99,15 @@ namespace AppGroup {
         private readonly IconHelper _iconHelper;
         private DispatcherTimer debounceTimer;
         private SupportDialogHelper _supportDialogHelper;
+        private bool _isReordering = false;
+        private readonly Dictionary<int, string> _tempDragFiles = new Dictionary<int, string>();
         private IntPtr _hwnd;
         private NativeMethods.SubclassProc _subclassProc;
         private const int SUBCLASS_ID = 2;
         private bool _wasHidden = false;
+
+        // Add field
+        private CancellationTokenSource _dragCleanupCts;
         public MainWindow() {
             InitializeComponent();
             _hwnd = WindowNative.GetWindowHandle(this);
@@ -422,7 +428,12 @@ namespace AppGroup {
                                                 icon = await IconHelper.GetUrlFileIconAsync(filePath);
                                             }
                                             else {
-                                                icon = await IconCache.GetIconPathAsync(filePath);
+                                                string resolvedPath = filePath;
+
+                                                if (Path.GetExtension(filePath).Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+                                                    resolvedPath = ResolveLnkTarget(filePath);
+
+                                                icon = await IconCache.GetIconPathAsync(resolvedPath);
                                             }
 
                                             return icon;
@@ -460,68 +471,51 @@ namespace AppGroup {
                 _semaphore.Release();
             }
         }
-        private bool _isReordering = false;
 
-        // Add this field to your MainWindow class
-        private readonly Dictionary<int, string> _tempDragFiles = new Dictionary<int, string>();
-
+        private void TouchFile(string path) {
+            var now = DateTime.Now;
+            File.SetCreationTime(path, now);
+            File.SetLastWriteTime(path, now);
+            File.SetLastAccessTime(path, now);
+        }
         private async void GroupListView_DragItemsStarting(object sender, DragItemsStartingEventArgs e) {
-            // Set flag to prevent file watcher from interfering during reorder
             _isReordering = true;
 
-            // Store the dragged item for reference
             if (e.Items.Count > 0 && e.Items[0] is GroupItem draggedItem) {
+                if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) {
+                    e.Data.RequestedOperation = DataPackageOperation.Move;
+                    return;
+                }
+
                 e.Data.Properties.Add("DraggedGroupId", draggedItem.GroupId);
+                e.Data.RequestedOperation = DataPackageOperation.Copy | DataPackageOperation.Link;
 
-                // Always set basic data for internal reordering
-                e.Data.RequestedOperation = DataPackageOperation.Copy | DataPackageOperation.Move | DataPackageOperation.Link;
+                string appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
+                string fullShortcutPath = Path.GetFullPath(Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk"));
 
-                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
-                // Prepare file data for external drops
-                //string shortcutPath = Path.Combine("Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk");
-                //string fullShortcutPath = Path.GetFullPath(shortcutPath);
-                string shortcutPath = Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk");
-                string fullShortcutPath = Path.GetFullPath(shortcutPath);
                 if (File.Exists(fullShortcutPath)) {
                     try {
-                        // Copy to temp location
-                        string tempDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup", "DragTemp");
+                        string tempDir = Path.Combine(appDataPath, "DragTemp");
                         Directory.CreateDirectory(tempDir);
+
+                        _dragCleanupCts?.Cancel();
+                        _dragCleanupCts = new CancellationTokenSource();
+
                         string tempShortcutPath = Path.Combine(tempDir, $"{draggedItem.GroupName}.lnk");
 
-                        if (File.Exists(tempShortcutPath)) {
-                            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                            tempShortcutPath = Path.Combine(tempDir, $"{draggedItem.GroupName}_{timestamp}.lnk");
-                        }
-
                         File.Copy(fullShortcutPath, tempShortcutPath, true);
+                        TouchFile(tempShortcutPath);
+                        Debug.WriteLine($"Temp exists after copy: {File.Exists(tempShortcutPath)} — {tempShortcutPath}");
                         _tempDragFiles[draggedItem.GroupId] = tempShortcutPath;
 
-                        // Set text data immediately (this won't break reordering)
                         e.Data.SetText(fullShortcutPath);
 
-                        // Use SetDataProvider for StorageItems - only provides data when external target requests it
-                        e.Data.SetDataProvider(StandardDataFormats.StorageItems, async (request) => {
-                            var deferral = request.GetDeferral();
-                            try {
-                                var tempFolder = await StorageFolder.GetFolderFromPathAsync(tempDir);
-                                var tempFile = await tempFolder.GetFileAsync(Path.GetFileName(tempShortcutPath));
-                                request.SetData(new List<IStorageItem> { tempFile });
-                                System.Diagnostics.Debug.WriteLine($"Provided storage items for external drop: {tempShortcutPath}");
-                            }
-                            catch (Exception ex) {
-                                System.Diagnostics.Debug.WriteLine($"Error providing storage items: {ex.Message}");
-                            }
-                            finally {
-                                deferral.Complete();
-                            }
-                        });
-
-                        System.Diagnostics.Debug.WriteLine($"Prepared conditional drag data for: {tempShortcutPath}");
+                        var storageFile = await StorageFile.GetFileFromPathAsync(tempShortcutPath);
+                        e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
                     }
                     catch (Exception ex) {
-                        System.Diagnostics.Debug.WriteLine($"Error preparing drag data: {ex.Message}");
+                        Debug.WriteLine($"Error preparing drag data: {ex.Message}");
+                        throw;
                     }
                 }
             }
@@ -529,45 +523,107 @@ namespace AppGroup {
 
         private async void GroupListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
             try {
-                // Clean up temp files for all dragged items
+                var itemsToClean = new List<string>();
+
                 foreach (var item in args.Items) {
-                    if (item is GroupItem groupItem && _tempDragFiles.ContainsKey(groupItem.GroupId)) {
-                        string tempFilePath = _tempDragFiles[groupItem.GroupId];
-                        if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath)) {
-                            try {
-                                File.Delete(tempFilePath);
-                                System.Diagnostics.Debug.WriteLine($"Cleaned up temp file: {tempFilePath}");
-                            }
-                            catch (Exception cleanupEx) {
-                                System.Diagnostics.Debug.WriteLine($"Error cleaning up temp file: {cleanupEx.Message}");
-                            }
-                        }
+                    if (item is GroupItem groupItem && _tempDragFiles.TryGetValue(groupItem.GroupId, out var tempFilePath)) {
+                        itemsToClean.Add(tempFilePath);
                         _tempDragFiles.Remove(groupItem.GroupId);
                     }
                 }
 
-                // Reset the reordering flag
                 _isReordering = false;
 
-                if (args.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move) {
-                    // Get the current order of items in the ListView
+                if (args.DropResult == DataPackageOperation.Move) {
                     var reorderedItems = new List<GroupItem>();
                     for (int i = 0; i < GroupListView.Items.Count; i++) {
-                        if (GroupListView.Items[i] is GroupItem item) {
+                        if (GroupListView.Items[i] is GroupItem item)
                             reorderedItems.Add(item);
-                        }
                     }
-
-                    // Update the JSON file with the new order
                     await UpdateJsonWithNewOrderAsync(reorderedItems);
                 }
+
+                var cleanupToken = _dragCleanupCts?.Token ?? CancellationToken.None;
+
+                _ = Task.Run(() => {
+                    foreach (var tempPath in itemsToClean) {
+                        if (string.IsNullOrEmpty(tempPath) || !File.Exists(tempPath)) continue;
+
+                        var copyTime = File.GetLastWriteTime(tempPath);
+                        var tcs = new TaskCompletionSource<bool>();
+
+                        using var watcher = new FileSystemWatcher(Path.GetDirectoryName(tempPath), Path.GetFileName(tempPath)) {
+                            NotifyFilter = NotifyFilters.LastAccess | NotifyFilters.LastWrite
+                        };
+
+                        watcher.Changed += (s, e) => {
+                            var accessTime = File.GetLastAccessTime(tempPath);
+                            if (accessTime > copyTime)
+                                tcs.TrySetResult(true);
+                        };
+                        watcher.Deleted += (s, e) => tcs.TrySetResult(false);
+                        cleanupToken.Register(() => tcs.TrySetResult(false));
+                        watcher.EnableRaisingEvents = true;
+
+                        tcs.Task.Wait();
+
+                        if (!tcs.Task.Result || !File.Exists(tempPath)) continue;
+
+                        try {
+                            using var fs = File.Open(tempPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                            fs.Close();
+                            File.Delete(tempPath);
+                        }
+                        catch (IOException) { }
+                    }
+                });
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error during drag completion: {ex.Message}");
-                // Reload groups to restore correct state
                 _ = LoadGroupsAsync();
             }
         }
+        //private async void GroupListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
+        //    try {
+        //        // Clean up temp files for all dragged items
+        //        foreach (var item in args.Items) {
+        //            if (item is GroupItem groupItem && _tempDragFiles.ContainsKey(groupItem.GroupId)) {
+        //                string tempFilePath = _tempDragFiles[groupItem.GroupId];
+        //                if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath)) {
+        //                    try {
+        //                        File.Delete(tempFilePath);
+        //                        System.Diagnostics.Debug.WriteLine($"Cleaned up temp file: {tempFilePath}");
+        //                    }
+        //                    catch (Exception cleanupEx) {
+        //                        System.Diagnostics.Debug.WriteLine($"Error cleaning up temp file: {cleanupEx.Message}");
+        //                    }
+        //                }
+        //                _tempDragFiles.Remove(groupItem.GroupId);
+        //            }
+        //        }
+
+        //        // Reset the reordering flag
+        //        _isReordering = false;
+
+        //        if (args.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move) {
+        //            // Get the current order of items in the ListView
+        //            var reorderedItems = new List<GroupItem>();
+        //            for (int i = 0; i < GroupListView.Items.Count; i++) {
+        //                if (GroupListView.Items[i] is GroupItem item) {
+        //                    reorderedItems.Add(item);
+        //                }
+        //            }
+
+        //            // Update the JSON file with the new order
+        //            await UpdateJsonWithNewOrderAsync(reorderedItems);
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error during drag completion: {ex.Message}");
+        //        // Reload groups to restore correct state
+        //        _ = LoadGroupsAsync();
+        //    }
+        //}
 
         private async Task UpdateJsonWithNewOrderAsync(List<GroupItem> reorderedItems) {
             try {
@@ -861,63 +917,137 @@ namespace AppGroup {
                 );
                 Directory.CreateDirectory(outputDirectory);
 
-                var iconTasks = paths
-                    .Where(p => p.Value != null)
-                    .Select(async path => {
-                        string filePath = path.Key;
-                        string tooltip = path.Value["tooltip"]?.GetValue<string>();
-                        string args = path.Value["args"]?.GetValue<string>();
-                        string customIcon = path.Value["icon"]?.GetValue<string>(); // Get custom icon from JSON
+              
+                var iconPaths = new List<string>();
+                foreach (var path in paths.Where(p => p.Value != null)) {
+                    string filePath = path.Key;
+                    string tooltip = path.Value["tooltip"]?.GetValue<string>();
+                    string args = path.Value["args"]?.GetValue<string>();
+                    string customIcon = path.Value["icon"]?.GetValue<string>();
 
-                        groupItem.Tooltips[filePath] = tooltip;
-                        groupItem.Args[filePath] = args;
-                        groupItem.CustomIcons[filePath] = customIcon; // Store custom icon
+                    groupItem.Tooltips[filePath] = tooltip;
+                    groupItem.Args[filePath] = args;
+                    groupItem.CustomIcons[filePath] = customIcon;
 
-                        // Use custom icon if available and exists, otherwise use cached icon
-                        if (!string.IsNullOrEmpty(customIcon) && File.Exists(customIcon)) {
-                            return customIcon;
+                    string iconResult = null;
+
+                    if (!string.IsNullOrEmpty(customIcon) && File.Exists(customIcon)) {
+                        iconResult = customIcon;
+                    }
+                    else {
+                        string cachedIconPath;
+                        if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
+                            cachedIconPath = await IconHelper.GetUrlFileIconAsync(filePath);
                         }
                         else {
-                            // Force icon regeneration if not exists
-                            string cachedIconPath;
-                            if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase)) {
-                                cachedIconPath = await IconHelper.GetUrlFileIconAsync(filePath);
-                            }
-                            else {
-                                cachedIconPath = await IconCache.GetIconPathAsync(filePath);
-                            }
-                            // Additional verification to ensure icon is actually generated
-                            if (string.IsNullOrEmpty(cachedIconPath) || !File.Exists(cachedIconPath)) {
-                                cachedIconPath = await ReGenerateIconAsync(filePath, outputDirectory);
-                            }
+                            string resolvedPath = filePath;
 
-                            return cachedIconPath;
+                            if (Path.GetExtension(filePath).Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+                                resolvedPath = ResolveLnkTarget(filePath);
+
+                            cachedIconPath = await IconCache.GetIconPathAsync(resolvedPath);
                         }
-                    })
-                    .ToList();
 
-                var iconPaths = await Task.WhenAll(iconTasks);
-                var validIconPaths = iconPaths.Where(p => !string.IsNullOrEmpty(p) && File.Exists(p)).ToList();
+                        if (string.IsNullOrEmpty(cachedIconPath) || !File.Exists(cachedIconPath)) {
+                            cachedIconPath = await ReGenerateIconAsync(filePath, outputDirectory);
+                        }
 
-                // Limit to 7 icons
+                        iconResult = cachedIconPath;
+                    }
+
+                    if (!string.IsNullOrEmpty(iconResult)) iconPaths.Add(iconResult);
+                }
+
+                var validIconPaths = iconPaths.Where(p => File.Exists(p)).ToList();
                 int maxIconsToShow = 7;
                 groupItem.PathIcons.AddRange(validIconPaths.Take(maxIconsToShow));
                 groupItem.AdditionalIconsCount = Math.Max(0, validIconPaths.Count - maxIconsToShow);
+
             }
 
             return groupItem;
         }
+
+        private static string ResolveLnkTarget(string lnkPath) {
+            try {
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                dynamic shell = Activator.CreateInstance(shellType);
+                var shortcut = shell.CreateShortcut(lnkPath);
+                string target = shortcut.TargetPath;
+                return File.Exists(target) ? target : lnkPath;
+            }
+            catch {
+                return lnkPath;
+            }
+        }
+        public static async Task DiagnoseIconAsync(string filePath) {
+            Debug.WriteLine($"=== ICON DIAGNOSIS FOR: {filePath} ===");
+
+            // Step 1: Check SHIL_JUMBO raw
+            var shfi = new NativeMethods.SHFILEINFO();
+            var result = NativeMethods.SHGetFileInfo(
+                filePath, 0, ref shfi,
+                (uint)Marshal.SizeOf(shfi),
+                NativeMethods.SHGFI_SYSICONINDEX
+            );
+            Debug.WriteLine($"SHGetFileInfo result: {result}, iIcon: {shfi.iIcon}");
+
+            // Step 2: Check image list
+            Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+            NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
+            Debug.WriteLine($"ImageList null: {imageList == null}");
+
+            // Step 3: Check hIcon
+            IntPtr hIcon = IntPtr.Zero;
+            imageList?.GetIcon(shfi.iIcon, 1, ref hIcon);
+            Debug.WriteLine($"hIcon: {hIcon}");
+
+            // Step 4: Save raw bitmap to desktop to SEE what we actually get
+            if (hIcon != IntPtr.Zero) {
+                var bmp = new Bitmap(256, 256, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(bmp)) {
+                    g.Clear(System.Drawing.Color.Red); // Red bg so we see what's drawn
+                    IntPtr hdc = g.GetHdc();
+                    NativeMethods.DrawIconEx(hdc, 0, 0, hIcon, 256, 256, 0, IntPtr.Zero, 0x0003);
+                    g.ReleaseHdc(hdc);
+                }
+                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string savePath = Path.Combine(desktop, "icon_test.png");
+                bmp.Save(savePath);
+                Debug.WriteLine($"Saved test bitmap to: {savePath}");
+                NativeMethods.DestroyIcon(hIcon);
+            }
+
+            // Step 5: Also try ExtractIconEx directly
+            IntPtr[] hIcons = new IntPtr[1];
+            uint count = NativeMethods.ExtractIconEx(filePath, 0, hIcons, null, 1);
+            Debug.WriteLine($"ExtractIconEx count: {count}, hIcon: {hIcons[0]}");
+            if (hIcons[0] != IntPtr.Zero) {
+                using (var icon = System.Drawing.Icon.FromHandle(hIcons[0])) {
+                    Debug.WriteLine($"ExtractIconEx icon size: {icon.Width}x{icon.Height}");
+                }
+                NativeMethods.DestroyIcon(hIcons[0]);
+            }
+        }
+
         private async Task<string> ReGenerateIconAsync(string filePath, string outputDirectory) {
             try {
-                // Force regeneration of icon
-                var regeneratedIconPath = await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-                if (regeneratedIconPath != null && File.Exists(regeneratedIconPath)) {
-                    // Compute cache key and update cache
-                    string cacheKey = IconCache.ComputeFileCacheKey(filePath);
-                    IconCache._iconCache[cacheKey] = regeneratedIconPath;
+               await DiagnoseIconAsync(filePath);
+                // First remove stale cache entry to force re-extraction
+                string cacheKey = IconCache.ComputeFileCacheKey(filePath);
+                if (IconCache._iconCache.ContainsKey(cacheKey)) {
+                    IconCache._iconCache.Remove(cacheKey);
                     IconCache.SaveIconCache();
+                }
+                string resolvedPath = filePath;
 
+                if (Path.GetExtension(filePath).Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+                    resolvedPath = ResolveLnkTarget(filePath);
+
+                // Now get via cache which internally calls ExtractIconAndSaveAsync with warm-up
+                string regeneratedIconPath = await IconCache.GetIconPathAsync(resolvedPath);
+
+                if (!string.IsNullOrEmpty(regeneratedIconPath) && File.Exists(regeneratedIconPath)) {
                     return regeneratedIconPath;
                 }
             }

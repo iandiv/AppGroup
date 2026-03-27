@@ -1,274 +1,221 @@
-﻿
-using IWshRuntimeLibrary;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml.Media.Imaging;
+﻿using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using File = System.IO.File;
-namespace AppGroup
-{
 
+namespace AppGroup {
     public static class IconCache {
-        public static  Dictionary<string, string> _iconCache = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> _iconCache = new Dictionary<string, string>();
         private static readonly string CacheFilePath = GetCacheFilePath();
+        private static readonly object _cacheLock = new object();
+
+        // Per-file semaphores — concurrent callers for the same source file
+        // wait for the first extraction rather than all extracting in parallel.
+        private static readonly Dictionary<string, SemaphoreSlim> _extractionLocks
+            = new Dictionary<string, SemaphoreSlim>();
+        private static readonly object _extractionLocksLock = new object();
 
         static IconCache() {
             LoadIconCache();
         }
 
+        // ── private helpers ───────────────────────────────────────────────────
+
         private static string GetCacheFilePath() {
             string folder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string appGroupFolder = Path.Combine(folder, "AppGroup");
-            Directory.CreateDirectory(appGroupFolder); 
+            Directory.CreateDirectory(appGroupFolder);
             return Path.Combine(appGroupFolder, "icon_cache.json");
         }
 
         private static void LoadIconCache() {
             try {
-                if (File.Exists(CacheFilePath)) {
-                    string json = File.ReadAllText(CacheFilePath);
-                    var cacheData = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-
-                    if (cacheData != null) {
-                        bool anyPruned = false;
-                        foreach (var kvp in cacheData) {
-                            if (!string.IsNullOrEmpty(kvp.Value) && File.Exists(kvp.Value)) {
-                                _iconCache[kvp.Key] = kvp.Value;
-                            }
-                            else {
-                                anyPruned = true; // stale entry detected
-                            }
-                        }
-                        if (anyPruned) {
-                            SaveIconCache(); // flush pruned entries so JSON stays in sync
-                        }
+                if (!File.Exists(CacheFilePath)) return;
+                string json = File.ReadAllText(CacheFilePath);
+                var cacheData = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                if (cacheData == null) return;
+                lock (_cacheLock) {
+                    _iconCache.Clear();
+                    foreach (var kvp in cacheData) {
+                        // Only keep entries whose PNG still exists on disk
+                        if (!string.IsNullOrEmpty(kvp.Key) &&
+                            !string.IsNullOrEmpty(kvp.Value) &&
+                            File.Exists(kvp.Value))
+                            _iconCache[kvp.Key] = kvp.Value;
                     }
                 }
+                Debug.WriteLine($"IconCache loaded {_iconCache.Count} valid entries.");
             }
             catch (Exception ex) {
-                Debug.WriteLine($"Failed to load cache: {ex.Message}");
+                Debug.WriteLine($"Failed to load icon cache: {ex.Message}");
             }
         }
 
-        public static async Task<BitmapImage> LoadImageFromPathAsync(string filePath) {
-            BitmapImage bitmapImage = new BitmapImage();
-
-            try {
-                using var stream = File.OpenRead(filePath);
-                using var randomAccessStream = stream.AsRandomAccessStream();
-                await bitmapImage.SetSourceAsync(randomAccessStream);
+        private static SemaphoreSlim GetExtractionSemaphore(string filePath) {
+            lock (_extractionLocksLock) {
+                if (!_extractionLocks.TryGetValue(filePath, out var sem))
+                    _extractionLocks[filePath] = sem = new SemaphoreSlim(1, 1);
+                return sem;
             }
-            catch (Exception ex) {
-                Debug.WriteLine($"Failed to load image: {ex.Message}");
-            }
-
-            return bitmapImage;
         }
-        //public static async Task<string> GetIconPathAsync(string filePath) {
-        //    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
 
-        //    string cacheKey = ComputeFileCacheKey(filePath);
+        // ── public API ────────────────────────────────────────────────────────
 
-        //    if (_iconCache.TryGetValue(cacheKey, out var cachedIconPath)) {
-        //        if (File.Exists(cachedIconPath))
-        //            return cachedIconPath;
+        /// <summary>
+        /// Builds a stable cache key encoding path + last-write-time + size.
+        /// Returns empty string if the file does not exist.
+        /// </summary>
+        public static string ComputeFileCacheKey(string filePath) {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                return string.Empty;
+            var fi = new FileInfo(filePath);
+            // Use pipe separator — paths can contain underscores
+            return $"{filePath}|{fi.LastWriteTimeUtc.Ticks}|{fi.Length}";
+        }
 
-        //        _iconCache.Remove(cacheKey);  // evict dead entry
-        //        SaveIconCache();              // persist removal immediately
-        //    }
-
-        //    try {
-        //        string outputDirectory = Path.Combine(
-        //            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        //            "AppGroup", "Icons"
-        //        );
-        //        Directory.CreateDirectory(outputDirectory);
-
-        //        var extractedIconPath = await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-        //        if (extractedIconPath != null && File.Exists(extractedIconPath)) {
-        //            _iconCache[cacheKey] = extractedIconPath;
-        //            SaveIconCache();
-        //            return extractedIconPath;
-        //        }
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Icon extraction failed for {filePath}: {ex.Message}");
-        //    }
-
-        //    return null;
-        //}
+        /// <summary>
+        /// Returns the cached PNG path for a source file, extracting it first if needed.
+        /// Re-extracts only when the cached PNG no longer exists on disk.
+        /// </summary>
         public static async Task<string> GetIconPathAsync(string filePath) {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
 
             string cacheKey = ComputeFileCacheKey(filePath);
+            if (string.IsNullOrEmpty(cacheKey)) return null;
 
-            if (_iconCache.TryGetValue(cacheKey, out var cachedIconPath)) {
-                if (File.Exists(cachedIconPath)) {
-                    // Evict stale _shell or hash-suffixed entries from old naming convention
-                    if (cachedIconPath.Contains("_shell") ||
-                        System.Text.RegularExpressions.Regex.IsMatch(
-                            Path.GetFileNameWithoutExtension(cachedIconPath), @"_[a-f0-9]{16}$")) {
-                        _iconCache.Remove(cacheKey);
-                        SaveIconCache();
-                        // fall through to re-extract
-                    }
-                    else {
-                        return cachedIconPath;
-                    }
-                }
-                else {
+            // Fast path — valid cached PNG exists on disk
+            lock (_cacheLock) {
+                if (_iconCache.TryGetValue(cacheKey, out var cached) &&
+                    !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                    return cached;
+                // Stale pointer — remove it so extraction runs cleanly
+                _iconCache.Remove(cacheKey);
+            }
+
+            // Serialise extraction per source file so concurrent callers don't
+            // each extract and then race to store the result.
+            var sem = GetExtractionSemaphore(filePath);
+            await sem.WaitAsync().ConfigureAwait(false);
+            try {
+                // Re-check: another waiter may have populated the entry
+                lock (_cacheLock) {
+                    if (_iconCache.TryGetValue(cacheKey, out var cached) &&
+                        !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                        return cached;
                     _iconCache.Remove(cacheKey);
+                }
+
+                string outputDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "AppGroup", "Icons");
+                Directory.CreateDirectory(outputDir);
+
+                string extracted = await IconHelper.ExtractIconAndSaveAsync(
+                    filePath, outputDir, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+
+                if (!string.IsNullOrEmpty(extracted) && File.Exists(extracted)) {
+                    lock (_cacheLock) {
+                        _iconCache[cacheKey] = extracted;
+                    }
                     SaveIconCache();
+                    Debug.WriteLine($"IconCache: extracted {filePath} -> {extracted}");
+                    return extracted;
+                }
+
+                return null;
+            }
+            finally {
+                sem.Release();
+            }
+        }
+
+        /// <summary>
+        /// Forces the next GetIconPathAsync call for this file to re-extract,
+        /// even if the source file itself hasn't changed on disk.
+        /// Call this after a custom icon is assigned to an item in the editor.
+        /// </summary>
+        public static void InvalidateEntry(string filePath) {
+            if (string.IsNullOrEmpty(filePath)) return;
+            string cacheKey = ComputeFileCacheKey(filePath);
+            if (string.IsNullOrEmpty(cacheKey)) return;
+            bool removed;
+            lock (_cacheLock) {
+                removed = _iconCache.Remove(cacheKey);
+            }
+            if (removed) {
+                SaveIconCache();
+                Debug.WriteLine($"IconCache: invalidated {filePath}");
+            }
+        }
+
+        /// <summary>
+        /// Stores an already-resolved PNG path under a source file's cache key.
+        /// Use when you have a PNG from outside the normal extraction flow
+        /// (e.g. GetLnkIconAsync resolved the exe target and already saved the PNG).
+        /// </summary>
+        public static void StoreEntry(string filePath, string pngPath) {
+            if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(pngPath)) return;
+            string cacheKey = ComputeFileCacheKey(filePath);
+            if (string.IsNullOrEmpty(cacheKey)) return;
+            lock (_cacheLock) {
+                _iconCache[cacheKey] = pngPath;
+            }
+            SaveIconCache();
+        }
+
+        /// <summary>
+        /// Thread-safe lookup without triggering extraction.
+        /// Returns true and sets iconPath when a valid on-disk entry exists.
+        /// Takes filePath (not a raw key) so callers don't need to call ComputeFileCacheKey.
+        /// </summary>
+        public static bool TryGetCachedPath(string filePath, out string iconPath) {
+            iconPath = null;
+            if (string.IsNullOrEmpty(filePath)) return false;
+            string cacheKey = ComputeFileCacheKey(filePath);
+            if (string.IsNullOrEmpty(cacheKey)) return false;
+            lock (_cacheLock) {
+                if (_iconCache.TryGetValue(cacheKey, out var cached) &&
+                    !string.IsNullOrEmpty(cached) && File.Exists(cached)) {
+                    iconPath = cached;
+                    return true;
                 }
             }
-
-            string outputDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AppGroup", "Icons"
-            );
-            Directory.CreateDirectory(outputDirectory);
-
-            string ext = Path.GetExtension(filePath).ToLowerInvariant();
-            string extractedPath = ext is ".lnk" or ".msc" or ".cpl"
-                ? await IconHelper.GetLnkIconAsync(filePath)
-                : await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-            if (extractedPath != null && File.Exists(extractedPath)) {
-                _iconCache[cacheKey] = extractedPath;
-                SaveIconCache();
-                return extractedPath;
-            }
-
-            return null;
+            return false;
         }
-        //        public static async Task<string> GetIconPathAsync(string filePath) {
-        //    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
-
-        //    string cacheKey = ComputeFileCacheKey(filePath);
-        //    if (_iconCache.TryGetValue(cacheKey, out var cachedIconPath)) {
-        //        if (File.Exists(cachedIconPath)) return cachedIconPath;
-        //        _iconCache.Remove(cacheKey);
-        //        SaveIconCache();
-        //    }
-
-        //    string outputDirectory = Path.Combine(
-        //        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        //        "AppGroup", "Icons"
-        //    );
-        //    Directory.CreateDirectory(outputDirectory);
-
-        //    string ext = Path.GetExtension(filePath).ToLowerInvariant();
-        //    string extractedPath = ext is ".lnk" or ".msc" or ".cpl"
-        //        ? await IconHelper.GetLnkIconAsync(filePath)
-        //        : await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-        //    if (extractedPath != null && File.Exists(extractedPath)) {
-        //        _iconCache[cacheKey] = extractedPath;
-        //        SaveIconCache();
-        //        return extractedPath;
-        //    }
-        //    return null;
-        //}
-        //public static async Task<string> GetIconPathAsync(string filePath) {
-        //    Debug.WriteLine($"GetIconPathAsync thread: {System.Threading.Thread.CurrentThread.ManagedThreadId}, IsBackground: {System.Threading.Thread.CurrentThread.IsBackground}, IsThreadPoolThread: {System.Threading.Thread.CurrentThread.IsThreadPoolThread}");
-
-        //    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
-
-        //    string cacheKey = ComputeFileCacheKey(filePath);
-        //    if (_iconCache.TryGetValue(cacheKey, out var cachedIconPath)) {
-        //        if (File.Exists(cachedIconPath)) return cachedIconPath;
-        //        _iconCache.Remove(cacheKey);
-        //        SaveIconCache();
-        //    }
-
-        //    // Warm up shell HERE so it applies regardless of caller thread
-        //    var shfi = new NativeMethods.SHFILEINFO();
-        //    NativeMethods.SHGetFileInfo(
-        //        filePath, 0, ref shfi,
-        //        (uint)Marshal.SizeOf(shfi),
-        //        NativeMethods.SHGFI_SYSICONINDEX
-        //    );
-        //    Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
-        //    NativeMethods.SHGetImageList(NativeMethods.SHIL_JUMBO, ref iid, out NativeMethods.IImageList imageList);
-        //    IntPtr hIcon = IntPtr.Zero;
-        //    imageList?.GetIcon(shfi.iIcon, 1, ref hIcon);
-        //    if (hIcon != IntPtr.Zero) NativeMethods.DestroyIcon(hIcon);
-        //    await Task.Delay(50);
-
-        //    string outputDirectory = Path.Combine(
-        //        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        //        "AppGroup", "Icons"
-        //    );
-        //    Directory.CreateDirectory(outputDirectory);
-
-        //    string ext = Path.GetExtension(filePath).ToLowerInvariant();
-        //    string extractedPath = ext is ".lnk" or ".msc" or ".cpl"
-        //        ? await IconHelper.GetLnkIconAsync(filePath)
-        //        : await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-        //    if (extractedPath != null && File.Exists(extractedPath)) {
-        //        _iconCache[cacheKey] = extractedPath;
-        //        SaveIconCache();
-        //        return extractedPath;
-        //    }
-        //    return null;
-        //}
-
-
-        //public static async Task<string> GetIconPathAsync(string filePath) {
-        //    if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
-
-        //    string cacheKey = ComputeFileCacheKey(filePath);
-        //    if (_iconCache.TryGetValue(cacheKey, out var cachedIconPath)) {
-        //        if (File.Exists(cachedIconPath)) return cachedIconPath;
-        //        _iconCache.Remove(cacheKey);
-        //        SaveIconCache();
-        //    }
-
-        //    string outputDirectory = Path.Combine(
-        //             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        //             "AppGroup", "Icons"
-        //         );
-        //    Directory.CreateDirectory(outputDirectory);
-
-        //    // Use SHGetFileInfo for .lnk, .msc, .cpl — shell resolves everything
-        //    string ext = Path.GetExtension(filePath).ToLowerInvariant();
-        //    string extractedPath = ext is ".lnk" or ".msc" or ".cpl"
-        //        ? await IconHelper.GetLnkIconAsync(filePath)
-        //        : await IconHelper.ExtractIconAndSaveAsync(filePath, outputDirectory, TimeSpan.FromSeconds(2));
-
-        //    if (extractedPath != null && File.Exists(extractedPath)) {
-        //        _iconCache[cacheKey] = extractedPath;
-        //        SaveIconCache();
-        //        return extractedPath;
-        //    }
-        //    return null;
-        //}
 
         public static void SaveIconCache() {
             try {
-                string json = JsonSerializer.Serialize(_iconCache, new JsonSerializerOptions { WriteIndented = true });
-                System.IO.File.WriteAllText(CacheFilePath, json);
-                Debug.WriteLine($"Cache saved to {CacheFilePath}");
+                Dictionary<string, string> snapshot;
+                lock (_cacheLock) {
+                    snapshot = new Dictionary<string, string>(_iconCache);
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(CacheFilePath)!);
+                string json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(CacheFilePath, json);
+                Debug.WriteLine($"IconCache saved {snapshot.Count} entries.");
             }
             catch (Exception ex) {
-                Debug.WriteLine($"Failed to save cache: {ex.Message}");
+                Debug.WriteLine($"Failed to save icon cache: {ex.Message}");
             }
         }
 
-        public static string ComputeFileCacheKey(string filePath) {
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
-                return filePath ?? string.Empty;
+        public static async Task<BitmapImage> LoadImageFromPathAsync(string filePath) {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
+            try {
+                var bitmapImage = new BitmapImage();
+                using var stream = File.OpenRead(filePath);
+                using var randomAccessStream = stream.AsRandomAccessStream();
+                await bitmapImage.SetSourceAsync(randomAccessStream);
+                return bitmapImage;
             }
-            var fileInfo = new FileInfo(filePath);
-            return $"{filePath}_{fileInfo.LastWriteTimeUtc}_{fileInfo.Length}";
+            catch (Exception ex) {
+                Debug.WriteLine($"Failed to load image: {ex.Message}");
+                return null;
+            }
         }
     }
-
 }

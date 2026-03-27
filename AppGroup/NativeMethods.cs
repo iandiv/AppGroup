@@ -472,6 +472,10 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         public static extern bool SetLayeredWindowAttributes(
             IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
 
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmFlush();
+
         [DllImport("user32.dll")]
         public static extern bool AnimateWindow(IntPtr hWnd, int dwTime, int dwFlags);
 

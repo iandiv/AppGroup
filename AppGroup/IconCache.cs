@@ -76,7 +76,62 @@ namespace AppGroup {
             // Use pipe separator — paths can contain underscores
             return $"{filePath}|{fi.LastWriteTimeUtc.Ticks}|{fi.Length}";
         }
+        /// <summary>
+        /// Returns a cached PNG path for a folder, extracting the shell folder icon if needed.
+        /// Separate from GetIconPathAsync because directories fail File.Exists checks.
+        /// </summary>
+        public static async Task<string> GetFolderIconPathAsync(string folderPath) {
+            if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath)) return null;
 
+            // Build a stable cache key from path + last-write time
+            string cacheKey;
+            try {
+                var di = new DirectoryInfo(folderPath);
+                cacheKey = $"{folderPath}|{di.LastWriteTimeUtc.Ticks}";
+            }
+            catch { return null; }
+
+            // Fast path
+            lock (_cacheLock) {
+                if (_iconCache.TryGetValue(cacheKey, out var cached) &&
+                    !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                    return cached;
+                _iconCache.Remove(cacheKey);
+            }
+
+            var sem = GetExtractionSemaphore(folderPath);
+            await sem.WaitAsync().ConfigureAwait(false);
+            try {
+                // Re-check after acquiring semaphore
+                lock (_cacheLock) {
+                    if (_iconCache.TryGetValue(cacheKey, out var cached) &&
+                        !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                        return cached;
+                }
+
+                string outputDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "AppGroup", "Icons");
+                Directory.CreateDirectory(outputDir);
+
+                // Pass folderPath directly — SHGetFileInfo handles directories
+                string extracted = await IconHelper.ExtractFolderIconAndSaveAsync(
+     folderPath, outputDir, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+
+                if (!string.IsNullOrEmpty(extracted) && File.Exists(extracted)) {
+                    lock (_cacheLock) {
+                        _iconCache[cacheKey] = extracted;
+                    }
+                    SaveIconCache();
+                    return extracted;
+                }
+
+                return null;
+            }
+            finally {
+                sem.Release();
+            }
+        }
         /// <summary>
         /// Returns the cached PNG path for a source file, extracting it first if needed.
         /// Re-extracts only when the cached PNG no longer exists on disk.

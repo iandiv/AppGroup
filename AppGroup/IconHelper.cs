@@ -444,7 +444,68 @@ namespace AppGroup {
                 return null;
             }
         }
-      
+        public static async Task<string> ExtractFolderIconAndSaveAsync(string folderPath, string outputDirectory, TimeSpan? timeout = null) {
+            timeout ??= TimeSpan.FromSeconds(3);
+            if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath)) {
+                Debug.WriteLine($"Folder does not exist: {folderPath}");
+                return null;
+            }
+
+            try {
+                using var cts = new CancellationTokenSource(timeout.Value);
+                return await Task.Run(() => {
+                    try {
+                        Bitmap iconBitmap = null;
+
+                        var thread = new System.Threading.Thread(() => {
+                            NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                            try {
+                                iconBitmap = ExtractJumboIcon(folderPath);
+                            }
+                            finally {
+                                NativeMethods.CoUninitialize();
+                            }
+                        });
+                        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                        thread.Start();
+                        thread.Join();
+
+                        if (iconBitmap == null) {
+                            Debug.WriteLine($"No icon extracted for folder: {folderPath}");
+                            return null;
+                        }
+
+                        Directory.CreateDirectory(outputDirectory);
+                        string iconFileName = GenerateUniqueIconFileNameForPath(folderPath, iconBitmap);
+                        string iconFilePath = Path.Combine(outputDirectory, iconFileName);
+
+                        if (File.Exists(iconFilePath))
+                            return iconFilePath;
+
+                        using (var stream = new FileStream(iconFilePath, FileMode.Create)) {
+                            cts.Token.ThrowIfCancellationRequested();
+                            iconBitmap.Save(stream, ImageFormat.Png);
+                        }
+
+                        iconBitmap.Dispose();
+                        Debug.WriteLine($"Folder icon saved to: {iconFilePath}");
+                        return iconFilePath;
+                    }
+                    catch (OperationCanceledException) {
+                        Debug.WriteLine($"Folder icon extraction timed out: {folderPath}");
+                        return null;
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"Folder icon extraction error: {ex.Message}");
+                        return null;
+                    }
+                }, cts.Token);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"ExtractFolderIconAndSaveAsync failed: {ex.Message}");
+                return null;
+            }
+        }
         public static async Task<string> ExtractIconAndSaveAsync(string filePath, string outputDirectory, TimeSpan? timeout = null) {
             timeout ??= TimeSpan.FromSeconds(3);
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
@@ -452,8 +513,10 @@ namespace AppGroup {
                 return null;
             }
 
+
             try {
                 // Warm up shell image list on calling thread
+
                 var shfi = new NativeMethods.SHFILEINFO();
                 NativeMethods.SHGetFileInfo(
                     filePath, 0, ref shfi,
@@ -465,6 +528,8 @@ namespace AppGroup {
                 IntPtr hIcon = IntPtr.Zero;
                 imageList?.GetIcon(shfi.iIcon, 1, ref hIcon);
                 if (hIcon != IntPtr.Zero) NativeMethods.DestroyIcon(hIcon);
+
+
 
                 using var cancellationTokenSource = new CancellationTokenSource(timeout.Value);
                 return await Task.Run(async () => {
@@ -505,7 +570,7 @@ namespace AppGroup {
                         }
 
                         Directory.CreateDirectory(outputDirectory);
-                        string iconFileName = GenerateUniqueIconFileName(filePath, iconBitmap);
+                        string iconFileName = GenerateUniqueIconFileNameForPath(filePath, iconBitmap);
                         string iconFilePath = Path.Combine(outputDirectory, iconFileName);
 
                         if (File.Exists(iconFilePath)) {
@@ -532,7 +597,7 @@ namespace AppGroup {
             }
         }
 
-   
+
 
         public static string ResolveLnkTarget(string lnkPath) {
 
@@ -548,9 +613,20 @@ namespace AppGroup {
                 return lnkPath;
             }
         }
+        private static string GenerateUniqueIconFileNameForPath(string path, Bitmap iconBitmap) {
+            using var md5 = System.Security.Cryptography.MD5.Create();
+            byte[] pathBytes = System.Text.Encoding.UTF8.GetBytes(path);
+            using var ms = new MemoryStream();
+            iconBitmap.Save(ms, ImageFormat.Png);
+            byte[] combined = new byte[pathBytes.Length + ms.Length];
+            pathBytes.CopyTo(combined, 0);
+            ms.ToArray().CopyTo(combined, pathBytes.Length);
+            string hash = BitConverter.ToString(md5.ComputeHash(combined))
+                .Replace("-", "").Substring(0, 16).ToLower();
+            return $"{Path.GetFileName(path.TrimEnd('\\', '/'))}_{hash}.png";
+        }
 
 
-      
         private static string GenerateUniqueIconFileName(string filePath, Bitmap iconBitmap) {
             using (var md5 = System.Security.Cryptography.MD5.Create()) {
                 byte[] filePathBytes = System.Text.Encoding.UTF8.GetBytes(filePath);
@@ -901,7 +977,7 @@ namespace AppGroup {
         }
 
 
-     
+
         public async Task<string> CreateGridIconForPopupAsync(List<ExeFileModel> items, int gridSize, string groupName) {
             try {
                 if (items == null || !items.Any()) {
@@ -1151,7 +1227,7 @@ namespace AppGroup {
             }
         }
 
-     
+
         public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
             try {
                 if (selectedItems == null || selectedSize <= 0) {
@@ -1254,7 +1330,7 @@ namespace AppGroup {
                 return null;
             }
         }
-      
+
 
 
 

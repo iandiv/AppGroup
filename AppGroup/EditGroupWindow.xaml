@@ -112,6 +112,7 @@
                 <Thickness x:Key="ContentDialogPadding">0,0,0,0</Thickness>
                
             </ContentDialog.Resources>
+            
             <StackPanel Spacing="10" VerticalAlignment="Center" Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}" CornerRadius="5" HorizontalAlignment="Stretch">
                 <Grid Padding="10,0,5,0">
                     <Grid.ColumnDefinitions>
@@ -123,93 +124,97 @@
                         <FontIcon Glyph="&#xe711;" FontSize="15"/>
                     </Button>
                 </Grid>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="500">
+                    <StackPanel Spacing="0" Padding="15,0,15,15">
 
-                <StackPanel Spacing="0" Padding="15,0,15,15">
+                        <StackPanel Orientation="Vertical" Grid.Column="1" Margin="0,0,0,2" VerticalAlignment="Center" Padding="10,15,15,15" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Columns"/>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Number of columns in the grid." FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                                <ComboBox x:Name="GroupColComboBox" Grid.Column="1" SelectionChanged="GroupColComboBox_SelectionChanged"/>
+                            </Grid>
+                        </StackPanel>
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,2" VerticalAlignment="Center" 
+Padding="10,10,15,10" 
+Background="{ThemeResource CardBackgroundFillColorDefault}" 
+BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
+CornerRadius="5">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Layout"/>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Content area background style" FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                                <ComboBox x:Name="LayoutComboBox" Grid.Column="1" VerticalAlignment="Center">
+                                    <ComboBoxItem Content="Default" IsSelected="True"/>
+                                    <ComboBoxItem Content="Card"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
 
-                    <StackPanel Orientation="Vertical" Grid.Column="1" Margin="0,0,0,2" VerticalAlignment="Center" Padding="10,15,15,15" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Columns</TextBlock>
-                            <ComboBox x:Name="GroupColComboBox" Grid.Column="1" SelectionChanged="GroupColComboBox_SelectionChanged"/>
-                        </Grid>
-                    </StackPanel>
 
-                    <!-- Header Expander -->
-                    <Expander HorizontalAlignment="Stretch"
-              IsExpanded="False"
-              ExpandDirection="Down"
-              Background="Transparent"
-              VerticalAlignment="Top"
-              Padding="0"
-              Margin="0,0,0,2"
-              HorizontalContentAlignment="Stretch"
-              CornerRadius="5"
-              BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                        <Expander.Header>
-                            <StackPanel x:Name="HeaderPanel" Orientation="Vertical" Margin="-10,0,-15,0" VerticalAlignment="Center" Padding="15,10,0,10">
-                                <Grid HorizontalAlignment="Stretch">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="50"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock VerticalAlignment="Center" Text="Header"/>
-                                        <TextBlock VerticalAlignment="Center" Text="Show group name header" FontSize="12" Opacity="0.7"/>
-                                    </StackPanel>
-                                    <ToggleSwitch Grid.Column="1" x:Name="GroupHeader" OnContent="" OffContent="" Toggled="GroupHeader_Toggled"/>
-                                </Grid>
-                            </StackPanel>
-                        </Expander.Header>
-                        <Expander.Content>
-                            <StackPanel>
-                                <StackPanel x:Name="HeaderPositionPanel" Orientation="Vertical" HorizontalAlignment="Stretch"
+                        <!-- Header Expander -->
+                        <Expander HorizontalAlignment="Stretch"
+                              IsExpanded="False"
+                              ExpandDirection="Down"
+                              Background="Transparent"
+                              VerticalAlignment="Top"
+                              Padding="0"
+                              Margin="0,0,0,2"
+                              HorizontalContentAlignment="Stretch"
+                              CornerRadius="5"
+                              BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                            <Expander.Header>
+                                <StackPanel x:Name="HeaderPanel" Orientation="Vertical" Margin="-10,0,-15,0" VerticalAlignment="Center" Padding="15,10,0,10">
+                                    <Grid HorizontalAlignment="Stretch">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="50"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock VerticalAlignment="Center" Text="Header"/>
+                                            <TextBlock VerticalAlignment="Center" Text="Show group name header" FontSize="12" Opacity="0.7"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" x:Name="GroupHeader" OnContent="" OffContent="" Toggled="GroupHeader_Toggled"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Expander.Header>
+                            <Expander.Content>
+                                <StackPanel>
+                                    <StackPanel x:Name="HeaderPositionPanel" Orientation="Vertical" HorizontalAlignment="Stretch"
                             Padding="40,10,50,10" 
                             Background="{ThemeResource CardBackgroundFillColorSecondary}" 
                             BorderThickness="0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
                             CornerRadius="0,0,5,5">
-                                    <Grid HorizontalAlignment="Stretch">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
+                                        <Grid HorizontalAlignment="Stretch">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Position</TextBlock>
-                                        <ComboBox x:Name="HeaderPositionComboBox" Grid.Column="1" VerticalAlignment="Center" IsEnabled="False">
-                                            <ComboBoxItem Content="Top"/>
-                                            <ComboBoxItem Content="Bottom" IsSelected="True"/>
-                                        </ComboBox>
-                                    </Grid>
+                                            <ComboBox x:Name="HeaderPositionComboBox" Grid.Column="1" VerticalAlignment="Center" IsEnabled="False">
+                                                <ComboBoxItem Content="Top"/>
+                                                <ComboBoxItem Content="Bottom" IsSelected="True"/>
+                                            </ComboBox>
+                                        </Grid>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </Expander.Content>
-                    </Expander>
+                            </Expander.Content>
+                        </Expander>
 
-                    <!-- Layout -->
-                    <StackPanel Orientation="Vertical" Margin="0,0,0,2" VerticalAlignment="Center" 
-                Padding="10,10,15,10" 
-                Background="{ThemeResource CardBackgroundFillColorDefault}" 
-                BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                CornerRadius="5">
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Layout"/>
-                                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Content area background style" FontSize="12" Opacity="0.7"/>
-                            </StackPanel>
-                            <ComboBox x:Name="LayoutComboBox" Grid.Column="1" VerticalAlignment="Center">
-                                <ComboBoxItem Content="Default" IsSelected="True"/>
-                                <ComboBoxItem Content="Card"/>
-                            </ComboBox>
-                        </Grid>
-                    </StackPanel>
+                        <!-- Layout -->
 
-              
-                <Expander
+
+                        <Expander
            x:Name="ExpanderLabel"
            Grid.Row="1"
            HorizontalAlignment="Stretch"
@@ -222,55 +227,75 @@
            CornerRadius="5"
            BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         >
-                        <Expander.Header>
+                            <Expander.Header>
 
-                            <StackPanel Orientation="Vertical"  Margin="-10,0,-15,0" VerticalAlignment="Center" Padding="15,10,0,10">
-                                <Grid HorizontalAlignment="Stretch" >
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="50"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock  VerticalAlignment="Center" Text="Labels"/>
-                                        <TextBlock  VerticalAlignment="Center" Text="Show or Hide program labels" FontSize="12" Opacity="0.7"/>
-                                    </StackPanel>
-                                    <ToggleSwitch Grid.Column="1" x:Name="ShowLabels" OnContent="" OffContent="" Toggled="ShowLabels_Toggled"/>
+                                <StackPanel Orientation="Vertical"  Margin="-10,0,-15,0" VerticalAlignment="Center" Padding="15,10,0,10">
+                                    <Grid HorizontalAlignment="Stretch" >
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="50"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock  VerticalAlignment="Center" Text="Labels"/>
+                                            <TextBlock  VerticalAlignment="Center" Text="Show or Hide program labels" FontSize="12" Opacity="0.7"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" x:Name="ShowLabels" OnContent="" OffContent="" Toggled="ShowLabels_Toggled"/>
 
-                                </Grid>
-                            </StackPanel>
-                        </Expander.Header>
-                        <Expander.Content >
-                            <StackPanel>
-                                <StackPanel  x:Name="LabelSizePanel"   Orientation="Vertical" Grid.Column="1" HorizontalAlignment="Stretch"    Padding="40,10,50,10" Background="{ThemeResource CardBackgroundFillColorSecondary}" BorderThickness="0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  CornerRadius="0" >
-                                    <Grid HorizontalAlignment="Stretch"
+                                    </Grid>
+                                </StackPanel>
+                            </Expander.Header>
+                            <Expander.Content >
+                                <StackPanel>
+                                    <StackPanel  x:Name="LabelSizePanel"   Orientation="Vertical" Grid.Column="1" HorizontalAlignment="Stretch"    Padding="40,10,50,10" Background="{ThemeResource CardBackgroundFillColorSecondary}" BorderThickness="0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  CornerRadius="0" >
+                                        <Grid HorizontalAlignment="Stretch"
                        >
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Text Size</TextBlock>
-                                        <ComboBox x:Name="LabelSizeComboBox" Grid.Column="1" IsEnabled="False"/>
-                                    </Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Text Size</TextBlock>
+                                            <ComboBox x:Name="LabelSizeComboBox" Grid.Column="1" IsEnabled="False"/>
+                                        </Grid>
 
-                                </StackPanel>
-                                <StackPanel  x:Name="LabelPositionPanel"   Orientation="Vertical" Grid.Column="1" HorizontalAlignment="Stretch" Padding="40,10,50,10" Background="{ThemeResource CardBackgroundFillColorSecondary}" BorderThickness="0,1,0,0"  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="0,0,5,5" >
-                                    <Grid HorizontalAlignment="Stretch"
+                                    </StackPanel>
+                                    <StackPanel  x:Name="LabelPositionPanel"   Orientation="Vertical" Grid.Column="1" HorizontalAlignment="Stretch" Padding="40,10,50,10" Background="{ThemeResource CardBackgroundFillColorSecondary}" BorderThickness="0,1,0,0"  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="0,0,5,5" >
+                                        <Grid HorizontalAlignment="Stretch"
 >
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Position</TextBlock>
-                                        <ComboBox  Grid.Column="1" IsEnabled="False" x:Name="LabelPositionComboBox"/>
-                                    </Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Position</TextBlock>
+                                            <ComboBox  Grid.Column="1" IsEnabled="False" x:Name="LabelPositionComboBox"/>
+                                        </Grid>
 
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </Expander.Content>
+                            </Expander.Content>
 
-                    </Expander>
+                        </Expander>
+                        <TextBlock VerticalAlignment="Center" Text="Others" FontWeight="SemiBold" Margin="5,30,5,5"/>
 
-                </StackPanel>
+                        <!-- Show on Tray -->
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,2" VerticalAlignment="Center"
+    Padding="10,10,15,10"
+    Background="{ThemeResource CardBackgroundFillColorDefault}"
+    BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+    CornerRadius="5">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="50"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Show on Tray"/>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Show group icon in system tray" FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                                <ToggleSwitch Grid.Column="1" x:Name="ShowOnTray" OnContent="" OffContent=""/>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </StackPanel>
         </ContentDialog>
         <Grid Padding="20,50,20,10">
@@ -371,6 +396,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="ApplicationCount" FontWeight="SemiBold" VerticalAlignment="Center"></TextBlock>
@@ -378,7 +404,10 @@
                         <Button  Padding="10" Margin="0,5,0,5" Background="Transparent" BorderThickness="0" Grid.Column="1" Click="CustomizeDialog_Click">
                             <FontIcon Glyph="&#xe9e9;" FontSize="15"/>
                         </Button>
-                        <Button x:Name="BrowseFilePathButton" Padding="10" Margin="0,5,0,5" Background="Transparent" BorderThickness="0" Grid.Column="2" Click="BrowseFilePathButton_Click">
+
+                        <Button Click="BrowseFilesClick" Padding="10" Margin="0,5,0,5" 
+        Background="Transparent" BorderThickness="0" Grid.Column="2">
+                           
                             <FontIcon Glyph="&#xe710;" FontSize="15"/>
                         </Button>
                     </Grid>

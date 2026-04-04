@@ -55,7 +55,7 @@ namespace AppGroup {
         private const int SUBCLASS_ID = 3;
         private bool _isFirstActivation = true;
         private bool _wasHidden = true;
-
+      
         public EditGroupWindow(int groupId) {
             this.InitializeComponent();
             _hwnd = WindowNative.GetWindowHandle(this);
@@ -358,31 +358,47 @@ namespace AppGroup {
             try {
                 if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
                     var items = await e.DataView.GetStorageItemsAsync();
-
                     foreach (var item in items) {
                         if (item is StorageFile file &&
                             (file.FileType.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                              file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
                              file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))) {
 
+                            // Resolve DragTemp .lnk back to the real Groups path
+                            string resolvedPath = file.Path;
+                            if (file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                                string dragTempDir = Path.Combine(
+                                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                    "AppGroup", "DragTemp");
+                                if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
+                                    string groupsDir = Path.Combine(
+                                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                        "AppGroup", "Groups");
+                                    string fileName = Path.GetFileNameWithoutExtension(file.Path);
+                                    string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
+                                    if (File.Exists(realPath))
+                                        resolvedPath = realPath;
+                                }
+                            }
+
                             string icon;
                             if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))
-                                icon = await IconHelper.GetUrlFileIconAsync(file.Path);
+                                icon = await IconHelper.GetUrlFileIconAsync(resolvedPath);
                             else
-                                icon = await IconCache.GetIconPathAsync(file.Path);
+                                icon = await IconCache.GetIconPathAsync(resolvedPath);
 
                             if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
-                                icon = await IconCache.GetIconPathAsync(file.Path);
+                                icon = await IconCache.GetIconPathAsync(resolvedPath);
 
                             ExeFiles.Add(new ExeFileModel {
-                                FileName = file.Name,
+                                FileName = Path.GetFileName(resolvedPath),
                                 Icon = icon,
-                                FilePath = file.Path,
+                                FilePath = resolvedPath,
                                 IconPath = icon
                             });
                         }
+                      
                     }
-
                     RefreshListViewState();
                 }
             }
@@ -390,7 +406,9 @@ namespace AppGroup {
                 Debug.WriteLine($"Drop Error: {ex.Message}");
             }
         }
+        private void BrowseFilesClick(object sender, RoutedEventArgs e) => BrowseFiles();
 
+      
         // Fix: extracted shared list-view refresh logic to avoid duplication and bugs
         private void RefreshListViewState() {
             ExeListView.ItemsSource = ExeFiles;
@@ -487,6 +505,8 @@ namespace AppGroup {
                     if (jsonObject.AsObject().TryGetPropertyValue(groupId.ToString(), out JsonNode groupNode)) {
                         string gName = groupNode["groupName"]?.GetValue<string>();
                         int groupCol = groupNode["groupCol"]?.GetValue<int>() ?? 0;
+                        bool showOnTray = groupNode["showOnTray"]?.GetValue<bool>() ?? false;
+
                         string groupIcon = IconHelper.FindOrigIcon(groupNode["groupIcon"]?.GetValue<string>());
                         bool groupHeader = groupNode["groupHeader"]?.GetValue<bool>() ?? false;
                         bool showLabels = groupNode["showLabels"]?.GetValue<bool>() ?? false;
@@ -513,6 +533,7 @@ namespace AppGroup {
                             tempIcon = resolvedTempIcon;
                             groupName = gName;
 
+                            ShowOnTray.IsOn = showOnTray;
                             GroupHeader.IsOn = groupHeader;
                             if (!string.IsNullOrEmpty(gName))
                                 GroupNameTextBox.Text = gName;
@@ -565,7 +586,7 @@ namespace AppGroup {
                             foreach (var path in paths) {
                                 string filePath = path.Key;
 
-                                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) continue;
+                                if (string.IsNullOrEmpty(filePath) || (!File.Exists(filePath) && !Directory.Exists(filePath))) continue;
                                 string icon = null;
                                 if (path.Value.AsObject().TryGetPropertyValue("icon", out JsonNode? iconNode)
                                     && iconNode != null
@@ -574,7 +595,7 @@ namespace AppGroup {
 
                                 // Mirror PopupWindow.LoadIconAsync: fall back to extracting icon from the file itself
                                 if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon)) {
-                                    if (filePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
+                                  if (filePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
                                         icon = await IconHelper.GetUrlFileIconAsync(filePath);
                                     else
                                         icon = await IconCache.GetIconPathAsync(filePath);
@@ -644,6 +665,7 @@ namespace AppGroup {
                 InitializeLabelPositionComboBox();
 
                 ShowLabels.IsOn = false;
+                ShowOnTray.IsOn = false;
                 LabelSizePanel.Opacity = 0.5;
                 LabelSizeComboBox.IsEnabled = false;
                 LabelPositionPanel.Opacity = 0.5;
@@ -746,7 +768,6 @@ namespace AppGroup {
             }
         }
 
-        private void BrowseFilePathButton_Click(object sender, RoutedEventArgs e) => BrowseFiles();
 
         private async void BrowseFiles() {
             var openPicker = new FileOpenPicker();
@@ -1034,8 +1055,10 @@ namespace AppGroup {
                     JsonConfigHelper.AddGroupToJson(
                         JsonConfigHelper.GetDefaultConfigPath(),
                         GroupId, newGroupName, groupHeader, icoFilePath, groupCol,
-                        showLabels, labelSize, labelPosition, headerPosition, layout, paths);
+                        showLabels, labelSize, labelPosition, headerPosition, layout, ShowOnTray.IsOn, paths);
 
+
+                    GroupTrayManager.SyncFromJson();
                     // Fix: clean up the field-level tempIcon, not a separate local
                     if (!string.IsNullOrEmpty(tempIcon) && File.Exists(tempIcon)) {
                         try { File.Delete(tempIcon); }

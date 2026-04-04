@@ -71,7 +71,7 @@ namespace AppGroup {
         private readonly IconHelper _iconHelper;
         private DispatcherTimer debounceTimer;
 
-        // Fix: file-watcher debounce timer to prevent reload storms
+        
         private DispatcherTimer _watcherDebounceTimer;
 
         private SupportDialogHelper _supportDialogHelper;
@@ -83,9 +83,8 @@ namespace AppGroup {
         private bool _wasHidden = false;
         private CancellationTokenSource _dragCleanupCts;
 
-        // Fix: owned CTS so we can cancel on window close
         private readonly CancellationTokenSource _windowCloseCts = new CancellationTokenSource();
-
+        private bool _isIconDragging = false;
         public MainWindow() {
             InitializeComponent();
             _hwnd = WindowNative.GetWindowHandle(this);
@@ -104,7 +103,6 @@ namespace AppGroup {
             var iconPath = Path.Combine(AppContext.BaseDirectory, "AppGroup.ico");
             this.AppWindow.SetIcon(iconPath);
 
-            // Fix: create config file if it doesn't exist before first load
             EnsureConfigFileExists();
 
             _ = LoadGroupsAsync();
@@ -114,7 +112,6 @@ namespace AppGroup {
             debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             debounceTimer.Tick += FilterGroups;
 
-            // Fix: watcher debounce — 500 ms quiet period before reloading
             _watcherDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _watcherDebounceTimer.Tick += async (s, e) => {
                 _watcherDebounceTimer.Stop();
@@ -131,7 +128,6 @@ namespace AppGroup {
             _ = CheckForUpdatesOnStartupAsync();
         }
 
-        // Fix: ensure the config JSON exists so ReadAllTextAsync never throws FileNotFoundException
         private void EnsureConfigFileExists() {
             string path = JsonConfigHelper.GetDefaultConfigPath();
             if (!File.Exists(path))
@@ -289,13 +285,12 @@ namespace AppGroup {
             }
             catch { }
 
-            // Fix: cancel any in-flight load tasks
             _windowCloseCts.Cancel();
 
             NativeMethods.GetCursorPos(out NativeMethods.POINT cursorPos);
             int screenWidth = NativeMethods.GetSystemMetrics(0);
             NativeMethods.SetCursorPos(screenWidth - 1, cursorPos.Y);
-
+       
             this.Hide();
             _wasHidden = true;
             await Task.Delay(10);
@@ -322,7 +317,6 @@ namespace AppGroup {
         private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public async Task UpdateGroupItemAsync(string jsonFilePath) {
-            // Fix: use a timeout on the semaphore so a hung icon task can't deadlock forever
             if (!await _semaphore.WaitAsync(TimeSpan.FromSeconds(10))) {
                 Debug.WriteLine("UpdateGroupItemAsync: semaphore wait timed out");
                 return;
@@ -332,7 +326,6 @@ namespace AppGroup {
                 JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
                 var groupDictionary = jsonObject.AsObject();
 
-                // Fix: build icon data off the UI thread, then apply to UI thread in one batch
                 var updates = new List<(int groupId, string newName, string newIcon, List<string> icons, int extra,
                     Dictionary<string, string> tooltips, Dictionary<string, string> args, Dictionary<string, string> customIcons)>();
 
@@ -349,7 +342,6 @@ namespace AppGroup {
                         var iconPaths = new List<string>();
 
                         if (paths?.Count > 0) {
-                            // Fix: run icon tasks sequentially with individual timeouts rather than WhenAll inside semaphore
                             foreach (var path in paths.Where(p => p.Value != null)) {
                                 string filePath = path.Key;
                                 string tooltip = path.Value["tooltip"]?.GetValue<string>();
@@ -361,7 +353,6 @@ namespace AppGroup {
                                 customIcons[filePath] = customIcon;
 
                                 string iconResult;
-                                // Fix: treat "" same as null — JSON writes "" for no custom icon
                                 string effectiveCustom = string.IsNullOrWhiteSpace(customIcon) ? null : customIcon;
                                 if (effectiveCustom != null && File.Exists(effectiveCustom)) {
                                     iconResult = effectiveCustom;
@@ -394,7 +385,6 @@ namespace AppGroup {
                     }
                 }
 
-                // Fix: all UI mutations on the dispatcher thread
                 DispatcherQueue.TryEnqueue(() => {
                     foreach (var (groupId, newName, newIcon, icons, extra, tooltips, args, customIcons) in updates) {
                         var existingItem = GroupItems.FirstOrDefault(item => item.GroupId == groupId);
@@ -422,7 +412,6 @@ namespace AppGroup {
                         }
                     }
 
-                    // Remove items that no longer exist in the JSON
                     var activeIds = updates.Select(u => u.groupId).ToHashSet();
                     var toRemove = GroupItems.Where(g => !activeIds.Contains(g.GroupId)).ToList();
                     foreach (var item in toRemove)
@@ -445,49 +434,20 @@ namespace AppGroup {
             File.SetLastWriteTime(path, now);
             File.SetLastAccessTime(path, now);
         }
+        private void GroupListView_DragItemsStarting(object sender, DragItemsStartingEventArgs e) {
+            if (_isIconDragging) {
+                _isIconDragging = false;
+                e.Cancel = true; 
+                return;
+            }
 
-        private async void GroupListView_DragItemsStarting(object sender, DragItemsStartingEventArgs e) {
             _isReordering = true;
-
             if (e.Items.Count > 0 && e.Items[0] is GroupItem draggedItem) {
-                if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) {
-                    e.Data.RequestedOperation = DataPackageOperation.Move;
-                    return;
-                }
-
+                if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) return;
                 e.Data.Properties.Add("DraggedGroupId", draggedItem.GroupId);
-                e.Data.RequestedOperation = DataPackageOperation.Copy | DataPackageOperation.Link;
-
-                string appDataPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
-                string fullShortcutPath = Path.GetFullPath(
-                    Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk"));
-
-                if (File.Exists(fullShortcutPath)) {
-                    try {
-                        string tempDir = Path.Combine(appDataPath, "DragTemp");
-                        Directory.CreateDirectory(tempDir);
-
-                        _dragCleanupCts?.Cancel();
-                        _dragCleanupCts = new CancellationTokenSource();
-
-                        string tempShortcutPath = Path.Combine(tempDir, $"{draggedItem.GroupName}.lnk");
-                        File.Copy(fullShortcutPath, tempShortcutPath, true);
-                        TouchFile(tempShortcutPath);
-                        _tempDragFiles[draggedItem.GroupId] = tempShortcutPath;
-
-                        e.Data.SetText(fullShortcutPath);
-                        var storageFile = await StorageFile.GetFileFromPathAsync(tempShortcutPath);
-                        e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
-                    }
-                    catch (Exception ex) {
-                        Debug.WriteLine($"Error preparing drag data: {ex.Message}");
-                        throw;
-                    }
-                }
             }
         }
-
+      
         private async void GroupListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args) {
             try {
                 var itemsToClean = new List<string>();
@@ -560,7 +520,6 @@ namespace AppGroup {
                 throw;
             }
             finally {
-                // Fix: always re-enable watcher, even on error
                 _fileWatcher.EnableRaisingEvents = true;
             }
         }
@@ -574,7 +533,6 @@ namespace AppGroup {
                 NotifyFilter = NotifyFilters.LastWrite
             };
 
-            // Fix: use debounce timer instead of firing reload directly
             _fileWatcher.Changed += (s, e) => {
                 if (_isReordering) return;
                 DispatcherQueue.TryEnqueue(() => {
@@ -645,22 +603,16 @@ namespace AppGroup {
 
         public async Task LoadGroupsAsync() {
             if (!await _loadingSemaphore.WaitAsync(0)) return;
-
             try {
-                // Fix: link to window-close token so loads abort when window closes
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(_windowCloseCts.Token);
                 cts.CancelAfter(TimeSpan.FromSeconds(10));
 
                 string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
-
-                // Fix: guard against missing file instead of crashing
-                if (!File.Exists(jsonFilePath)) {
+                if (!File.Exists(jsonFilePath))
                     File.WriteAllText(jsonFilePath, "{}");
-                }
 
                 string jsonContent = await File.ReadAllTextAsync(jsonFilePath, cts.Token)
                     .ConfigureAwait(false);
-
                 JsonNode jsonObject = JsonNode.Parse(jsonContent ?? "{}") ?? new JsonObject();
                 var groupDictionary = jsonObject.AsObject();
 
@@ -670,15 +622,16 @@ namespace AppGroup {
 
                 var updatedGroupItems = await processingTask.ConfigureAwait(false);
 
-                // Fix: swap atomically — clear and re-add in one dispatcher call to avoid flash
                 DispatcherQueue.TryEnqueue(() => {
-                    // Remove items no longer in JSON
+                    GroupTrayManager.SyncFromJson();
+                });
+
+                DispatcherQueue.TryEnqueue(() => {
                     var activeIds = updatedGroupItems.Select(g => g.GroupId).ToHashSet();
                     var toRemove = GroupItems.Where(g => !activeIds.Contains(g.GroupId)).ToList();
                     foreach (var r in toRemove)
                         GroupItems.Remove(r);
 
-                    // Add or update
                     foreach (var item in updatedGroupItems) {
                         var existing = GroupItems.FirstOrDefault(g => g.GroupId == item.GroupId);
                         if (existing == null)
@@ -696,6 +649,8 @@ namespace AppGroup {
                         : GroupListView.Items.Count == 1 ? "1 Group" : "";
                     EmptyView.Visibility = GroupListView.Items.Count == 0
                         ? Visibility.Visible : Visibility.Collapsed;
+
+                    GroupTrayManager.SyncFromJson();
                 });
             }
             catch (OperationCanceledException) {
@@ -708,7 +663,6 @@ namespace AppGroup {
                 _loadingSemaphore.Release();
             }
         }
-
         private async Task<GroupItem> CreateGroupItemAsync(int groupId, JsonNode groupNode) {
             string groupName = groupNode?["groupName"]?.GetValue<string>();
             string groupIcon = IconHelper.FindOrigIcon(groupNode?["groupIcon"]?.GetValue<string>());
@@ -732,7 +686,6 @@ namespace AppGroup {
 
                 var iconPaths = new List<string>();
                 foreach (var path in paths.Where(p => p.Value != null)) {
-                    // Fix: respect window-close cancellation in per-item icon loads
                     if (_windowCloseCts.IsCancellationRequested) break;
 
                     string filePath = path.Key;
@@ -745,7 +698,6 @@ namespace AppGroup {
                     groupItem.CustomIcons[filePath] = customIcon;
 
                     string iconResult = null;
-                    // Fix: treat "" the same as null — AddGroupToJson writes "" for no custom icon
                     string effectiveCustomIcon = string.IsNullOrWhiteSpace(customIcon) ? null : customIcon;
                     if (effectiveCustomIcon != null && File.Exists(effectiveCustomIcon)) {
                         iconResult = effectiveCustomIcon;
@@ -782,7 +734,6 @@ namespace AppGroup {
 
         private async Task<string> ReGenerateIconAsync(string filePath, string outputDirectory) {
             try {
-                // Only evict if the cached PNG is missing from disk; InvalidateEntry handles the rest
                 if (IconCache.TryGetCachedPath(filePath, out _)) {
                     // Entry exists and PNG is on disk — no eviction needed
                 }
@@ -892,7 +843,40 @@ namespace AppGroup {
                 await errorDialog.ShowAsync();
             }
         }
+        private async void GroupIcon_DragStarting(UIElement sender, DragStartingEventArgs e) {
+            if (((FrameworkElement)sender).DataContext is not GroupItem draggedItem) return;
+            if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) return;
 
+            _isIconDragging = true;
+            var deferral = e.GetDeferral();
+            try {
+                string appDataPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
+                string fullShortcutPath = Path.GetFullPath(
+                    Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk"));
+
+                if (!File.Exists(fullShortcutPath)) {
+                    _isIconDragging = false;
+                    return;
+                }
+
+                var storageFile = await StorageFile.GetFileFromPathAsync(fullShortcutPath);
+                e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
+                e.AllowedOperations = DataPackageOperation.Link;
+                e.Data.RequestedOperation = DataPackageOperation.Link;
+            }
+            catch (Exception ex) {
+                _isIconDragging = false;
+                Debug.WriteLine($"GroupIcon drag error: {ex.Message}");
+            }
+            finally {
+                deferral.Complete();
+            }
+        }
+
+        private void GroupIcon_DropCompleted(UIElement sender, DropCompletedEventArgs e) {
+            // nothing to clean up
+        }
         private async void DuplicateButton_Click(object sender, RoutedEventArgs e) {
             if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is GroupItem selectedGroup) {
                 string filePath = JsonConfigHelper.GetDefaultConfigPath();

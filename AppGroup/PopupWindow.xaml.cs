@@ -122,7 +122,7 @@ namespace AppGroup {
         private UISettings _uiSettings;
         private bool _isUISettingsSubscribed = false;
 
-        // Fix: track icon loading tasks with a CTS so they can be cancelled on close
+        
         private CancellationTokenSource _iconLoadCts = new CancellationTokenSource();
         private readonly List<Task> _backgroundTasks = new List<Task>();
 
@@ -155,7 +155,7 @@ namespace AppGroup {
             _windowHelper.HasTitleBar = false;
             _windowHelper.IsAlwaysOnTop = true;
 
-            // Fix: compute offscreen size lazily at point of use, not at field initialisation
+            
             NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
             var workArea = DisplayArea.Primary.WorkArea;
             this.AppWindow.Resize(new SizeInt32(workArea.Width * 2, workArea.Height * 2));
@@ -173,7 +173,7 @@ namespace AppGroup {
             this.Activated += Window_Activated;
         }
 
-        // Fix: helper so callers always get the current work-area size, not a stale field
+        
         private SizeInt32 GetOffscreenSize() {
             var workArea = DisplayArea.Primary.WorkArea;
             return new SizeInt32(workArea.Width * 2, workArea.Height * 2);
@@ -218,7 +218,7 @@ namespace AppGroup {
                 NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
             NativeMethods.ShowWindow(hWnd, NativeMethods.SW_SHOWNOACTIVATE);
 
-            // Use refresh rate to determine frame count for ~200ms animation
+            
             int intervalMs = GetRefreshIntervalMs(hWnd);
             int durationMs = 200;
             int steps = Math.Max(1, durationMs / intervalMs);
@@ -286,7 +286,7 @@ namespace AppGroup {
         }
         private static BitmapImage GetOrCreatePlaceholder() {
             if (_placeholderIcon != null) return _placeholderIcon;
-            // 24x24 transparent placeholder — just an empty BitmapImage
+            
             _placeholderIcon = new BitmapImage();
             return _placeholderIcon;
         }
@@ -527,11 +527,11 @@ namespace AppGroup {
         private DateTime _lastConfigLoad = DateTime.MinValue;
 
         private async Task LoadConfiguration() {
-            // Fix: use Interlocked for thread-safe guard
+          
             if (Interlocked.CompareExchange(ref _isLoadingConfig, 1, 0) != 0) return;
             try {
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
-                // Fix: always re-read on activation — timestamp comparison misses same-second saves
+                
                 _groups = await Task.Run(() => {
                     string json = JsonConfigHelper.ReadJsonFromFile(configPath);
                     return JsonSerializer.Deserialize<Dictionary<string, GroupData>>(json, JsonOptions);
@@ -643,7 +643,7 @@ namespace AppGroup {
             }
         }
 
-        // Fix: extracted handler cleanup
+        
         private void UnsubscribeGridViewHandlers() {
             if (_gridView != null) {
                 _gridView.RightTapped -= GridView_RightTapped;
@@ -752,7 +752,7 @@ namespace AppGroup {
             }
 
 
-            //// Non-taskbar: no slide to wait for, fire immediately
+            
             //DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
 
 
@@ -825,7 +825,7 @@ namespace AppGroup {
             sb.Begin();
         }
         private void StopEntranceStoryboard() {
-            // Fix: only stop if it was actually started
+            
             if (_entranceStarted && _entranceStoryboard != null) {
                 try { _entranceStoryboard.Stop(); } catch { }
                 _entranceStoryboard = null;
@@ -1150,7 +1150,7 @@ namespace AppGroup {
                 return;
             }
 
-            // Threshold: reveal GridPanel once this many icons are loaded
+            
             int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 0.6)));
             int loadedCount = 0;
             bool revealed = false;
@@ -1188,61 +1188,7 @@ namespace AppGroup {
 
             _ = Task.WhenAll(iconTasks);
         }
-        //private async Task LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
-        //    var items = await Task.Run(() => {
-        //        var result = new List<PopupItem>();
-        //        foreach (var pathEntry in pathsWithProperties) {
-        //            string path = pathEntry.Key;
-        //            PathData properties = pathEntry.Value;
-        //            string tooltip = !string.IsNullOrEmpty(properties.Tooltip)
-        //                ? properties.Tooltip : GetDisplayNameBackground(path);
-        //            string customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
-
-        //            var popupItem = new PopupItem {
-        //                Path = path,
-        //                Name = Path.GetFileNameWithoutExtension(path),
-        //                ToolTip = tooltip,
-        //                Icon = null,
-        //                Args = properties.Args ?? "",
-        //                IconPath = customIconPath,
-        //                CustomIconPath = customIconPath
-        //            };
-
-
-
-        //            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
-        //                try {
-        //                    IWshShell shell = new WshShell();
-        //                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-        //                    string comment = shortcut.Description;
-        //                    if (!string.IsNullOrEmpty(comment) &&
-        //                        comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
-        //                        popupItem.IsSubgroup = true;
-        //                        popupItem.SubgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
-        //                    }
-        //                }
-        //                catch (Exception ex) {
-        //                    Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
-        //                }
-        //            }
-        //            if (Directory.Exists(path)) {
-        //                popupItem.IsFolder = true;
-        //                popupItem.FolderPath = path;
-        //                // IsSubgroup stays false
-        //            }
-        //            result.Add(popupItem);
-        //        }
-        //        return result;
-        //    });
-
-        //    // Fix: capture CTS token at the point of loading so cancellation is respected per-load
-        //    var loadToken = _iconLoadCts.Token;
-        //    foreach (var item in items) {
-        //        if (loadToken.IsCancellationRequested) break;
-        //        PopupItems.Add(item);
-        //        _ = LoadIconAsync(item, item.Path, loadToken);
-        //    }
-        //}
+        
         private async Task LoadIconAsync(PopupItem item, string path, CancellationToken token) {
             await _iconLoadSemaphore.WaitAsync(token).ConfigureAwait(false);
             try {
@@ -1300,46 +1246,13 @@ namespace AppGroup {
                 _iconLoadSemaphore.Release();
             }
         }
-        // Fix: accept a CancellationToken so icon callbacks don't dispatch after window closes
-        //private async Task LoadIconAsync(PopupItem item, string path, CancellationToken token) {
-        //    try {
-        //        string iconPath;
-        //        // Fix: treat empty string the same as null — empty string comes from JSON "icon": ""
-        //        // Always prefer a valid custom icon over the cache to show post-edit icons correctly
-        //        string customIcon = string.IsNullOrWhiteSpace(item.CustomIconPath) ? null : item.CustomIconPath;
-        //        if (customIcon != null && File.Exists(customIcon)) {
-        //            iconPath = customIcon;
-        //        }
-        //        else if (Directory.Exists(path)) {
-        //            iconPath = await IconCache.GetFolderIconPathAsync(path);
-        //        }
-        //        else {
-        //            iconPath = Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)
-        //                ? await IconHelper.GetUrlFileIconAsync(path)
-        //                : await IconCache.GetIconPathAsync(path);
-        //        }
-
-        //        if (token.IsCancellationRequested) return;
-
-        //        var icon = await IconCache.LoadImageFromPathAsync(iconPath);
-        //        if (token.IsCancellationRequested) return;
-
-        //        DispatcherQueue.TryEnqueue(() => {
-        //            if (!token.IsCancellationRequested)
-        //                item.Icon = icon;
-        //        });
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Error loading icon for {path}: {ex.Message}");
-        //    }
-        //}
+       
 
         private System.Threading.Timer _focusTimer = null;
         private DateTime _lastSubPopupOpenTime = DateTime.MinValue;
 
         private void OpenSubPopup(string groupName) {
             if (_openSubPopups.TryGetValue(groupName, out var existing)) {
-                // Fix: hide first, then clear state — proper order of operations
                 NativeMethods.PositionWindowOffScreen(existing.GetWindowHandle());
                 existing.Hide();
                 existing._openSubPopups.Clear();
@@ -1388,7 +1301,6 @@ namespace AppGroup {
 
             int taskbarThickness = 60;
 
-            // Bottom taskbar: cursor must be WITHIN the taskbar strip, not above it
             if (mi.rcWork.bottom < mi.rcMonitor.bottom) {
                 int taskbarTop = mi.rcWork.bottom;
                 int taskbarBottom = mi.rcMonitor.bottom;
@@ -1404,7 +1316,6 @@ namespace AppGroup {
         private void StartFocusTimer() {
             if (_parentPopup != null) { _parentPopup.StartFocusTimer(); return; }
 
-            // Fix: dispose existing timer safely before creating a new one
             var old = Interlocked.Exchange(ref _focusTimer, null);
             old?.Dispose();
 
@@ -1462,7 +1373,6 @@ namespace AppGroup {
                 sub._parentPopup = null;
                 sub._isLoaded = false;
                 NativeMethods.PositionWindowOffScreen(sub.GetWindowHandle());
-                // Fix: use current work area, not a stale field
                 var offscreen = sub.GetOffscreenSize();
                 sub.AppWindow.Resize(new SizeInt32(offscreen.Width, offscreen.Height));
                 sub.Hide();
@@ -1471,7 +1381,6 @@ namespace AppGroup {
 
         private void StopFocusTimer() {
             if (_parentPopup != null) { _parentPopup.StopFocusTimer(); return; }
-            // Fix: use Interlocked to prevent double-dispose race
             var t = Interlocked.Exchange(ref _focusTimer, null);
             t?.Dispose();
         }

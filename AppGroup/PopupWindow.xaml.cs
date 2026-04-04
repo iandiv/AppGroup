@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
@@ -42,6 +43,8 @@ namespace AppGroup {
         public string LabelPosition { get; set; } = "Bottom";
         public string HeaderPosition { get; set; } = "Top";
         public string Layout { get; set; } = "Default";
+
+     public   bool ShowOnTray { get; set; } = false;
         public Dictionary<string, PathData> Path { get; set; }
     }
 
@@ -66,6 +69,7 @@ namespace AppGroup {
         public event PropertyChangedEventHandler PropertyChanged;
         public bool IsSubgroup { get; set; }
         public string SubgroupName { get; set; }
+      
     }
 
     public sealed partial class PopupWindow : Window {
@@ -128,15 +132,15 @@ namespace AppGroup {
         private readonly Dictionary<string, PopupWindow> _openSubPopups = new Dictionary<string, PopupWindow>();
         private PopupWindow _parentPopup = null;
         private Storyboard _entranceStoryboard;
-        private bool _entranceStarted = false;   // Fix: track whether Begin() was called
+        private bool _entranceStarted = false;  
         private bool _wasLaunchedFromTaskbar = false;
 
-        // Fix: use a volatile int flag instead of plain bool for thread-safe load guard
         private int _isLoadingConfig = 0;
-
-        // Fix: window close CTS to abort callbacks after window is hidden
+        private bool _isFlyoutOpen = false;
+        private bool _isClosing = false;
         private readonly CancellationTokenSource _windowCts = new CancellationTokenSource();
-
+        private static readonly SemaphoreSlim _iconLoadSemaphore = new SemaphoreSlim(6, 6);
+        private static BitmapImage _placeholderIcon;
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
             _groupFilter = groupFilter;
@@ -257,18 +261,21 @@ namespace AppGroup {
                         Math.Pow(finalY - currentY, 2)
                     );
 
-                    int triggerDistancePx = 20;
+                    double totalDistance = Math.Sqrt(
+      Math.Pow(finalX - startX, 2) +
+      Math.Pow(finalY - startY, 2)
+  );
+                    double triggerDistancePx = totalDistance * 0.1;
 
                     if (!earlyTriggered && remainingDistance <= triggerDistancePx) {
                         earlyTriggered = true;
-                        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () =>
-                        {
+                        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () => {
                             onComplete?.Invoke();
                         });
                     }
 
                     if (currentStep >= steps) {
-                       
+
                         if (!isSubPopup)
                             NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
                                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
@@ -277,8 +284,13 @@ namespace AppGroup {
                 }
             });
         }
-     
-        
+        private static BitmapImage GetOrCreatePlaceholder() {
+            if (_placeholderIcon != null) return _placeholderIcon;
+            // 24x24 transparent placeholder — just an empty BitmapImage
+            _placeholderIcon = new BitmapImage();
+            return _placeholderIcon;
+        }
+
         private void AnimateWindowSlideDown(IntPtr hWnd, Action onComplete) {
             NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
             int startX = rect.left;
@@ -551,15 +563,12 @@ namespace AppGroup {
         }
 
         private async Task CreateDynamicContent() {
-            // Fix: unsubscribe old GridView handlers before clearing to prevent memory leaks
             UnsubscribeGridViewHandlers();
-            GridPanel.Opacity = 0;
             PopupItems.Clear();
             GridPanel.Children.Clear();
             HeaderText.Text = "";
             _anyGroupDisplayed = false;
-
-            // Fix: cancel previous icon loads and create a fresh CTS
+            GridPanel.Opacity = 0;
             _iconLoadCts.Cancel();
             _iconLoadCts = new CancellationTokenSource();
 
@@ -715,29 +724,36 @@ namespace AppGroup {
 
             NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
             _windowHelper.SetSize(finalWidth, finalHeight);
-
+            _windowHelper.IsAlwaysOnTop = true;
             if (_parentPopup != null) {
                 PositionSubPopupNearParent();
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+          
             }
             else if (IsLaunchedFromTaskbar()) {
                 _wasLaunchedFromTaskbar = true;
                 NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
 
-                AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false, onComplete: TriggerContentAnimation);
-               //await Task.Delay(100);
-               // TriggerContentAnimation();
+                var settings = await SettingsHelper.LoadSettingsAsync();
+                if (settings.EnableWindowSlideAnimation) {
+                    AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false, onComplete: null);
+
+                }
+                else {
+                    NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+                }
                 return;
             }
             else {
                 _wasLaunchedFromTaskbar = false;
                 NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+
             }
 
 
-            // Non-taskbar: no slide to wait for, fire immediately
-            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
+            //// Non-taskbar: no slide to wait for, fire immediately
+            //DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
 
 
         }
@@ -755,7 +771,7 @@ namespace AppGroup {
                 mi.rcWork.left == mi.rcMonitor.left && mi.rcWork.right == mi.rcMonitor.right;
 
             bool slideOnX = false;
-            
+
             double slideFrom = 40;
 
             if (_parentPopup != null) {
@@ -968,24 +984,26 @@ namespace AppGroup {
             if (headerPosition == "Top") {
                 Grid.SetRow(ScrollView, 1);
                 if (headerParent != null) Grid.SetRow(headerParent, 0);
+                //Header.Background = new SolidColorBrush(Microsoft.UI.Colors.Red);
                 MainGrid.RowDefinitions[0].Height = GridLength.Auto;
                 MainGrid.RowDefinitions[1].Height = new GridLength(1, GridUnitType.Star);
                 MainGrid.Margin = groupHeader ? new Thickness(0, 0, -1, -5) : new Thickness(0, -10, -1, -10);
-                Header.Margin = layout == "Card" ? new Thickness(15, 5, 5, 5) : new Thickness(10, 5, 5, 5);
+                Header.Margin = layout == "Card" ? new Thickness(15, 5, 5, 5) : new Thickness(10, 5, 5, -5);
                 HeaderEditButton.Padding = layout == "Card" ? new Thickness(10) : new Thickness(7);
                 GridPanel.Padding = groupHeader ? new Thickness(0) : new Thickness(0, 10, 0, 15);
                 GridPanel.Margin = layout == "Card" ? new Thickness(0, 0, -5, -15) : new Thickness(0, -5, -5, -25);
             }
             else {
                 Grid.SetRow(ScrollView, 0);
+                //Header.Background = new SolidColorBrush(Microsoft.UI.Colors.Blue);
                 if (headerParent != null) Grid.SetRow(headerParent, 1);
                 MainGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 MainGrid.RowDefinitions[1].Height = GridLength.Auto;
                 MainGrid.Margin = groupHeader ? new Thickness(0, 0, -1, 0) : new Thickness(0, -10, -1, -10);
-                Header.Margin = layout == "Card" ? new Thickness(15, 0, 5, 5) : new Thickness(10, 5, 5, 5);
+                Header.Margin = layout == "Card" ? new Thickness(15, 1, 5, 5) : new Thickness(10, -5, 5, 5);
                 HeaderEditButton.Padding = layout == "Card" ? new Thickness(10) : new Thickness(7);
                 GridPanel.Padding = groupHeader ? new Thickness(0) : new Thickness(0, 10, 0, 15);
-                GridPanel.Margin = layout == "Card" ? new Thickness(0, 0, -5, -15) : new Thickness(0, 0, -5, -20);
+                GridPanel.Margin = layout == "Card" ? new Thickness(0, 0, -5, -15) : new Thickness(0, 0, -5, -15);
             }
         }
 
@@ -1010,6 +1028,7 @@ namespace AppGroup {
                     filteredGroup.Value.LabelPosition ?? DEFAULT_LABEL_POSITION,
                     filteredGroup.Value.HeaderPosition ?? "Top",
                     filteredGroup.Value.Layout ?? "Default",
+                    filteredGroup.Value.ShowOnTray,
                     reorderedPaths);
 
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
@@ -1050,6 +1069,7 @@ namespace AppGroup {
                         filteredGroup.Value.LabelPosition ?? DEFAULT_LABEL_POSITION,
                         filteredGroup.Value.HeaderPosition ?? "Top",
                         filteredGroup.Value.Layout ?? "Default",
+                          filteredGroup.Value.ShowOnTray,
                         newPathOrder);
                 }
 
@@ -1072,7 +1092,6 @@ namespace AppGroup {
             }
             return Path.GetFileNameWithoutExtension(filePath);
         }
-
         private async Task LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
             var items = await Task.Run(() => {
                 var result = new List<PopupItem>();
@@ -1108,50 +1127,212 @@ namespace AppGroup {
                             Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
                         }
                     }
+
+                   
+
                     result.Add(popupItem);
                 }
                 return result;
             });
 
-            // Fix: capture CTS token at the point of loading so cancellation is respected per-load
             var loadToken = _iconLoadCts.Token;
+            var placeholder = GetOrCreatePlaceholder();
+
             foreach (var item in items) {
                 if (loadToken.IsCancellationRequested) break;
+                item.Icon = placeholder;
                 PopupItems.Add(item);
-                _ = LoadIconAsync(item, item.Path, loadToken);
             }
-        }
 
-        // Fix: accept a CancellationToken so icon callbacks don't dispatch after window closes
+            int total = items.Count;
+            if (total == 0) {
+                GridPanel.Opacity = 1;
+                return;
+            }
+
+            // Threshold: reveal GridPanel once this many icons are loaded
+            int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 0.6)));
+            int loadedCount = 0;
+            bool revealed = false;
+            var revealLock = new object();
+
+            void OnIconLoaded() {
+
+                int count = Interlocked.Increment(ref loadedCount);
+                if (!revealed && count >= revealThreshold) {
+                    bool shouldReveal = false;
+                    lock (revealLock) {
+                        if (!revealed) { revealed = true; shouldReveal = true; }
+                    }
+                    if (shouldReveal) {
+                        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, async () => {
+                            if (loadToken.IsCancellationRequested) return;
+                            var settings = await SettingsHelper.LoadSettingsAsync();
+                            if (settings.EnableContentSlideAnimation)
+                                TriggerContentAnimation();
+                            else
+                                GridPanel.Opacity = 1;
+
+                        });
+                    }
+                }
+            }
+
+            var iconTasks = items
+                .Where(_ => !loadToken.IsCancellationRequested)
+                .Select(async item => {
+                    await LoadIconAsync(item, item.Path, loadToken);
+                    OnIconLoaded();
+                })
+                .ToList();
+
+            _ = Task.WhenAll(iconTasks);
+        }
+        //private async Task LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
+        //    var items = await Task.Run(() => {
+        //        var result = new List<PopupItem>();
+        //        foreach (var pathEntry in pathsWithProperties) {
+        //            string path = pathEntry.Key;
+        //            PathData properties = pathEntry.Value;
+        //            string tooltip = !string.IsNullOrEmpty(properties.Tooltip)
+        //                ? properties.Tooltip : GetDisplayNameBackground(path);
+        //            string customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
+
+        //            var popupItem = new PopupItem {
+        //                Path = path,
+        //                Name = Path.GetFileNameWithoutExtension(path),
+        //                ToolTip = tooltip,
+        //                Icon = null,
+        //                Args = properties.Args ?? "",
+        //                IconPath = customIconPath,
+        //                CustomIconPath = customIconPath
+        //            };
+
+
+
+        //            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+        //                try {
+        //                    IWshShell shell = new WshShell();
+        //                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+        //                    string comment = shortcut.Description;
+        //                    if (!string.IsNullOrEmpty(comment) &&
+        //                        comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
+        //                        popupItem.IsSubgroup = true;
+        //                        popupItem.SubgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
+        //                    }
+        //                }
+        //                catch (Exception ex) {
+        //                    Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
+        //                }
+        //            }
+        //            if (Directory.Exists(path)) {
+        //                popupItem.IsFolder = true;
+        //                popupItem.FolderPath = path;
+        //                // IsSubgroup stays false
+        //            }
+        //            result.Add(popupItem);
+        //        }
+        //        return result;
+        //    });
+
+        //    // Fix: capture CTS token at the point of loading so cancellation is respected per-load
+        //    var loadToken = _iconLoadCts.Token;
+        //    foreach (var item in items) {
+        //        if (loadToken.IsCancellationRequested) break;
+        //        PopupItems.Add(item);
+        //        _ = LoadIconAsync(item, item.Path, loadToken);
+        //    }
+        //}
         private async Task LoadIconAsync(PopupItem item, string path, CancellationToken token) {
+            await _iconLoadSemaphore.WaitAsync(token).ConfigureAwait(false);
             try {
+                if (token.IsCancellationRequested) return;
+
+                // Resolve icon file path (background thread work)
                 string iconPath;
-                // Fix: treat empty string the same as null — empty string comes from JSON "icon": ""
-                // Always prefer a valid custom icon over the cache to show post-edit icons correctly
                 string customIcon = string.IsNullOrWhiteSpace(item.CustomIconPath) ? null : item.CustomIconPath;
                 if (customIcon != null && File.Exists(customIcon)) {
                     iconPath = customIcon;
                 }
+               
                 else {
                     iconPath = Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)
-                        ? await IconHelper.GetUrlFileIconAsync(path)
-                        : await IconCache.GetIconPathAsync(path);
+                        ? await IconHelper.GetUrlFileIconAsync(path).ConfigureAwait(false)
+                        : await IconCache.GetIconPathAsync(path).ConfigureAwait(false);
                 }
 
                 if (token.IsCancellationRequested) return;
+                if (string.IsNullOrEmpty(iconPath) || !File.Exists(iconPath)) return;
 
-                var icon = await IconCache.LoadImageFromPathAsync(iconPath);
+                // Decode image bytes on background thread
+                byte[] imageBytes = await Task.Run(() => File.ReadAllBytes(iconPath), token).ConfigureAwait(false);
                 if (token.IsCancellationRequested) return;
 
-                DispatcherQueue.TryEnqueue(() => {
-                    if (!token.IsCancellationRequested)
-                        item.Icon = icon;
+                // BitmapImage must be created on UI thread, but we minimise work there
+                DispatcherQueue.TryEnqueue(async () => {
+                    if (token.IsCancellationRequested) return;
+                    try {
+                        using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                        using var writer = new Windows.Storage.Streams.DataWriter(stream);
+                        writer.WriteBytes(imageBytes);
+                        await writer.StoreAsync();
+                        await writer.FlushAsync();
+                        stream.Seek(0);
+
+                        var bmp = new BitmapImage();
+                        bmp.DecodePixelWidth = ICON_SIZE;   // decode at display size — saves memory
+                        bmp.DecodePixelHeight = ICON_SIZE;
+                        await bmp.SetSourceAsync(stream);
+
+                        if (!token.IsCancellationRequested)
+                            item.Icon = bmp;
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"BitmapImage decode error for {path}: {ex.Message}");
+                    }
                 });
             }
+            catch (OperationCanceledException) { /* expected on close */ }
             catch (Exception ex) {
                 Debug.WriteLine($"Error loading icon for {path}: {ex.Message}");
             }
+            finally {
+                _iconLoadSemaphore.Release();
+            }
         }
+        // Fix: accept a CancellationToken so icon callbacks don't dispatch after window closes
+        //private async Task LoadIconAsync(PopupItem item, string path, CancellationToken token) {
+        //    try {
+        //        string iconPath;
+        //        // Fix: treat empty string the same as null — empty string comes from JSON "icon": ""
+        //        // Always prefer a valid custom icon over the cache to show post-edit icons correctly
+        //        string customIcon = string.IsNullOrWhiteSpace(item.CustomIconPath) ? null : item.CustomIconPath;
+        //        if (customIcon != null && File.Exists(customIcon)) {
+        //            iconPath = customIcon;
+        //        }
+        //        else if (Directory.Exists(path)) {
+        //            iconPath = await IconCache.GetFolderIconPathAsync(path);
+        //        }
+        //        else {
+        //            iconPath = Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)
+        //                ? await IconHelper.GetUrlFileIconAsync(path)
+        //                : await IconCache.GetIconPathAsync(path);
+        //        }
+
+        //        if (token.IsCancellationRequested) return;
+
+        //        var icon = await IconCache.LoadImageFromPathAsync(iconPath);
+        //        if (token.IsCancellationRequested) return;
+
+        //        DispatcherQueue.TryEnqueue(() => {
+        //            if (!token.IsCancellationRequested)
+        //                item.Icon = icon;
+        //        });
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error loading icon for {path}: {ex.Message}");
+        //    }
+        //}
 
         private System.Threading.Timer _focusTimer = null;
         private DateTime _lastSubPopupOpenTime = DateTime.MinValue;
@@ -1194,6 +1375,7 @@ namespace AppGroup {
 
         private bool IsLaunchedFromTaskbar() {
             NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+
             IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
             var mi = new NativeMethods.MONITORINFO { cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>() };
             NativeMethods.GetMonitorInfo(monitor, ref mi);
@@ -1205,8 +1387,15 @@ namespace AppGroup {
             if (workEqualsMonitor) return NativeMethods.IsTaskbarAutoHide();
 
             int taskbarThickness = 60;
+
+            // Bottom taskbar: cursor must be WITHIN the taskbar strip, not above it
+            if (mi.rcWork.bottom < mi.rcMonitor.bottom) {
+                int taskbarTop = mi.rcWork.bottom;
+                int taskbarBottom = mi.rcMonitor.bottom;
+                return cursor.Y >= taskbarTop && cursor.Y <= taskbarBottom;
+            }
+
             if (mi.rcWork.top > mi.rcMonitor.top) return cursor.Y < mi.rcWork.top + taskbarThickness;
-            if (mi.rcWork.bottom < mi.rcMonitor.bottom) return cursor.Y > mi.rcWork.bottom - taskbarThickness;
             if (mi.rcWork.left > mi.rcMonitor.left) return cursor.X < mi.rcWork.left + taskbarThickness;
             if (mi.rcWork.right < mi.rcMonitor.right) return cursor.X > mi.rcWork.right - taskbarThickness;
             return false;
@@ -1235,7 +1424,9 @@ namespace AppGroup {
                         _openSubPopups.Clear();
                         _isLoaded = false;
 
-                        if (_wasLaunchedFromTaskbar) {
+                        var settings = SettingsHelper.GetCurrentSettings();
+
+                        if (_wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
                             AnimateWindowSlideDown(this.GetWindowHandle(), () => {
                                 DispatcherQueue.TryEnqueue(() => {
                                     this.Hide();
@@ -1284,30 +1475,47 @@ namespace AppGroup {
             var t = Interlocked.Exchange(ref _focusTimer, null);
             t?.Dispose();
         }
-
         private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
             if (e.ClickedItem is PopupItem popupItem) {
                 if (popupItem.IsSubgroup) {
                     OpenSubPopup(popupItem.SubgroupName);
                 }
+              
                 else {
                     var root = this;
                     while (root._parentPopup != null) root = root._parentPopup;
 
-                    root.DispatcherQueue.TryEnqueue(() => {
+                    string capturedPath = popupItem.Path;
+                    string capturedArgs = popupItem.Args;
+
+                    root.DispatcherQueue.TryEnqueue(async () => {
                         root.StopFocusTimer();
                         CloseAllChildrenRecursive(root._openSubPopups);
                         root._openSubPopups.Clear();
                         root._isLoaded = false;
-                        root.Hide();
+
+                        var settings = await SettingsHelper.LoadSettingsAsync();
+                        if (root._wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
+                            root.AnimateWindowSlideDown(root.GetWindowHandle(), () => {
+                                root.DispatcherQueue.TryEnqueue(() => {
+                                    root.Hide();
+                                    NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
+                                });
+                            });
+                        }
+                        else {
+                            root.Hide();
+                            NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
+                        }
+
+                        TryLaunchApp(capturedPath, capturedArgs);
                     });
 
                     if (_parentPopup != null) this.Hide();
-                    TryLaunchApp(popupItem.Path, popupItem.Args);
                 }
             }
         }
-
+      
         private void GridView_RightTapped(object sender, RightTappedRoutedEventArgs e) {
             var item = (e.OriginalSource as FrameworkElement)?.DataContext as PopupItem;
             if (item != null) {
@@ -1318,17 +1526,17 @@ namespace AppGroup {
         }
 
         private bool _isLoaded = false;
-
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
                 if (_parentPopup != null) return;
                 if (_focusTimer != null) return;
+                if (_isClosing) return;
 
-                // Fix: set flag before starting async cleanup so re-activation during cleanup
-                // doesn't race into a half-cleaned state
+                _isClosing = true;
+
                 bool wasLoaded = _isLoaded;
-                _isLoaded = false;
-
+                if (!_isFlyoutOpen)
+                    _isLoaded = false;
                 CleanupUISettings();
 
                 if (_hasBeenLoaded && !string.IsNullOrEmpty(_groupFilter) && wasLoaded) {
@@ -1344,8 +1552,6 @@ namespace AppGroup {
 
                         try {
                             UnsubscribeGridViewHandlers();
-
-                            // Fix: cancel icon loads before clearing items
                             _iconLoadCts.Cancel();
 
                             foreach (var item in PopupItems) {
@@ -1371,10 +1577,13 @@ namespace AppGroup {
                         catch (Exception ex) {
                             Debug.WriteLine($"UI cleanup error: {ex.Message}");
                         }
+                        finally {
+                            _isClosing = false;
+                        }
                     }
 
                     this.DispatcherQueue.TryEnqueue(() => {
-                        if (_wasLaunchedFromTaskbar) {
+                        if (_wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
                             AnimateWindowSlideDown(this.GetWindowHandle(), () => {
                                 DispatcherQueue.TryEnqueue(DoCleanup);
                             });
@@ -1402,11 +1611,16 @@ namespace AppGroup {
 
                     _ = Task.Run(() => GC.Collect(0, GCCollectionMode.Optimized));
                 }
+                else {
+                    _isClosing = false;
+                }
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated ||
                      e.WindowActivationState == WindowActivationState.PointerActivated) {
+   
+                if (_isClosing) return;
 
-                if (!_isLoaded) {
+                if (!_isLoaded && !_isFlyoutOpen) {
                     await LoadConfiguration();
                     _isLoaded = true;
                     _hasBeenLoaded = true;
@@ -1452,7 +1666,6 @@ namespace AppGroup {
                 });
             }
         }
-
         private void CleanupUISettings() {
             if (_isUISettingsSubscribed && _uiSettings != null) {
                 _uiSettings.ColorValuesChanged -= UiSettings_ColorValuesChanged;

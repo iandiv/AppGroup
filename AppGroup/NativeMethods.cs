@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace AppGroup {
     public static partial class NativeMethods {
-
+     
         #region Window Messages & Command IDs
 
         public const int WM_USER = 0x0400;
@@ -16,6 +16,7 @@ namespace AppGroup {
         public const uint WM_COMMAND = 0x0111;
         public const uint WM_DESTROY = 0x0002;
         public const uint WM_LBUTTONDBLCLK = 0x0203;
+        public const int WM_LBUTTONUP = 0x0202;
         public const uint WM_RBUTTONUP = 0x0205;
         public const uint WM_NULL = 0x0000;
         public const uint WM_TRAYICON = 0x8000;

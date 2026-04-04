@@ -151,9 +151,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Orientation="Horizontal" Spacing="15" VerticalAlignment="Center">
-                                    <StackPanel Spacing="5" VerticalAlignment="Center" Padding="6"  Orientation="Vertical" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}"   CornerRadius="5">
+                                    <StackPanel   CanDrag="True"
+  DragStarting="GroupIcon_DragStarting"
+  DropCompleted="GroupIcon_DropCompleted" Spacing="5" VerticalAlignment="Center" Padding="6"  Orientation="Vertical" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"  Background="{ThemeResource CardBackgroundFillColorDefault}"   CornerRadius="5">
                                         <StackPanel CornerRadius="4" >
-                                            <Image Source="{Binding GroupIcon}" Width="35" Height="35"  Stretch="UniformToFill"/>
+
+                                            <Image Source="{Binding GroupIcon}" Width="35" Height="35" Stretch="UniformToFill"
+     />
                                         </StackPanel>
                                     </StackPanel>
                                     <StackPanel Spacing="0"  Orientation="Vertical">

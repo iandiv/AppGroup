@@ -36,7 +36,8 @@ namespace AppGroup {
                 StartupToggle.Toggled += StartupToggle_Toggled;
                 GrayscaleIconToggle.Toggled += GrayScaleToggle_Toggled;
                 UpdateCheckToggle.Toggled += UpdateCheckToggle_Toggled;
-
+                WindowSlideAnimationToggle.Toggled += WindowSlideAnimationToggle_Toggled;
+                ContentSlideAnimationToggle.Toggled += ContentSlideAnimationToggle_Toggled;
                 _isLoading = false;
             }
             catch (Exception ex) {
@@ -57,7 +58,8 @@ namespace AppGroup {
                 StartupToggle.IsOn = _settings.RunAtStartup;
                 GrayscaleIconToggle.IsOn = _settings.UseGrayscaleIcon;
                 UpdateCheckToggle.IsOn = _settings.CheckForUpdatesOnStartup;
-
+                WindowSlideAnimationToggle.IsOn = _settings.EnableWindowSlideAnimation;
+                ContentSlideAnimationToggle.IsOn = _settings.EnableContentSlideAnimation;
                 // Verify startup setting matches registry
                 bool isInRegistry = SettingsHelper.IsInStartupRegistry();
                 if (_settings.RunAtStartup != isInRegistry) {
@@ -190,7 +192,8 @@ namespace AppGroup {
                 _settings.RunAtStartup = StartupToggle.IsOn;
                 _settings.UseGrayscaleIcon = GrayscaleIconToggle.IsOn;
                 _settings.CheckForUpdatesOnStartup = UpdateCheckToggle.IsOn;
-
+                _settings.EnableWindowSlideAnimation = WindowSlideAnimationToggle.IsOn;
+                _settings.EnableContentSlideAnimation = ContentSlideAnimationToggle.IsOn;
                 // Save to file
                 await SettingsHelper.SaveSettingsAsync(_settings);
 
@@ -210,7 +213,31 @@ namespace AppGroup {
                 throw; // Re-throw to let the caller handle it
             }
         }
+        private async void WindowSlideAnimationToggle_Toggled(object sender, RoutedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving window slide animation settings: {ex.Message}");
+                _isLoading = true;
+                WindowSlideAnimationToggle.IsOn = !WindowSlideAnimationToggle.IsOn;
+                _isLoading = false;
+            }
+        }
 
+        private async void ContentSlideAnimationToggle_Toggled(object sender, RoutedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving window slide animation settings: {ex.Message}");
+                _isLoading = true;
+                ContentSlideAnimationToggle.IsOn = !ContentSlideAnimationToggle.IsOn;
+                _isLoading = false;
+            }
+        }
         private void CloseDialog(object sender, RoutedEventArgs e) {
             try {
                 this.Hide();

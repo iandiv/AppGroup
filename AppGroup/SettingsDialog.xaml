@@ -75,7 +75,6 @@
                                    />
                     </Grid>
                 </Border>
-
                 <!-- System Tray Section -->
 
                 <Border Style="{StaticResource SettingsCardStyle}">
@@ -87,25 +86,85 @@
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
                             <TextBlock Text="Show system tray icon" 
-                                     FontWeight="SemiBold"
-                                     FontSize="14"
-                                     TextWrapping="Wrap"/>
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       TextWrapping="Wrap"/>
                             <TextBlock Text="Display the application icon in the system tray"
-                                     FontSize="12"
-                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                     Margin="0,2,0,0"
-                                     TextWrapping="Wrap"/>
+                       FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,2,0,0"
+                       TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <ToggleSwitch x:Name="SystemTrayToggle" 
-                                    Grid.Column="1"
-                                    IsOn="True"
-                                    OnContent=""
-                                    OffContent=""
-                                    VerticalAlignment="Center"
-                                   />
+                      Grid.Column="1"
+                      IsOn="True"
+                      OnContent=""
+                      OffContent=""
+                      VerticalAlignment="Center"
+                     />
                     </Grid>
                 </Border>
+
+                <TextBlock VerticalAlignment="Center" Text="Animation" FontWeight="SemiBold" Margin="5,30,5,5"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Window "
+                     FontWeight="SemiBold"
+                     FontSize="14"
+                     TextWrapping="Wrap"/>
+                            <TextBlock Text="Animate window when opening and closing"
+                     FontSize="12"
+                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                     Margin="0,2,0,0"
+                     TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <ToggleSwitch x:Name="WindowSlideAnimationToggle"
+                    Grid.Column="1"
+                    IsOn="True"
+                    OnContent=""
+                    OffContent=""
+                    VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Content "
+       FontWeight="SemiBold"
+       FontSize="14"
+       TextWrapping="Wrap"/>
+                            <TextBlock Text="Animate items inside the group"
+       FontSize="12"
+       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+       Margin="0,2,0,0"
+       TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <ToggleSwitch x:Name="ContentSlideAnimationToggle"
+      Grid.Column="1"
+      IsOn="True"
+      OnContent=""
+      OffContent=""
+      VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+                <TextBlock VerticalAlignment="Center" Text="Others" FontWeight="SemiBold" Margin="5,30,5,5"/>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid>
@@ -137,8 +196,22 @@
                     </Grid>
                 </Border>
 
-                <!-- Updates Section -->
-                <TextBlock Text="Updates" Style="{StaticResource SectionHeaderStyle}"/>
+
+
+                <TextBlock VerticalAlignment="Center" Text="About" FontWeight="SemiBold" Margin="5,30,5,5"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="AppGroup"
+                                 FontWeight="SemiBold"
+                                 FontSize="14"/>
+                        <TextBlock x:Name="VersionText"
+                                 Text="Version"
+                                 FontSize="12"
+                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                 Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
 
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid>
@@ -210,23 +283,6 @@
                         </InfoBar>
                     </StackPanel>
                 </Border>
-
-                <!-- About Section -->
-                <TextBlock Text="About" Style="{StaticResource SectionHeaderStyle}"/>
-
-                <Border Style="{StaticResource SettingsCardStyle}">
-                    <StackPanel>
-                        <TextBlock Text="AppGroup"
-                                 FontWeight="SemiBold"
-                                 FontSize="14"/>
-                        <TextBlock x:Name="VersionText"
-                                 Text="Version"
-                                 FontSize="12"
-                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                 Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
-
             </StackPanel>
         </ScrollViewer>
     </StackPanel>

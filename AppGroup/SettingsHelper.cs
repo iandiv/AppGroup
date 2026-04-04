@@ -20,6 +20,8 @@ namespace AppGroup {
             public bool RunAtStartup { get; set; } = true;
             public bool UseGrayscaleIcon { get; set; } = false;
             public bool CheckForUpdatesOnStartup { get; set; } = true;
+            public bool EnableWindowSlideAnimation { get; set; } = true;
+            public bool EnableContentSlideAnimation { get; set; } = true;
         }
 
         private static AppSettings _currentSettings;

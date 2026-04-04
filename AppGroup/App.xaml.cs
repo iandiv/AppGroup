@@ -404,6 +404,8 @@ namespace AppGroup {
 
         private static void KillAppGroup() {
             try {
+                GroupTrayManager.Cleanup();
+
                 var startInfo = new ProcessStartInfo {
                     FileName = "taskkill",
                     Arguments = "/f /t /im AppGroup.exe",

@@ -1,6 +1,7 @@
-﻿using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.Win32;
 using System;
 using System.Diagnostics;
@@ -30,7 +31,9 @@ namespace AppGroup {
         private async void SettingsDialog_Loaded(object sender, RoutedEventArgs e) {
             try {
                 await LoadCurrentSettingsAsync();
-
+                ThemeComboBox.SelectionChanged += ThemeComboBox_SelectionChanged;
+                PopupThemeComboBox.SelectionChanged += PopupThemeComboBox_SelectionChanged;
+                AccentBackgroundToggle.Toggled += AccentBackgroundToggle_Toggled;
                 // Wire up toggle events after loading to prevent firing during init
                 SystemTrayToggle.Toggled += SystemTrayToggle_Toggled;
                 StartupToggle.Toggled += StartupToggle_Toggled;
@@ -46,13 +49,52 @@ namespace AppGroup {
             }
         }
 
-      
-
-    
+        private async void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+                var requestedTheme = _settings.AppTheme switch {
+                    "Light" => ElementTheme.Light,
+                    "Dark" => ElementTheme.Dark,
+                    _ => ElementTheme.Default
+                };
+                ApplyThemeToDialog(requestedTheme);
+                if (App.Current is App app)
+                    app.ApplyTheme(requestedTheme);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving theme: {ex.Message}");
+            }
+        }
+        private void ApplyThemeToDialog(ElementTheme theme) {
+            // ContentDialog inherits FrameworkElement, so this works directly
+            ((FrameworkElement)this).RequestedTheme = theme;
+        }
+       
         private async Task LoadCurrentSettingsAsync() {
             try {
                 _settings = await SettingsHelper.LoadSettingsAsync();
+                ThemeComboBox.SelectedIndex = _settings.AppTheme switch {
+                    "Light" => 0,
+                    "Dark" => 1,
+                    _ => 2  // "System"
+                };
 
+                PopupThemeComboBox.SelectedIndex = _settings.PopupTheme switch {
+                    "Light" => 0,
+                    "Dark" => 1,
+                    "AppMode" => 2,
+                    _ => 3  // "WindowsMode"
+                };
+                AccentBackgroundToggle.IsOn = _settings.PopupAccentBackground;
+                UpdateAccentBackgroundState(_settings.PopupTheme);
+                var theme = _settings.AppTheme switch {
+                    "Light" => ElementTheme.Light,
+                    "Dark" => ElementTheme.Dark,
+                    _ => ElementTheme.Default
+                };
+
+                ApplyThemeToDialog(theme);
                 // Update UI with current settings
                 SystemTrayToggle.IsOn = _settings.ShowSystemTrayIcon;
                 StartupToggle.IsOn = _settings.RunAtStartup;
@@ -180,7 +222,34 @@ namespace AppGroup {
                 UpdateChecker.OpenReleasesPage(_updateReleaseUrl);
             }
         }
-
+        private async void PopupThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                var selected = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+                UpdateAccentBackgroundState(selected);
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving popup theme: {ex.Message}");
+            }
+        }
+        private void UpdateAccentBackgroundState(string popupTheme) {
+            bool isWindowsMode = popupTheme == "WindowsMode";
+            AccentBackgroundToggle.IsEnabled = isWindowsMode;
+            AccentBackgroundInfoBar.IsOpen = !isWindowsMode;
+        }
+        private async void AccentBackgroundToggle_Toggled(object sender, RoutedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving accent background setting: {ex.Message}");
+                _isLoading = true;
+                AccentBackgroundToggle.IsOn = !AccentBackgroundToggle.IsOn;
+                _isLoading = false;
+            }
+        }
         private async Task SaveSettingsAsync() {
             try {
                 if (_settings == null) {
@@ -194,6 +263,8 @@ namespace AppGroup {
                 _settings.CheckForUpdatesOnStartup = UpdateCheckToggle.IsOn;
                 _settings.EnableWindowSlideAnimation = WindowSlideAnimationToggle.IsOn;
                 _settings.EnableContentSlideAnimation = ContentSlideAnimationToggle.IsOn;
+                _settings.AppTheme = (ThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "System";
+                _settings.PopupTheme = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "WindowsMode";
                 // Save to file
                 await SettingsHelper.SaveSettingsAsync(_settings);
 

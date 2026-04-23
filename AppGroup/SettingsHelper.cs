@@ -22,6 +22,9 @@ namespace AppGroup {
             public bool CheckForUpdatesOnStartup { get; set; } = true;
             public bool EnableWindowSlideAnimation { get; set; } = true;
             public bool EnableContentSlideAnimation { get; set; } = true;
+            public string AppTheme { get; set; } = "System"; // "Light", "Dark", "System"
+            public string PopupTheme { get; set; } = "WindowsMode";
+            public bool PopupAccentBackground { get; set; } = true;
         }
 
         private static AppSettings _currentSettings;
@@ -136,6 +139,7 @@ namespace AppGroup {
                 await File.WriteAllTextAsync(SettingsPath, jsonContent);
 
                 _currentSettings = settings;
+
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Error saving settings: {ex.Message}");

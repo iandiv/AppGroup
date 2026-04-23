@@ -164,6 +164,103 @@
       VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
+
+                <TextBlock VerticalAlignment="Center" Text="Appearance" FontWeight="SemiBold" Margin="5,10,5,5"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="App theme"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       TextWrapping="Wrap"/>
+                            <TextBlock Text="Select which app theme to display"
+                       FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,2,0,0"
+                       TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <ComboBox x:Name="ThemeComboBox"
+                  Grid.Column="1"
+                  VerticalAlignment="Center"
+                  SelectionChanged="ThemeComboBox_SelectionChanged">
+                            <ComboBoxItem Content="Light" Tag="Light"/>
+                            <ComboBoxItem Content="Dark" Tag="Dark"/>
+                            <ComboBoxItem Content="Use system setting" Tag="System"/>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Popup theme"
+                       FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Select the theme for the popup window"
+                       FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <ComboBox x:Name="PopupThemeComboBox" Grid.Column="1" VerticalAlignment="Center" MinWidth="160">
+                            <ComboBoxItem Content="Light"        Tag="Light"/>
+                            <ComboBoxItem Content="Dark"         Tag="Dark"/>
+                            <ComboBoxItem Content="App mode "   Tag="AppMode"/>
+                            <ComboBoxItem Content="Windows mode " Tag="WindowsMode"/>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+                <Border x:Name="AccentBackgroundCard"  Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="200"/>
+                                <ColumnDefinition Width="50"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                                <TextBlock Text="Accent color background"
+                   FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="AccentBackgroundDescription" 
+                   Text="Use Windows accent color as popup background"
+                   FontSize="12"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                   Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <ToggleSwitch x:Name="AccentBackgroundToggle"
+                  Grid.Column="1"
+                  IsOn="True"
+                  OnContent="" OffContent=""
+                  VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <InfoBar x:Name="AccentBackgroundInfoBar"
+         IsOpen="False"
+         IsClosable="False"
+         Severity="Warning"
+         Margin="0,8,0,0">
+                            <InfoBar.Content>
+                                <TextBlock 
+            Text=" Only available when popup theme is set to Windows mode"
+         
+                                    TextAlignment="Left"
+            FontSize="12"
+        />
+                            </InfoBar.Content>
+                        </InfoBar>
+                    </StackPanel>
+                </Border>
                 <TextBlock VerticalAlignment="Center" Text="Others" FontWeight="SemiBold" Margin="5,30,5,5"/>
 
                 <Border Style="{StaticResource SettingsCardStyle}">

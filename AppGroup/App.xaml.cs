@@ -27,7 +27,7 @@ namespace AppGroup {
         public App() {
             try {
 
-                _ = InitializeSettingsAsync();
+                //_ = InitializeSettingsAsync();
 
                 this.InitializeComponent();
             }
@@ -42,6 +42,7 @@ namespace AppGroup {
             try {
                 // Load settings - this will automatically apply the startup setting if needed
                 await SettingsHelper.LoadSettingsAsync();
+
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Settings initialization failed: {ex.Message}");
@@ -62,6 +63,7 @@ namespace AppGroup {
                     }
                     CreateAllWindows();
                     InitializeSystemTray();
+                   await ApplySavedThemeAsync();
                     return;
                 }
 
@@ -71,7 +73,7 @@ namespace AppGroup {
 
                 CreateAllWindows();
                 InitializeSystemTray();
-
+                await ApplySavedThemeAsync();
                 if (cmdArgs.Length > 1) {
                     string command = cmdArgs[1];
 
@@ -90,7 +92,7 @@ namespace AppGroup {
                         // Send group name first, then show
                         IntPtr popupHWnd = popupWindow?.GetWindowHandle() ?? IntPtr.Zero;
                         if (popupHWnd != IntPtr.Zero) {
-                            NativeMethods.SendString(popupHWnd, command);
+                            NativeMethods.SendString(popupHWnd, $"{command}|{Program.InitialClickPos.X},{Program.InitialClickPos.Y}");
                             NativeMethods.ForceForegroundWindow(popupHWnd);
                         }
                     }
@@ -106,7 +108,15 @@ namespace AppGroup {
                 Environment.Exit(1);
             }
         }
-
+        private async Task ApplySavedThemeAsync() {
+            var settings = await SettingsHelper.LoadSettingsAsync();
+            var theme = settings.AppTheme switch {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
+            ApplyTheme(theme);
+        }
         //protected async override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args) {
         //    try {
         //        string[] cmdArgs = Environment.GetCommandLineArgs();
@@ -247,6 +257,26 @@ namespace AppGroup {
                 popupWindow.AppWindow.Resize(new SizeInt32(screenWidth, screenHeight));
 
                 popupWindow.InitializeComponent();
+                _ = Task.Run(async () => {
+                    await Task.Delay(300); // let app finish startup first
+                    try {
+                        string lastOpenPath = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "AppGroup", "lastOpen");
+                        string lastGroup = File.Exists(lastOpenPath)
+                            ? File.ReadAllText(lastOpenPath).Trim() : "";
+
+                        if (!string.IsNullOrEmpty(lastGroup)) {
+                            popupWindow.DispatcherQueue.TryEnqueue(async () => {
+                                popupWindow._groupFilter = lastGroup;  // make _groupFilter internal
+                                await popupWindow.PreloadLastGroupAsync();
+                            });
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"Preload error: {ex.Message}");
+                    }
+                });
 
                 NativeMethods.PositionWindowOffScreen(popupWindow.GetWindowHandle());
 
@@ -258,6 +288,7 @@ namespace AppGroup {
                 if (editHWnd != IntPtr.Zero) {
                     NativeMethods.ShowWindow(editHWnd, NativeMethods.SW_HIDE);
                 }
+
             }
             catch (Exception ex) {
                 System.Diagnostics.Debug.WriteLine($"Failed to create windows: {ex.Message}");
@@ -458,6 +489,28 @@ namespace AppGroup {
             }
         }
 
-     
+        public void ApplyTheme(ElementTheme theme) {
+            ApplyThemeToWindow(m_window, theme);
+            ApplyThemeToWindow(popupWindow, theme);
+            ApplyThemeToWindow(editWindow, theme);
+        }
+
+        private void ApplyThemeToWindow(Window window, ElementTheme theme) {
+            if (window == null) return;
+
+            if (window.Content is FrameworkElement root) {
+                root.RequestedTheme = theme;
+                ThemeHelper.ApplyTitleBarColors(window);
+            }
+            else {
+                // Content not ready yet — wait for it
+                window.Activated += (s, e) => {
+                    if (window.Content is FrameworkElement r) {
+                        r.RequestedTheme = theme;
+                        ThemeHelper.ApplyTitleBarColors(window);
+                    }
+                };
+            }
+        }
     }
 }

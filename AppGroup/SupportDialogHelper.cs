@@ -107,6 +107,12 @@ namespace AppGroup {
                     Debug.WriteLine("Cannot show dialog: Window or XamlRoot is not available");
                     return;
                 }
+                var settings = SettingsHelper.GetCurrentSettings();
+                var theme = settings.AppTheme switch {
+                    "Light" => ElementTheme.Light,
+                    "Dark" => ElementTheme.Dark,
+                    _ => ElementTheme.Default
+                };
 
                 ContentDialog supportDialog = new ContentDialog {
                     Title = "❤️ Support Us ",
@@ -118,7 +124,8 @@ namespace AppGroup {
                     SecondaryButtonText = "Support Us",
                     PrimaryButtonText = "Later",
                     DefaultButton = ContentDialogButton.Secondary,
-                    XamlRoot = _ownerWindow.Content.XamlRoot
+                    XamlRoot = _ownerWindow.Content.XamlRoot,
+                    RequestedTheme = theme  
                 };
 
                 var result = await supportDialog.ShowAsync();

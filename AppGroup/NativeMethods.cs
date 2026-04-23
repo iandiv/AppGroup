@@ -24,12 +24,38 @@ namespace AppGroup {
         public const int ID_SHOW = 1001;
         public const int ID_EXIT = 1002;
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr SetCursor(IntPtr hCursor);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
         // Registered at startup — unique cross-process message
         public static readonly int WM_UPDATE_GROUP = RegisterWindowMessage("AppGroup.WM_UPDATE_GROUP");
 
         #endregion
 
         #region ShowWindow / SetWindowPos Flags
+        public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll")]
+        public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        public const int WH_MOUSE_LL = 14;
+        public const int WM_LBUTTONDOWN = 0x0201;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MSLLHOOKSTRUCT {
+            public POINT pt;
+            public uint mouseData, flags, time;
+            public IntPtr dwExtraInfo;
+        }
 
         public const int SW_HIDE = 0;
         public const int SW_NORMAL = 1;
@@ -761,14 +787,17 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
             return TaskbarPosition.Bottom;
         }
 
-        public static void PositionWindowAboveTaskbar(IntPtr hWnd, bool show = true) {
+        public static void PositionWindowAboveTaskbar(IntPtr hWnd, bool show = true, POINT? cursorOverride = null) { 
             try {
                 if (!GetWindowRect(hWnd, out RECT wr)) return;
                 int windowWidth = wr.right - wr.left;
                 int windowHeight = wr.bottom - wr.top;
 
-                if (!GetCursorPos(out POINT cursor)) return;
-
+                POINT cursor;
+                if (cursorOverride.HasValue)
+                    cursor = cursorOverride.Value;
+                else if (!GetCursorPos(out cursor))
+                    return;
                 IntPtr monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
                 var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
                 if (!GetMonitorInfo(monitor, ref mi)) return;

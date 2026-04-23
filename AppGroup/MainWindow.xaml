@@ -99,17 +99,16 @@
 
                         <Button.Flyout>
                             <MenuFlyout>
-                                <MenuFlyoutItem Text="Import"  Icon="Download"  Click="ImportBackupButton_Click"/>
-
-
+                                <MenuFlyoutSubItem Text="Import" Icon="Download">
+                                    <MenuFlyoutItem Text=".agz" Icon="Document" Click="ImportBackupButton_Click"/>
+                                    <MenuFlyoutItem Text="TaskbarGroups" Icon="Folder" Click="ImportTbgButton_Click"/>
+                                </MenuFlyoutSubItem>
+                                <MenuFlyoutSeparator/>
                                 <MenuFlyoutItem Text="Export" Icon="Upload" Click="ExportBackupButton_Click"/>
                                 <MenuFlyoutSeparator/>
-                                <MenuFlyoutItem Text="Settings"  Icon="Setting"  Click="SettingsButton_Click"/>
-
+                                <MenuFlyoutItem Text="Force Taskbar Update" Icon="Sync" Click="ForceTaskbarUpdate_Click"/>
                                 <MenuFlyoutSeparator/>
-
-                                <MenuFlyoutItem Text="Force Taskbar Update"  Icon="Sync"  Click="ForceTaskbarUpdate_Click"/>
-
+                                <MenuFlyoutItem Text="Settings" Icon="Setting" Click="SettingsButton_Click"/>
                             </MenuFlyout>
                         </Button.Flyout>
 

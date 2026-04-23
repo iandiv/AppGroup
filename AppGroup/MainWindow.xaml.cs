@@ -1,7 +1,9 @@
 ﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Concurrent;
@@ -428,12 +430,7 @@ namespace AppGroup {
             }
         }
 
-        private void TouchFile(string path) {
-            var now = DateTime.Now;
-            File.SetCreationTime(path, now);
-            File.SetLastWriteTime(path, now);
-            File.SetLastAccessTime(path, now);
-        }
+       
         private void GroupListView_DragItemsStarting(object sender, DragItemsStartingEventArgs e) {
             if (_isIconDragging) {
                 _isIconDragging = false;
@@ -459,7 +456,7 @@ namespace AppGroup {
                     }
                 }
 
-                _isReordering = false;
+                _isReordering = false;  
 
                 if (args.DropResult == DataPackageOperation.Move) {
                     var reorderedItems = GroupListView.Items.OfType<GroupItem>().ToList();
@@ -731,7 +728,7 @@ namespace AppGroup {
 
             return groupItem;
         }
-
+       
         private async Task<string> ReGenerateIconAsync(string filePath, string outputDirectory) {
             try {
                 if (IconCache.TryGetCachedPath(filePath, out _)) {
@@ -864,6 +861,7 @@ namespace AppGroup {
                 e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
                 e.AllowedOperations = DataPackageOperation.Link;
                 e.Data.RequestedOperation = DataPackageOperation.Link;
+
             }
             catch (Exception ex) {
                 _isIconDragging = false;
@@ -871,6 +869,82 @@ namespace AppGroup {
             }
             finally {
                 deferral.Complete();
+            }
+        }
+
+
+        private async void ImportTbgButton_Click(object sender, RoutedEventArgs e) {
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
+            StorageFolder rootFolder = await picker.PickSingleFolderAsync();
+            if (rootFolder == null) return;
+            try {
+
+                string configPath = await TbgImporter.ResolveConfigFolderAsync(rootFolder);
+                var previews = await TbgImporter.ScanGroupsAsync(configPath);
+                if (previews.Count == 0) {
+                    var emptyDialog = new ContentDialog {
+                        Title = "Import from TaskbarGroups",
+                        Content = "No valid TaskbarGroups groups found in that folder.",
+                        CloseButtonText = "OK",
+                        XamlRoot = this.Content.XamlRoot
+                    };
+                    await emptyDialog.ShowAsync();
+                    return;
+                }
+                var importDialog = new TbgImportDialog(previews) {
+                    XamlRoot = this.Content.XamlRoot
+                };
+                await importDialog.ShowAsync();
+                if (!importDialog.ImportConfirmed) return;
+                var selected = importDialog.GetSelected();
+                if (selected.Count == 0) return;
+                // Duplicate protection
+                var duplicates = TbgImporter.FindDuplicates(selected);
+                if (duplicates.Any()) {
+                    var msg = "The following groups already exist and will be overwritten:\n\n"
+                              + string.Join("\n", duplicates.Select(n => $"- {n}"))
+                              + "\n\nDo you want to continue?";
+
+                    var overwriteDialog = new ContentDialog {
+                        Title = "Groups Will Be Overwritten",
+                        Content = new ScrollViewer {
+                            MaxHeight = 400,
+                            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                            Content = new TextBlock { Text = msg, TextWrapping = TextWrapping.Wrap }
+                        },
+                        PrimaryButtonText = "Continue",
+                        CloseButtonText = "Cancel",
+                        DefaultButton = ContentDialogButton.Primary,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+
+                    var result = await overwriteDialog.ShowAsync();
+                    if (result != ContentDialogResult.Primary) return;
+                }
+
+                int count = await TbgImporter.ImportSelectedAsync(selected);
+
+
+                await LoadGroupsAsync();
+                var doneDialog = new ContentDialog {
+                    Title = "Import Complete",
+                    Content = $"Imported {count} group{(count == 1 ? "" : "s")} from TaskbarGroups.",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.Content.XamlRoot
+                };
+                await doneDialog.ShowAsync();
+            }
+            catch (Exception ex) {
+                var dialog = new ContentDialog {
+                    Title = "Import Failed",
+                    Content = $"Error: {ex.Message}",
+                    CloseButtonText = "OK",
+                    XamlRoot = this.Content.XamlRoot
+                };
+                await dialog.ShowAsync();
             }
         }
 

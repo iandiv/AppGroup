@@ -149,7 +149,189 @@ namespace AppGroup {
                             var serializerOptions = new System.Text.Json.JsonSerializerOptions {
                                 PropertyNameCaseInsensitive = true
                             };
-                            config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, GroupConfig>>(configContent, serializerOptions);
+                            //config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, GroupConfig>>(configContent, serializerOptions);
+                            var importedConfig = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, BackupHelper.GroupConfig>>(
+    configContent,
+    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+) ?? new Dictionary<string, BackupHelper.GroupConfig>();
+
+                            string existingConfigContent = File.Exists(configPath)
+                                ? await File.ReadAllTextAsync(configPath)
+                                : "{}";
+
+                            var existingConfig = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, BackupHelper.GroupConfig>>(
+                                existingConfigContent,
+                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                            ) ?? new Dictionary<string, BackupHelper.GroupConfig>();
+
+
+                            // Collect groups that will be overwritten
+                            var groupsToOverwrite = importedConfig.Keys
+                                .Select(k => importedConfig[k].groupName)
+                                .Where(name => existingConfig.Values.Any(g => g.groupName == name))
+                                .ToList();
+
+                            if (groupsToOverwrite.Any()) {
+                                progressDialog.Hide();
+
+                                var overwriteMessage = "The following groups already exist and will be overwritten:\n\n";
+                                foreach (var name in groupsToOverwrite) {
+                                    overwriteMessage += $"- {name}\n";
+                                }
+                                overwriteMessage += "\nDo you want to continue?";
+
+                                var overwriteDialog = new ContentDialog {
+                                    Title = "Groups Will Be Overwritten",
+                                    Content = new ScrollViewer {
+                                        MaxHeight = 400,
+                                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                                        Content = new TextBlock {
+                                            Text = overwriteMessage,
+                                            TextWrapping = TextWrapping.Wrap
+                                        }
+                                    },
+                                    PrimaryButtonText = "Continue",
+                                    CloseButtonText = "Cancel",
+                                    DefaultButton = ContentDialogButton.Primary,
+                                    XamlRoot = _parentWindow.Content.XamlRoot
+                                };
+
+                                var overwriteResult = await overwriteDialog.ShowAsync();
+                                if (overwriteResult != ContentDialogResult.Primary) {
+                                    Debug.WriteLine("User canceled import due to overwrite warning");
+                                    return;
+                                }
+
+                                progressTask = progressDialog.ShowAsync();
+                            }
+                            int nextKey = existingConfig.Keys
+                                .Select(k => int.TryParse(k, out int n) ? n : 0)
+                                .DefaultIfEmpty(0).Max() + 1;
+
+                            foreach (var entry in importedConfig) {
+                                var existingKey = existingConfig
+                                    .FirstOrDefault(k => k.Value.groupName == entry.Value.groupName).Key;
+
+                                if (existingKey != null) {
+                                    existingConfig[existingKey] = entry.Value; // replace
+                                }
+                                else {
+                                    existingConfig[nextKey.ToString()] = entry.Value; // add new
+                                    nextKey++;
+                                }
+                            }
+
+                            config = existingConfig;
+
+
+                            var previewItems = await Task.Run(() =>
+      importedConfig.Values
+      .Where(g => !string.IsNullOrEmpty(g.groupName))
+    .Select(g => {
+        // Try to resolve icon from the zip (Groups/<name>/<name>/<name>_regular.png or .ico)
+          string iconEntry = archive.Entries
+        .FirstOrDefault(e =>
+            e.FullName.StartsWith($"Groups/{g.groupName}/{g.groupName}/", StringComparison.OrdinalIgnoreCase)
+            && (e.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+             ))
+        ?.FullName;
+
+    string tempIconPath = null;
+    if (iconEntry != null) {
+        try {
+            var entry = archive.GetEntry(iconEntry);
+            string ext = Path.GetExtension(entry.Name);
+            tempIconPath = Path.Combine(Path.GetTempPath(),
+                $"agbk_preview_{g.groupName.GetHashCode():x}{ext}");
+            entry.ExtractToFile(tempIconPath, overwrite: true);
+        }
+        catch { tempIconPath = null; }
+    }
+
+     // ADD: resolve path icons from zip entries
+    int maxIcons = 7;
+    var pathIcons = new List<string>();
+    if (g.path != null) {
+        foreach (var pathKey in g.path.Keys) {
+            // look for a matching icon inside Groups/<name>/ (any subfolder)
+            string fileName = Path.GetFileName(pathKey);
+            var iconZipEntry = archive.Entries.FirstOrDefault(e =>
+                e.FullName.StartsWith($"Groups/{g.groupName}/", StringComparison.OrdinalIgnoreCase)
+                && !e.FullName.StartsWith($"Groups/{g.groupName}/{g.groupName}/", StringComparison.OrdinalIgnoreCase)
+                && (e.Name.Equals(fileName + ".png", StringComparison.OrdinalIgnoreCase)
+                 || e.Name.Equals(fileName + ".ico", StringComparison.OrdinalIgnoreCase)));
+
+            if (iconZipEntry != null) {
+                try {
+                    string ext = Path.GetExtension(iconZipEntry.Name);
+                    string tmp = Path.Combine(Path.GetTempPath(),
+                        $"agbk_path_{pathKey.GetHashCode():x}{ext}");
+                    iconZipEntry.ExtractToFile(tmp, overwrite: true);
+                    pathIcons.Add(tmp);
+                }
+                catch { }
+            }
+            else {
+                // fall back to live icon cache for paths that exist on this machine
+                try {
+                    string cached = IconCache.GetIconPathAsync(pathKey).GetAwaiter().GetResult();
+                    if (!string.IsNullOrEmpty(cached) && File.Exists(cached))
+                        pathIcons.Add(cached);
+                }
+                catch { }
+            }
+
+            if (pathIcons.Count >= maxIcons) break;
+        }
+    }
+
+    return new BackupGroupPreviewItem {
+        GroupName = g.groupName,
+        ShortcutCount = g.path?.Count ?? 0,
+        GroupIcon = tempIconPath,
+        PathIcons = pathIcons.Take(maxIcons).ToList(),                     // ADD
+        AdditionalIconsCount = Math.Max(0, (g.path?.Count ?? 0) - maxIcons) // ADD
+    };
+})
+    .ToList());
+
+                            // Hide progress while showing the preview dialog
+                            progressDialog.Hide();
+
+                            var previewDialog = new BackupImportDialog(previewItems) {
+                                XamlRoot = _parentWindow.Content.XamlRoot
+                            };
+                            await previewDialog.ShowAsync();
+
+                            // Clean up temp icon files
+                            foreach (var item in previewItems)
+                                if (item.GroupIcon != null && File.Exists(item.GroupIcon))
+                                    try { File.Delete(item.GroupIcon); } catch { }
+
+                            if (!previewDialog.ImportConfirmed) {
+                                Debug.WriteLine("User cancelled at preview dialog");
+                                return;
+                            }
+
+                            // Filter config to only selected groups
+                            var selectedNames = previewDialog.GetSelectedNames();
+
+                            var importedNames = importedConfig.Values
+                                .Select(g => g.groupName)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                            var keysToRemove = config
+                                .Where(kv => importedNames.Contains(kv.Value.groupName ?? "")
+                                          && !selectedNames.Contains(kv.Value.groupName ?? ""))
+                                .Select(kv => kv.Key)
+                                .ToList();
+
+                            foreach (var key in keysToRemove)
+                                config.Remove(key);
+
+                            // Show progress again for the actual extraction
+                            progressTask = progressDialog.ShowAsync();
+
 
                             // Null check after deserialization
                             if (config == null) {
@@ -252,6 +434,9 @@ namespace AppGroup {
                                     foreach (var invalidPath in groupsWithInvalidPaths[group.groupName]) {
                                         group.path.Remove(invalidPath);
                                     }
+                                    int remainingCount = group.path.Count;
+                                    if (group.groupCol > remainingCount)
+                                        group.groupCol = Math.Max(1, remainingCount);
                                 }
                             }
                         }
@@ -263,23 +448,23 @@ namespace AppGroup {
                     // Ensure directories exist
                     Directory.CreateDirectory(appGroupLocalPath);
 
-                    // Clean up the Groups directory - remove all existing folders to ensure clean import
-                    if (Directory.Exists(groupsPath)) {
-                        try {
-                            // Get all directories inside the Groups folder
-                            string[] groupDirectories = Directory.GetDirectories(groupsPath);
+                    //// Clean up the Groups directory - remove all existing folders to ensure clean import
+                    //if (Directory.Exists(groupsPath)) {
+                    //    try {
+                    //        // Get all directories inside the Groups folder
+                    //        string[] groupDirectories = Directory.GetDirectories(groupsPath);
 
-                            // Delete each directory
-                            foreach (string directory in groupDirectories) {
-                                Directory.Delete(directory, true); // true means recursive delete
-                            }
-                            Debug.WriteLine("Removed all existing group folders before import");
-                        }
-                        catch (Exception ex) {
-                            Debug.WriteLine($"Error cleaning up Groups directory: {ex.Message}");
-                            // Continue with import even if cleanup fails
-                        }
-                    }
+                    //        // Delete each directory
+                    //        foreach (string directory in groupDirectories) {
+                    //            Directory.Delete(directory, true); // true means recursive delete
+                    //        }
+                    //        Debug.WriteLine("Removed all existing group folders before import");
+                    //    }
+                    //    catch (Exception ex) {
+                    //        Debug.WriteLine($"Error cleaning up Groups directory: {ex.Message}");
+                    //        // Continue with import even if cleanup fails
+                    //    }
+                    //}
 
                     // Ensure Groups directory exists
                     Directory.CreateDirectory(groupsPath);

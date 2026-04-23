@@ -10,10 +10,13 @@ using System.Threading.Tasks;
 using Windows.UI.StartScreen;
 namespace AppGroup {
     public class Program {
+
+        public static NativeMethods.POINT InitialClickPos;
         [STAThread]
         
 
         static void Main(string[] args) {
+            NativeMethods.GetCursorPos(out InitialClickPos);
             // Register the same message as your receiver
             int msgId = NativeMethods.WM_UPDATE_GROUP;
             string[] cmdArgs = Environment.GetCommandLineArgs();
@@ -78,21 +81,12 @@ namespace AppGroup {
                     System.Diagnostics.Debug.WriteLine($"Failed to find group ID for '{command}': {ex.Message}");
                 }
 
-
                 if (existingPopupHWnd != IntPtr.Zero) {
-
-                    //NativeMethods.ShowWindow(existingPopupHWnd, NativeMethods.SW_SHOW);
                     NativeMethods.SendString(existingPopupHWnd, command);
                     NativeMethods.ForceForegroundWindow(existingPopupHWnd);
-                    //NativeMethods.PositionWindowAboveTaskbar(existingPopupHWnd);
                     InitializeJumpListSync();
-
-
                     return;
                 }
-              
-
-
             }
 
             WinRT.ComWrappersSupport.InitializeComWrappers();

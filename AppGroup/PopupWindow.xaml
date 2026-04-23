@@ -23,8 +23,14 @@
 
 
 
-        <ScrollViewer 
-                 Grid.Row="1" VerticalScrollMode="Auto" CornerRadius="0"  x:Name="ScrollView"  VerticalAlignment="Stretch" HorizontalAlignment="Stretch" HorizontalScrollMode="Disabled"
+        <ScrollViewer
+            Grid.Row="1" VerticalScrollMode="Auto"
+            CornerRadius="0" 
+            Margin="30"
+            x:Name="ScrollView"  
+            VerticalContentAlignment="Center"
+            VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+            HorizontalScrollMode="Disabled"
               VerticalScrollBarVisibility="Auto" >
             <StackPanel x:Name="GridPanel" Width="Auto"  Height="Auto"   VerticalAlignment="Center" HorizontalAlignment="Center"/>
         </ScrollViewer>

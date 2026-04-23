@@ -93,13 +93,14 @@ namespace AppGroup {
         };
 
         private readonly Dictionary<int, EditGroupWindow> _openEditWindows = new Dictionary<int, EditGroupWindow>();
-        private readonly WindowHelper _windowHelper;
+        private readonly WindowHelper _windowHelper;    
         private ObservableCollection<PopupItem> PopupItems = new ObservableCollection<PopupItem>();
         private Dictionary<string, GroupData> _groups;
         private GridView _gridView;
         private PopupItem _clickedItem;
         private int _groupId;
-        private string _groupFilter = null;
+        internal string _groupFilter = null;
+        private NativeMethods.POINT? _receivedCursorPos;
         private string _json = "";
         private bool _anyGroupDisplayed;
         private DataTemplate _itemTemplate;
@@ -141,8 +142,19 @@ namespace AppGroup {
         private readonly CancellationTokenSource _windowCts = new CancellationTokenSource();
         private static readonly SemaphoreSlim _iconLoadSemaphore = new SemaphoreSlim(6, 6);
         private static BitmapImage _placeholderIcon;
+
+        private static NativeMethods.POINT _lastClickPos;
+        private static IntPtr _mouseHookHandle;
+        private static NativeMethods.LowLevelMouseProc _mouseHookProc;
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
+
+            _mouseHookProc = MouseHookCallback;
+            _mouseHookHandle = NativeMethods.SetWindowsHookEx(
+                NativeMethods.WH_MOUSE_LL,
+                _mouseHookProc,
+                NativeMethods.GetModuleHandle(null),
+                0);
             _groupFilter = groupFilter;
             this.Title = "Popup Window";
 
@@ -150,7 +162,7 @@ namespace AppGroup {
             _windowHelper.SetSystemBackdrop(WindowHelper.BackdropType.AcrylicBase);
             _windowHelper.IsMaximizable = false;
             _windowHelper.IsMinimizable = false;
-            _windowHelper.IsResizable = false;
+            _windowHelper.IsResizable = true;
             _windowHelper.HasBorder = true;
             _windowHelper.HasTitleBar = false;
             _windowHelper.IsAlwaysOnTop = true;
@@ -172,21 +184,104 @@ namespace AppGroup {
             this.AppWindow.IsShownInSwitchers = false;
             this.Activated += Window_Activated;
         }
+        internal async Task PreloadSubgroupsAsync(CancellationToken token = default) {
+            try {
+                if (_groups == null || string.IsNullOrEmpty(_groupFilter)) return;
 
-        
+                // Find current group's items
+                var match = _groups.FirstOrDefault(g =>
+                    g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                if (match.Key == null) return;
+
+                // Collect subgroup names from path entries
+                var subgroupNames = new List<string>();
+                foreach (var pathEntry in match.Value.Path) {
+                    string path = pathEntry.Key;
+                    if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                        try {
+                            IWshShell shell = new WshShell();
+                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+                            string comment = shortcut.Description;
+                            if (!string.IsNullOrEmpty(comment) &&
+                                comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
+                                string subgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
+                                subgroupNames.Add(subgroupName);
+                            }
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"PreloadSubgroups shortcut read error: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Warm icon cache for each subgroup (background only, no UI)
+                foreach (string subgroupName in subgroupNames) {
+                    if (token.IsCancellationRequested) return;
+
+                    var subMatch = _groups.FirstOrDefault(g =>
+                        g.Value.GroupName.Equals(subgroupName, StringComparison.OrdinalIgnoreCase));
+                    if (subMatch.Key == null) continue;
+
+                    foreach (var path in subMatch.Value.Path.Keys) {
+                        if (token.IsCancellationRequested) return;
+                        string p = path;
+                        _ = Task.Run(() => IconCache.GetIconPathAsync(p), token);
+                    }
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"PreloadSubgroupsAsync error: {ex.Message}");
+            }
+        }
+        internal async Task PreloadLastGroupAsync() {
+            try {
+                string configPath = JsonConfigHelper.GetDefaultConfigPath();
+                _groups = await Task.Run(() => {
+                    string json = JsonConfigHelper.ReadJsonFromFile(configPath);
+                    return JsonSerializer.Deserialize<Dictionary<string, GroupData>>(json, JsonOptions);
+                });
+                if (_groups == null || string.IsNullOrEmpty(_groupFilter)) return;
+
+                var match = _groups.FirstOrDefault(g =>
+                    g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+                if (match.Key == null) return;
+
+                // Existing: warm main group icons
+                foreach (var path in match.Value.Path.Keys) {
+                    string p = path;
+                    _ = Task.Run(() => IconCache.GetIconPathAsync(p));
+                }
+
+                // New: warm subgroup icons
+                await PreloadSubgroupsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"PreloadLastGroupAsync error: {ex.Message}");
+            }
+        }
+        private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+            if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_LBUTTONDOWN) {
+                var hook = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                _lastClickPos = hook.pt;
+            }
+            return NativeMethods.CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
+        }
         private SizeInt32 GetOffscreenSize() {
             var workArea = DisplayArea.Primary.WorkArea;
             return new SizeInt32(workArea.Width * 2, workArea.Height * 2);
         }
 
-        private void AnimateWindowSlideUp(IntPtr hWnd, bool isSubPopup = false, Action onComplete = null) {
+        private void AnimateWindowSlideUp(IntPtr hWnd, bool isSubPopup = false, Action onComplete = null, NativeMethods.POINT? cursorOverride = null) {
             NativeMethods.GetWindowRect(hWnd, out NativeMethods.RECT rect);
             int finalX = rect.left;
             int finalY = rect.top;
             int windowWidth = rect.right - rect.left;
             int windowHeight = rect.bottom - rect.top;
 
-            NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+            NativeMethods.POINT cursor = cursorOverride.HasValue
+                ? cursorOverride.Value
+                : (NativeMethods.GetCursorPos(out var p) ? p : default);
+
             IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
             var mi = new NativeMethods.MONITORINFO {
                 cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>()
@@ -393,18 +488,24 @@ namespace AppGroup {
                     NativeMethods.COPYDATASTRUCT cds = (NativeMethods.COPYDATASTRUCT)Marshal.PtrToStructure(
                         lParam, typeof(NativeMethods.COPYDATASTRUCT));
                     if (cds.dwData == (IntPtr)100) {
-                        string groupName = Marshal.PtrToStringUni(cds.lpData);
+                        string raw = Marshal.PtrToStringUni(cds.lpData);
+                        string groupName = raw;
+                        NativeMethods.POINT? parsedClickPos = null;
+
+                        int sep = raw.IndexOf('|');
+                        if (sep >= 0) {
+                            groupName = raw.Substring(0, sep);
+                            string posStr = raw.Substring(sep + 1);
+                            var parts = posStr.Split(',');
+                            if (parts.Length == 2 && int.TryParse(parts[0], out int x) && int.TryParse(parts[1], out int y))
+                                parsedClickPos = new NativeMethods.POINT { X = x, Y = y };
+                        }
+
                         this.DispatcherQueue.TryEnqueue(async () => {
-                            try {
-                                if (IsAlreadyOpenInChain(groupName)) return;
-                                _groupFilter = groupName;
-                                await LoadConfiguration();
-                            }
-                            catch (Exception ex) {
-                                Debug.WriteLine($"Error updating group: {ex.Message}");
-                            }
+                            _groupFilter = groupName;
+                            _receivedCursorPos = parsedClickPos ?? _lastClickPos;
+                            await LoadConfiguration();
                         });
-                        return (IntPtr)1;
                     }
                 }
                 catch (Exception ex) {
@@ -415,7 +516,13 @@ namespace AppGroup {
         }
 
         private void UpdateMainGridBackground(UISettings uiSettings) {
-            if (IsAccentColorOnStartTaskbarEnabled()) {
+            var settings = SettingsHelper.GetCurrentSettings();
+            string popupTheme = settings?.PopupTheme ?? "WindowsMode";
+
+            // Accent color only applies to WindowsMode (it's a Windows/taskbar-level setting)
+            if (popupTheme == "WindowsMode"
+       && settings.PopupAccentBackground
+       && IsAccentColorOnStartTaskbarEnabled()) {
                 if (Content is FrameworkElement rootElement)
                     rootElement.RequestedTheme = ElementTheme.Dark;
 
@@ -427,18 +534,44 @@ namespace AppGroup {
                         FallbackColor = (Windows.UI.Color)accentColor
                     };
                 }
+                return;
             }
-            else {
-                MainGrid.Background = null;
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-                if (key != null) {
-                    object value = key.GetValue("SystemUsesLightTheme");
-                    bool isLight = value != null && (int)value == 1;
-                    if (Content is FrameworkElement rootElement)
-                        rootElement.RequestedTheme = isLight ? ElementTheme.Light : ElementTheme.Dark;
-                }
+
+            MainGrid.Background = null;
+
+            ElementTheme resolvedTheme = popupTheme switch {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                "AppMode" => ResolveAppModeTheme(),
+                _ => ResolveWindowsModeTheme()
+            };
+
+            if (Content is FrameworkElement root)
+                root.RequestedTheme = resolvedTheme;
+        }
+
+        private ElementTheme ResolveWindowsModeTheme() {
+            // Follows Windows mode (taskbar/start menu) — SystemUsesLightTheme
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            if (key != null) {
+                object value = key.GetValue("SystemUsesLightTheme");
+                bool isLight = value != null && (int)value == 1;
+                return isLight ? ElementTheme.Light : ElementTheme.Dark;
             }
+            return ElementTheme.Default;
+        }
+
+        private ElementTheme ResolveAppModeTheme() {
+            // Follows app mode (programs) — AppsUseLightTheme
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            if (key != null) {
+                object value = key.GetValue("AppsUseLightTheme");
+                bool isLight = value != null && (int)value == 1;
+                return isLight ? ElementTheme.Light : ElementTheme.Dark;
+            }
+            return ElementTheme.Default;
         }
 
         private bool IsAccentColorOnStartTaskbarEnabled() {
@@ -548,6 +681,7 @@ namespace AppGroup {
                         if (filteredGroup.Key != null) {
                             string headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
                             string layout = filteredGroup.Value.Layout ?? "Default";
+                            _isCardLayout = (layout == "Card");
                             bool groupHeader = filteredGroup.Value.GroupHeader;
                             ApplyGroupLayout(headerPosition, layout, groupHeader);
                         }
@@ -730,29 +864,29 @@ namespace AppGroup {
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
           
             }
-            else if (IsLaunchedFromTaskbar()) {
+            else if (IsLaunchedFromTaskbar(_receivedCursorPos)) {
                 _wasLaunchedFromTaskbar = true;
-                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
+                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
 
                 var settings = await SettingsHelper.LoadSettingsAsync();
                 if (settings.EnableWindowSlideAnimation) {
-                    AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false, onComplete: null);
-
+                    AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false, onComplete: null, cursorOverride: _receivedCursorPos);
                 }
                 else {
                     NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
                 }
+                _receivedCursorPos = null;
                 return;
             }
             else {
                 _wasLaunchedFromTaskbar = false;
-                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false);
+                NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
-
+                _receivedCursorPos = null;
             }
 
 
-            
+
             //DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
 
 
@@ -839,7 +973,9 @@ namespace AppGroup {
                 int subWidth = wr.right - wr.left;
                 int subHeight = wr.bottom - wr.top;
 
-                NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+                // Use last click position instead of live cursor
+                NativeMethods.POINT cursor = _lastClickPos;
+
                 IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
                 var mi = new NativeMethods.MONITORINFO { cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>() };
                 NativeMethods.GetMonitorInfo(monitor, ref mi);
@@ -970,9 +1106,19 @@ namespace AppGroup {
             if (!groupHeader) layout = "Default";
 
             if (layout == "Card") {
-                ScrollView.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"];
-                ScrollView.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
-                ScrollView.BorderThickness = new Thickness(0);
+                    ScrollView.RequestedTheme = (Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
+                    bool isDark = ScrollView.ActualTheme == ElementTheme.Dark;
+
+                    // CardBackgroundFillColorDefault: Light=#B3FFFFFF, Dark=#0DFFFFFF
+                    ScrollView.Background = new SolidColorBrush(isDark
+                        ? Windows.UI.Color.FromArgb(13, 255, 255, 255)
+                        : Windows.UI.Color.FromArgb(179, 255, 255, 255));
+
+                    // CardStrokeColorDefault: Light=#0F000000, Dark=#19000000
+                    ScrollView.BorderBrush = new SolidColorBrush(isDark
+                        ? Windows.UI.Color.FromArgb(25, 0, 0, 0)
+                        : Windows.UI.Color.FromArgb(15, 0, 0, 0));
+                ScrollView.BorderThickness = new Thickness(0,0,0,1);
             }
             else {
                 ScrollView.Background = null;
@@ -1002,7 +1148,7 @@ namespace AppGroup {
                 MainGrid.Margin = groupHeader ? new Thickness(0, 0, -1, 0) : new Thickness(0, -10, -1, -10);
                 Header.Margin = layout == "Card" ? new Thickness(15, 1, 5, 5) : new Thickness(10, -5, 5, 5);
                 HeaderEditButton.Padding = layout == "Card" ? new Thickness(10) : new Thickness(7);
-                GridPanel.Padding = groupHeader ? new Thickness(0) : new Thickness(0, 10, 0, 15);
+                GridPanel.Padding = new Thickness(0);
                 GridPanel.Margin = layout == "Card" ? new Thickness(0, 0, -5, -15) : new Thickness(0, 0, -5, -15);
             }
         }
@@ -1251,7 +1397,41 @@ namespace AppGroup {
         private System.Threading.Timer _focusTimer = null;
         private DateTime _lastSubPopupOpenTime = DateTime.MinValue;
 
-        private void OpenSubPopup(string groupName) {
+        //private void OpenSubPopup(string groupName) {
+        //    var clickPos = _lastClickPos;
+        //    if (_openSubPopups.TryGetValue(groupName, out var existing)) {
+        //        NativeMethods.PositionWindowOffScreen(existing.GetWindowHandle());
+        //        existing.Hide();
+        //        existing._openSubPopups.Clear();
+        //        existing._isLoaded = false;
+        //        existing._parentPopup = null;
+        //        _openSubPopups.Remove(groupName);
+        //    }
+
+        //    var subPopup = new PopupWindow(groupName);
+
+        //    subPopup._parentPopup = this;
+        //    subPopup._receivedCursorPos = clickPos;
+        //    _openSubPopups[groupName] = subPopup;
+
+        //    int disableTransitions = 1;
+        //    NativeMethods.DwmSetWindowAttribute(subPopup.GetWindowHandle(),
+        //        NativeMethods.DWMWA_TRANSITIONS_FORCEDISABLED,
+        //        ref disableTransitions, sizeof(int));
+
+        //    UpdateLastOpenTime();
+
+        //    var root = this;
+        //    while (root._parentPopup != null) root = root._parentPopup;
+        //    root._focusTimer?.Dispose();
+        //    root._focusTimer = null;
+        //    root.StartFocusTimer();
+
+        //    subPopup.Activate();
+        //}
+        private async void OpenSubPopup(string groupName) {
+            var clickPos = _lastClickPos;
+
             if (_openSubPopups.TryGetValue(groupName, out var existing)) {
                 NativeMethods.PositionWindowOffScreen(existing.GetWindowHandle());
                 existing.Hide();
@@ -1263,12 +1443,23 @@ namespace AppGroup {
 
             var subPopup = new PopupWindow(groupName);
             subPopup._parentPopup = this;
+            subPopup._receivedCursorPos = clickPos;
             _openSubPopups[groupName] = subPopup;
 
-            int disableTransitions = 1;
-            NativeMethods.DwmSetWindowAttribute(subPopup.GetWindowHandle(),
-                NativeMethods.DWMWA_TRANSITIONS_FORCEDISABLED,
-                ref disableTransitions, sizeof(int));
+            NativeMethods.PositionWindowOffScreen(subPopup.GetWindowHandle());
+
+
+
+            var settings = await SettingsHelper.LoadSettingsAsync();
+            if (!settings.EnableWindowSlideAnimation || !_wasLaunchedFromTaskbar) {
+                int disableTransitions = 1;
+                NativeMethods.DwmSetWindowAttribute(subPopup.GetWindowHandle(),
+                    NativeMethods.DWMWA_TRANSITIONS_FORCEDISABLED,
+                    ref disableTransitions, sizeof(int));
+            }
+
+
+
 
             UpdateLastOpenTime();
 
@@ -1278,16 +1469,28 @@ namespace AppGroup {
             root._focusTimer = null;
             root.StartFocusTimer();
 
-            subPopup.Activate();
+            // Pre-load config, then activate
+            subPopup.DispatcherQueue.TryEnqueue(async () => {
+                await subPopup.LoadConfigurationForSubPopup();
+                subPopup.Activate();
+            });
         }
-
+        internal async Task LoadConfigurationForSubPopup() {
+            _isLoaded = true;
+            _hasBeenLoaded = true;
+            await LoadConfiguration();
+        }
         private void UpdateLastOpenTime() {
             _lastSubPopupOpenTime = DateTime.Now;
             _parentPopup?.UpdateLastOpenTime();
         }
 
-        private bool IsLaunchedFromTaskbar() {
-            NativeMethods.GetCursorPos(out NativeMethods.POINT cursor);
+        private bool IsLaunchedFromTaskbar(NativeMethods.POINT? cursorOverride = null) {
+            NativeMethods.POINT cursor;
+            if (cursorOverride.HasValue)
+                cursor = cursorOverride.Value;
+            else if (!NativeMethods.GetCursorPos(out cursor))
+                return false;
 
             IntPtr monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
             var mi = new NativeMethods.MONITORINFO { cbSize = (uint)Marshal.SizeOf<NativeMethods.MONITORINFO>() };
@@ -1435,6 +1638,8 @@ namespace AppGroup {
         }
 
         private bool _isLoaded = false;
+        private bool _isCardLayout;
+
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
                 if (_parentPopup != null) return;
@@ -1526,7 +1731,7 @@ namespace AppGroup {
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated ||
                      e.WindowActivationState == WindowActivationState.PointerActivated) {
-   
+            
                 if (_isClosing) return;
 
                 if (!_isLoaded && !_isFlyoutOpen) {

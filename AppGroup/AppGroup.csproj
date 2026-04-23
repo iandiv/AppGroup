@@ -159,6 +159,16 @@
 	  </EmbeddedResource>
 	</ItemGroup>
 	<ItemGroup>
+	  <Page Update="BackupImportDialog.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+	<ItemGroup>
+	  <Page Update="TbgImportDialog.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+	<ItemGroup>
 	  <Page Update="DialogWindow.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </Page>

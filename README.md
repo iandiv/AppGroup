@@ -1,165 +1,150 @@
-
 ![AppGroup](https://github.com/user-attachments/assets/169e1383-fe84-4f6b-997e-75ee218abe0c)
 
+# App Group
 
-# App Group  
+Organize, customize, and launch your apps from the Windows taskbar. Create groups with custom icons, nest subgroups, and pin everything with a single drag.
 
-App Group lets you **organize, customize, and launch** your apps. Create groups, set custom icons, and access your apps faster.  
+## Table of Contents
 
-## Table of Contents  
-
-
-  - [Key Features](#key-features)  
-    - [Group Management](#group-management)  
-    - [Appearance & Customization](#appearance--customization)  
-    - [App & Shortcut Support](#app--shortcut-support)  
-    - [Import/Export](#importexport)  
-    - [Others](#others)  
-  - [Installation](#installation)
-  - [Screenshots](#screenshots)
-  - [Video Demo](#video-demo)
-  - [How to Use](#how-to-use)
-  - [Create UWP Shortcuts](#create-uwp-shortcuts)
-  - [Support](#support)
-  - [License](#license)
-
-
-
-
-
-
+- [Features](#features)
+- [Installation](#installation)
+- [How to Use](#how-to-use)
+- [Creating UWP Shortcuts](#creating-uwp-shortcuts)
+- [Support](#support)
+- [License](#license)
 
 ---
 
-## Key Features  
+## Features
 
-### Group Management  
-- **Create, edit, delete** , and **duplicate**  groups
-- **"Edit this Group"** option in jumplist  
-- **"Launch All"** option in jumplist  
+### Group Management
+- Create, edit, delete, and duplicate groups
+- **Subgroups** — nest groups inside groups, infinitely deep
+- Reorder groups and apps via drag & drop
+- Drag a group icon to the Desktop or Taskbar to pin it
+- Jumplist actions: **Edit this Group** and **Launch All**
 
-### Appearance & Customization  
-- **Custom icons**: Use a **Single icon** or a **Grid icon**  
-- **Accent-colored backgrounds** for groups  
-- **Show or hide group names** for a clean look  
-- **Dark Mode & Light Mode** experience  
-- **Adjust grid columns**  
-- **Drag & Drop**
-  - reorder apps instantly 
-  - pin groups to taskbar
+### Appearance & Customization
+- **Icon styles**: Single icon or auto-generated Grid icon from app icons
+- **Layouts**: Default or Card
+- Accent-colored group backgrounds
+- Show or hide group name headers (position: Top or Bottom)
+- Adjust grid column count
+- Dark Mode and Light Mode — configurable independently for the main window and popup
+- Use `.exe` files as custom icons
+- Custom tooltips and per-app launch arguments
+- Toggleable window and content animations
 
-- **Supports .exe files** as custom icons  
-- **Custom tooltips and launch arguments**  
+### App & Shortcut Support
+- UWP and PWA apps (via shortcuts)
+- `.lnk` shortcuts without the arrow overlay (where supported)
+- Steam shortcuts (`.url`)
+- Run apps as Administrator
+- App labels with configurable position (Bottom or Right)
 
-### App & Shortcut Support  
-- **Supports UWP & PWA apps** via shortcuts  
-- **Support .lnk shortcuts** without the arrow (if possible)  
-- **Run apps as Admin**  
+### Import & Export
+- `.agz` (AppGroupZip) format for import, export, backup, and sharing
+- Import from **TaskbarGroups** — migrate existing groups directly
+- Preview and selectively import groups — check or uncheck before confirming
+- Imported groups are always appended, never overwriting existing ones
 
-### Import/Export
-- **Supports .agz (AppGroupZip)** file import/export  
+### System & Performance
+- System tray support
+- Hybrid in-memory and persistent icon cache for faster load times
+- Auto-refreshes taskbar icons when group icons change
+- Grayscale taskbar icon option
+- Supports all taskbar positions: Top, Bottom, Left, Right
+- Run at startup
+- Built-in update notifier
 
+---
 
-### Others  
-- **Hybrid in-memory and persistent icon cache** for faster performance
-- **Supports different taskbar positions**: **Top**, **Bottom**, **Left**, **Right**  
+## Installation
 
+App Group is available in four variants:
 
-## Installation  
-AppGroup is available in **four variants**:  
+| Variant | Includes Installer | Includes .NET 8 |
+|---|---|---|
+| Setup | ✅ | ❌ |
+| Setup (Bundled) | ✅ | ✅ |
+| Portable | ❌ | ❌ |
+| Portable (Bundled) | ❌ | ✅ |
 
-### 🔹 Installer Versions  
-- **Setup** – Standard installer (requires .NET 8 Runtime installed on your system).  
-- **Setup (Bundled)** – Comes with the required .NET 8 Runtime already included. Best if you don’t want to install .NET separately.  
+**Not sure which to pick?** Download **Setup (Bundled)** — it includes everything you need.
 
-### 🔹 Portable Versions  
-- **Portable** – No installation needed (requires .NET 8 Runtime installed on your system).  
-- **Portable (Bundled)** – Self-contained portable version with .NET 8 Runtime included. Just extract and run.  
+1. Go to the [Releases page](https://github.com/iandiv/AppGroup/releases) and download your preferred variant.
+2. Run the `.exe` installer (Setup), or extract the `.zip` and run `AppGroup.exe` (Portable).
 
-### How to Install  
-1. [Download the latest release](https://github.com/iandiv/AppGroup/releases).  
-2. Choose your preferred variant:  
-   - **Setup** → Run the `.exe` installer.  
-   - **Portable** → Extract the `.zip` file and run **AppGroup.exe**.  
+---
 
- **Recommendation:** If you’re not sure which one to pick, download the **Setup (Bundled)** version for the easiest experience.  
+## Screenshots & Demo
 
-## Screenshots
-
-
- <img src="https://github.com/user-attachments/assets/39d02528-0cda-43f3-abc4-7a2567140c58" alt="explorer_iaflNp0ULV"  width ="300"> <img src="https://github.com/user-attachments/assets/73703278-b4c8-4b93-a4cb-5c8cf49ae2a8" alt="explorer_diGSIGlrYF"  width ="300"><img src="https://github.com/user-attachments/assets/4ef0825d-506e-49be-9f1b-5f66faf4ad8f" alt="explorer_R1L5xazeSe" width ="300">
-
-## Video Demo 
-
-
+<img src="https://github.com/user-attachments/assets/39d02528-0cda-43f3-abc4-7a2567140c58" width="300"> <img src="https://github.com/user-attachments/assets/73703278-b4c8-4b93-a4cb-5c8cf49ae2a8" width="300"> <img src="https://github.com/user-attachments/assets/4ef0825d-506e-49be-9f1b-5f66faf4ad8f" width="300">
 
 https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
 
-<img src="https://github.com/user-attachments/assets/a524eab8-b941-4be4-9ed6-579c63e4c4fe" width="500">
+---
 
+## How to Use
 
-## How to Use  
+### 1. Create a Group
+Click **+** in the main window and enter a group name.
 
-1. **Create a Group**  
-   - Click **“+”** to create a group  
-   - Set a **Group Name**  
+### 2. Add Apps
+Click **+** inside the group or drag and drop apps into it.
+For UWP apps (e.g. Calculator, Settings), see [Creating UWP Shortcuts](#creating-uwp-shortcuts).
 
-2. **Add Apps**  
-   - Click **“+”** or **drag & drop** apps into the group
-   - For UWP apps Shortcuts, see [Create UWP Shortcuts](#create-uwp-shortcuts)
+### 3. Customize the Group
+- **Header**: Enable *Show Header* and set its position (Top or Bottom)
+- **Layout**: Choose Default or Card
+- **Icon style**: *Regular* (pick any icon file) or *Grid* (auto-generated from app icons)
+- **Grid columns**: Adjust for your preferred layout
+- **Labels**: Enable *Show Labels* and set position (Bottom or Right)
 
+### 4. Pin a Group to the Taskbar
 
-3. **Customize Your Group**  
-   - Enable **Show Header** if needed  
-   - Adjust **grid columns** for the perfect layout  
-   - Set an **icon style**  
-       - **Regular** - Choose an icon from a directory  
-       - **Grid** - Create grid icon from selected applications  
+**Option A — Drag and drop:**
+Drag the group icon directly onto the taskbar.
 
-4. **Pin a Group to the Taskbar**
-   - Drag the group directly to the taskbar
-     
-   **OR**
-   
-   - Open **Groups Folder** and find the group folder  
-   - Inside, you'll find a **shortcut file**  
-   - **Right-click → Pin to Taskbar**  
+<img width="500" alt="Drag group to taskbar" src="https://github.com/user-attachments/assets/b54ac465-929d-46d1-98c4-2681aaed5995" />
 
-   **OR**  
+**Option B — Via the app menu:**
+Click the **⋮** menu → **Open File Location**, then right-click the shortcut → **Pin to Taskbar**.
 
-   - Click the **three-dot menu (···)** in the main window  
-   - Select **Open File Location**  
-   - This opens the folder containing the shortcut  
-   - **Right-click → Pin to Taskbar**  
+### 5. Use Subgroups
+Add an existing group as an item inside another group. Subgroups can be nested without limit.
 
+### 6. Import Groups
 
-# Create UWP Shortcuts 
+Click **⋮** in the main window → **Import** → choose **`.agz`** or **TaskbarGroups**.
 
-1. **Press** `Win + R`  
-2. **Type** `shell:AppsFolder` → **Enter**  
-   - File Explorer opens with **all installed apps (Win32 + UWP)**.
-     
-3. **Find** the UWP app (e.g., Calculator, Settings).  
-4. **Right-click** the app → **Create shortcut**  
-   - If Windows asks, choose **Yes** (shortcut will be placed on Desktop).  
+A preview will show all groups — check or uncheck individual groups before confirming. Selected groups are appended to your existing setup.
 
+---
 
+## Creating UWP Shortcuts
 
-## Support  
-AppGroup is actively maintained, and your support helps keep it improving. If you find this tool helpful, consider donating to support its development. Your contribution ensures new updates and improvements:  
+UWP apps (like Calculator or Settings) don't appear as regular files. To add them to a group:
 
+1. Press `Win + R`, type `shell:AppsFolder`, and press Enter — this opens a folder with all installed apps (Win32 and UWP).
+2. Find the app, right-click it, and select **Create shortcut**.
+3. If prompted, click **Yes** — the shortcut will be placed on your Desktop.
+4. Drag that shortcut into your App Group.
 
+---
 
-**[🍵 Donate on Ko-fi ](https://ko-fi.com/iandiv/tip)**  
+## Support
 
+App Group is actively maintained. If you find it useful, consider supporting development:
 
+**[☕ Donate on Ko-fi](https://ko-fi.com/iandiv/tip)**
 
 <a href="https://ko-fi.com/iandiv/tip" target="_blank">
-  <img src="https://github.com/user-attachments/assets/2e1376d4-d3a5-4ac4-95fc-e5aa512a1704" width="400" alt="explorer_iaflNp0ULV">
+  <img src="https://github.com/user-attachments/assets/2e1376d4-d3a5-4ac4-95fc-e5aa512a1704" width="400" alt="Ko-fi donation">
 </a>
 
-  
+---
 
-## License  
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.  
+## License
 
+MIT — see [LICENSE](LICENSE) for details.

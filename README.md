@@ -1,3 +1,6 @@
+> [!NOTE]
+> Please ensure you're downloading from this official repository. An infringing copy has been published on GitHub and the Microsoft Store with no attribution, in violation of the MIT License — DMCA notices have been filed.
+---
 ![AppGroup](https://github.com/user-attachments/assets/169e1383-fe84-4f6b-997e-75ee218abe0c)
 
 # App Group

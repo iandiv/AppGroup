@@ -702,6 +702,7 @@ namespace AppGroup {
             GridPanel.Children.Clear();
             HeaderText.Text = "";
             _anyGroupDisplayed = false;
+            GridPanel.RenderTransform = null;
             GridPanel.Opacity = 0;
             _iconLoadCts.Cancel();
             _iconLoadCts = new CancellationTokenSource();
@@ -1297,7 +1298,11 @@ namespace AppGroup {
             }
 
             
-            int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 0.6)));
+            int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 2.6)));
+           
+               
+         
+              
             int loadedCount = 0;
             bool revealed = false;
             var revealLock = new object();

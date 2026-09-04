@@ -20,21 +20,54 @@ using Image = Microsoft.UI.Xaml.Controls.Image;
 
 namespace AppGroup {
     public class IconHelper {
+        private static readonly System.Net.Http.HttpClient _httpClient =
+    new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        //public static async Task<string> GetUrlFileIconAsync(string filePath) {
+        //    try {
+        //        // Read all lines from the .url file
+        //        var lines = await File.ReadAllLinesAsync(filePath);
+
+        //        // Find the IconFile line
+        //        var iconLine = lines.FirstOrDefault(l => l.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase));
+
+        //        if (!string.IsNullOrEmpty(iconLine)) {
+        //            // Extract the path after "IconFile="
+        //            var iconPath = iconLine.Substring("IconFile=".Length).Trim();
+
+        //            // Check if the icon file exists
+        //            if (File.Exists(iconPath)) {
+        //                // Use your existing icon cache with the extracted path
+        //                return await IconCache.GetIconPathAsync(iconPath);
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Error reading .url file: {ex.Message}");
+        //    }
+
+        //    // Fallback to a default icon
+        //    return "ms-appx:///Assets/default-icon.png";
+        //}
+
+
+
         public static async Task<string> GetUrlFileIconAsync(string filePath) {
             try {
-                // Read all lines from the .url file
                 var lines = await File.ReadAllLinesAsync(filePath);
-
-                // Find the IconFile line
                 var iconLine = lines.FirstOrDefault(l => l.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase));
 
                 if (!string.IsNullOrEmpty(iconLine)) {
-                    // Extract the path after "IconFile="
                     var iconPath = iconLine.Substring("IconFile=".Length).Trim();
 
-                    // Check if the icon file exists
-                    if (File.Exists(iconPath)) {
-                        // Use your existing icon cache with the extracted path
+                    if (Uri.TryCreate(iconPath, UriKind.Absolute, out var uri) &&
+                        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)) {
+                        // Remote icon (e.g. https://www.google.com/favicon.ico)
+                        string downloaded = await DownloadAndCacheRemoteIconAsync(iconPath);
+                        if (!string.IsNullOrEmpty(downloaded))
+                            return downloaded;
+                    }
+                    else if (File.Exists(iconPath)) {
+                        // Local icon path
                         return await IconCache.GetIconPathAsync(iconPath);
                     }
                 }
@@ -43,10 +76,68 @@ namespace AppGroup {
                 Debug.WriteLine($"Error reading .url file: {ex.Message}");
             }
 
-            // Fallback to a default icon
             return "ms-appx:///Assets/default-icon.png";
         }
 
+        private static async Task<string> DownloadAndCacheRemoteIconAsync(string url) {
+            try {
+                string cacheKey = "url_" + Math.Abs(url.GetHashCode());
+                string outputDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "AppGroup", "Icons");
+                Directory.CreateDirectory(outputDir);
+                string cachedPngPath = Path.Combine(outputDir, $"{cacheKey}.png");
+
+                // Already downloaded — skip the network round trip
+                if (File.Exists(cachedPngPath))
+                    return cachedPngPath;
+
+                byte[] data;
+                try {
+                    data = await _httpClient.GetByteArrayAsync(url);
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Failed to download icon from {url}: {ex.Message}");
+                    return null;
+                }
+
+                using (var ms = new MemoryStream(data)) {
+                    System.Drawing.Bitmap bitmap = null;
+
+                    // favicon.ico is often actually a PNG/GIF despite the extension — try generic image decode first
+                    try {
+                        using (var img = System.Drawing.Image.FromStream(ms)) {
+                            bitmap = new System.Drawing.Bitmap(img);
+                        }
+                    }
+                    catch {
+                        // Fall back to real multi-size .ico parsing
+                        try {
+                            ms.Position = 0;
+                            using (var icon = new System.Drawing.Icon(ms)) {
+                                bitmap = icon.ToBitmap();
+                            }
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"Failed to decode downloaded icon from {url}: {ex.Message}");
+                            return null;
+                        }
+                    }
+
+                    if (bitmap == null) return null;
+
+                    using (bitmap) {
+                        bitmap.Save(cachedPngPath, System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                }
+
+                return cachedPngPath;
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error downloading remote icon: {ex.Message}");
+                return null;
+            }
+        }
         public static string FindOrigIcon(string icoFilePath) {
             if (string.IsNullOrEmpty(icoFilePath)) {
                 return icoFilePath;
@@ -1227,7 +1318,6 @@ namespace AppGroup {
             }
         }
 
-
         public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
             try {
                 if (selectedItems == null || selectedSize <= 0) {
@@ -1275,17 +1365,24 @@ namespace AppGroup {
 
                             System.Drawing.Bitmap iconBitmap = null;
 
-                            // 1. Always try cached PNG first (already correct size)
-                            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+                            // 1. Prefer the already-resolved icon path (handles .url correctly,
+                            //    since it was resolved via GetUrlFileIconAsync earlier in the pipeline)
+                            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
+                                try {
+                                    iconBitmap = new System.Drawing.Bitmap(iconPath);
+                                }
+                                catch (Exception ex) {
+                                    Debug.WriteLine($"Failed to load resolved icon '{iconPath}': {ex.Message}");
+                                }
+                            }
+
+                            // 2. Fallback: cached PNG for the source file (correct size, but
+                            //    re-extracts from filePath itself — wrong for .url files)
+                            if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
                                 string cachedPath = await IconCache.GetIconPathAsync(filePath);
                                 if (!string.IsNullOrEmpty(cachedPath) && File.Exists(cachedPath)) {
                                     iconBitmap = new System.Drawing.Bitmap(cachedPath);
                                 }
-                            }
-
-                            // 2. Fallback: custom icon path
-                            if (iconBitmap == null && !string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
-                                iconBitmap = new System.Drawing.Bitmap(iconPath);
                             }
 
                             // 3. Last resort: jumbo extraction
@@ -1330,6 +1427,108 @@ namespace AppGroup {
                 return null;
             }
         }
+        //public async Task<string> CreateGridIconAsync(List<ExeFileModel> selectedItems, int selectedSize, Image iconPreviewImage, Border iconPreviewBorder) {
+        //    try {
+        //        if (selectedItems == null || selectedSize <= 0) {
+        //            throw new ArgumentException("Invalid selected items or grid size.");
+        //        }
+        //        selectedItems = selectedItems.Take(selectedSize * selectedSize).ToList();
+        //        int finalSize = 256;
+        //        int gridSize;
+        //        int cellSize;
+        //        if (selectedItems.Count == 2) {
+        //            gridSize = 2;
+        //            cellSize = finalSize / 2;
+        //        }
+        //        else {
+        //            gridSize = (int)Math.Ceiling(Math.Sqrt(selectedItems.Count));
+        //            cellSize = finalSize / gridSize;
+        //        }
+        //        string tempFolder = Path.Combine(Path.GetTempPath(), "GridIconTemp");
+        //        Directory.CreateDirectory(tempFolder);
+        //        string outputPath = Path.Combine(tempFolder, "grid_icon.png");
+
+        //        using (var bitmap = new System.Drawing.Bitmap(finalSize, finalSize)) {
+        //            using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) {
+        //                graphics.Clear(System.Drawing.Color.Transparent);
+        //                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        //                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+        //                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+
+        //                for (int i = 0; i < selectedItems.Count; i++) {
+        //                    var item = selectedItems[i];
+        //                    string iconPath = !string.IsNullOrEmpty(item.IconPath) ? item.IconPath : item.Icon;
+        //                    string filePath = item.FilePath;
+
+        //                    int x, y;
+        //                    if (selectedItems.Count == 2) {
+        //                        if (i == 0) { x = 0; y = cellSize; }
+        //                        else { x = cellSize; y = 0; }
+        //                    }
+        //                    else {
+        //                        int row = i / gridSize;
+        //                        int col = i % gridSize;
+        //                        x = col * cellSize;
+        //                        y = row * cellSize;
+        //                    }
+
+        //                    System.Drawing.Bitmap iconBitmap = null;
+
+        //                    // 1. Always try cached PNG first (already correct size)
+        //                    if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                        string cachedPath = await IconCache.GetIconPathAsync(filePath);
+        //                        if (!string.IsNullOrEmpty(cachedPath) && File.Exists(cachedPath)) {
+        //                            iconBitmap = new System.Drawing.Bitmap(cachedPath);
+        //                        }
+        //                    }
+
+        //                    // 2. Fallback: custom icon path
+        //                    if (iconBitmap == null && !string.IsNullOrEmpty(iconPath) && File.Exists(iconPath)) {
+        //                        iconBitmap = new System.Drawing.Bitmap(iconPath);
+        //                    }
+
+        //                    // 3. Last resort: jumbo extraction
+        //                    if (iconBitmap == null && !string.IsNullOrEmpty(filePath) && File.Exists(filePath)) {
+        //                        iconBitmap = ExtractJumboIcon(filePath);
+        //                    }
+
+        //                    if (iconBitmap != null) {
+        //                        try {
+        //                            int padding = 5;
+        //                            int drawSize = cellSize - (padding * 2);
+        //                            graphics.DrawImage(iconBitmap, new System.Drawing.Rectangle(
+        //                                x + padding, y + padding, drawSize, drawSize));
+        //                        }
+        //                        catch (Exception ex) {
+        //                            Debug.WriteLine($"Error processing icon {i}: {ex.Message}");
+        //                        }
+        //                        finally {
+        //                            iconBitmap?.Dispose();
+        //                        }
+        //                    }
+        //                    else {
+        //                        Debug.WriteLine($"Failed to get icon for file: {item.FilePath}");
+        //                    }
+        //                }
+
+        //                bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+        //            }
+        //        }
+
+        //        StorageFile iconFile = await StorageFile.GetFileFromPathAsync(outputPath);
+        //        BitmapImage gridIcon = new BitmapImage();
+        //        using (var stream = await iconFile.OpenReadAsync()) {
+        //            await gridIcon.SetSourceAsync(stream);
+        //        }
+        //        iconPreviewImage.Source = gridIcon;
+        //        iconPreviewBorder.Visibility = Visibility.Visible;
+        //        return outputPath;
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Grid icon creation error: {ex.Message}");
+        //        return null;
+        //    }
+        //}
 
 
 

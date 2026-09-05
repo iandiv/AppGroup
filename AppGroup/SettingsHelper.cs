@@ -25,7 +25,9 @@ namespace AppGroup {
             public string AppTheme { get; set; } = "System"; // "Light", "Dark", "System"
             public string PopupTheme { get; set; } = "WindowsMode";
             public bool PopupAccentBackground { get; set; } = true;
+            public bool EnableLaunchAll { get; set; } = false;
         }
+
 
         private static AppSettings _currentSettings;
 

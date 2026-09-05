@@ -35,12 +35,14 @@ namespace AppGroup {
                 PopupThemeComboBox.SelectionChanged += PopupThemeComboBox_SelectionChanged;
                 AccentBackgroundToggle.Toggled += AccentBackgroundToggle_Toggled;
                 // Wire up toggle events after loading to prevent firing during init
+
                 SystemTrayToggle.Toggled += SystemTrayToggle_Toggled;
                 StartupToggle.Toggled += StartupToggle_Toggled;
                 GrayscaleIconToggle.Toggled += GrayScaleToggle_Toggled;
                 UpdateCheckToggle.Toggled += UpdateCheckToggle_Toggled;
                 WindowSlideAnimationToggle.Toggled += WindowSlideAnimationToggle_Toggled;
                 ContentSlideAnimationToggle.Toggled += ContentSlideAnimationToggle_Toggled;
+                LaunchAllToggle.Toggled += LaunchAllToggle_Toggled;
                 _isLoading = false;
             }
             catch (Exception ex) {
@@ -101,6 +103,7 @@ namespace AppGroup {
                 GrayscaleIconToggle.IsOn = _settings.UseGrayscaleIcon;
                 UpdateCheckToggle.IsOn = _settings.CheckForUpdatesOnStartup;
                 WindowSlideAnimationToggle.IsOn = _settings.EnableWindowSlideAnimation;
+                LaunchAllToggle.IsOn = _settings.EnableLaunchAll;
                 ContentSlideAnimationToggle.IsOn = _settings.EnableContentSlideAnimation;
                 // Verify startup setting matches registry
                 bool isInRegistry = SettingsHelper.IsInStartupRegistry();
@@ -121,7 +124,18 @@ namespace AppGroup {
                 UpdateCheckToggle.IsOn = true;
             }
         }
-
+        private async void LaunchAllToggle_Toggled(object sender, RoutedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving launch-all setting: {ex.Message}");
+                _isLoading = true;
+                LaunchAllToggle.IsOn = !LaunchAllToggle.IsOn;
+                _isLoading = false;
+            }
+        }
         private async void SystemTrayToggle_Toggled(object sender, RoutedEventArgs e) {
             if (_isLoading) return;
 
@@ -263,6 +277,7 @@ namespace AppGroup {
                 _settings.CheckForUpdatesOnStartup = UpdateCheckToggle.IsOn;
                 _settings.EnableWindowSlideAnimation = WindowSlideAnimationToggle.IsOn;
                 _settings.EnableContentSlideAnimation = ContentSlideAnimationToggle.IsOn;
+                _settings.EnableLaunchAll = LaunchAllToggle.IsOn;
                 _settings.AppTheme = (ThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "System";
                 _settings.PopupTheme = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "WindowsMode";
                 // Save to file

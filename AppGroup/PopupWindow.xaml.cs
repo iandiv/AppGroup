@@ -1646,11 +1646,11 @@ namespace AppGroup {
                 }
             }
         }
-      
-        private void GridView_RightTapped(object sender, RightTappedRoutedEventArgs e) {
+
+        private async void GridView_RightTapped(object sender, RightTappedRoutedEventArgs e) {
             var item = (e.OriginalSource as FrameworkElement)?.DataContext as PopupItem;
             if (item != null) {
-                MenuFlyout flyout = CreateItemFlyout();
+                MenuFlyout flyout = await CreateItemFlyoutAsync();
                 flyout.ShowAt(_gridView, e.GetPosition(_gridView));
                 _clickedItem = item;
             }
@@ -1870,7 +1870,35 @@ namespace AppGroup {
             _ = dialog.ShowDialogAsync();
         }
 
-        private MenuFlyout CreateItemFlyout() {
+        //private MenuFlyout CreateItemFlyout() {
+        //    MenuFlyout flyout = new MenuFlyout();
+
+        //    var openItem = new MenuFlyoutItem { Text = "Open", Icon = new FontIcon { Glyph = "\ue8a7" } };
+        //    openItem.Click += OpenItem_Click;
+        //    flyout.Items.Add(openItem);
+
+        //    var runAsAdminItem = new MenuFlyoutItem { Text = "Run as Administrator", Icon = new FontIcon { Glyph = "\uE7EF" } };
+        //    runAsAdminItem.Click += RunAsAdminItem_Click;
+        //    flyout.Items.Add(runAsAdminItem);
+
+        //    var fileLocationItem = new MenuFlyoutItem { Text = "Open File Location", Icon = new FontIcon { Glyph = "\ued43" } };
+        //    fileLocationItem.Click += OpenFileLocation_Click;
+        //    flyout.Items.Add(fileLocationItem);
+
+        //    flyout.Items.Add(new MenuFlyoutSeparator());
+
+        //    var editItem = new MenuFlyoutItem { Text = "Edit this Group", Icon = new FontIcon { Glyph = "\ue70f" } };
+        //    editItem.Click += EditGroup_Click;
+        //    flyout.Items.Add(editItem);
+
+        //    var launchAll = new MenuFlyoutItem { Text = "Launch All", Icon = new FontIcon { Glyph = "\ue8a9" } };
+        //    launchAll.Click += launchAllGroup_Click;
+        //    flyout.Items.Add(launchAll);
+
+        //    return flyout;
+        //}
+
+        private async Task<MenuFlyout> CreateItemFlyoutAsync() {
             MenuFlyout flyout = new MenuFlyout();
 
             var openItem = new MenuFlyoutItem { Text = "Open", Icon = new FontIcon { Glyph = "\ue8a7" } };
@@ -1891,13 +1919,15 @@ namespace AppGroup {
             editItem.Click += EditGroup_Click;
             flyout.Items.Add(editItem);
 
-            var launchAll = new MenuFlyoutItem { Text = "Launch All", Icon = new FontIcon { Glyph = "\ue8a9" } };
-            launchAll.Click += launchAllGroup_Click;
-            flyout.Items.Add(launchAll);
+            var settings = await SettingsHelper.LoadSettingsAsync();
+            if (settings.EnableLaunchAll) {
+                var launchAll = new MenuFlyoutItem { Text = "Launch All", Icon = new FontIcon { Glyph = "\ue8a9" } };
+                launchAll.Click += launchAllGroup_Click;
+                flyout.Items.Add(launchAll);
+            }
 
             return flyout;
         }
-
         private async void launchAllGroup_Click(object sender, RoutedEventArgs e) {
             if (!string.IsNullOrEmpty(_groupFilter)) {
                 var matchingGroup = _groups?.Values.FirstOrDefault(g =>

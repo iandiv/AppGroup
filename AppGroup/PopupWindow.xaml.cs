@@ -593,6 +593,7 @@ namespace AppGroup {
     xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
     <Grid VerticalAlignment=""Center"" HorizontalAlignment=""Center"" UseLayoutRounding=""True""
           Width=""{BUTTON_SIZE}"" Height=""{BUTTON_SIZE}""
+ Background=""Transparent""
           ToolTipService.ToolTip=""{{Binding ToolTip}}"">
         <Image Source=""{{Binding Icon}}"" Width=""{ICON_SIZE}"" Height=""{ICON_SIZE}""
                Stretch=""Uniform"" VerticalAlignment=""Center"" HorizontalAlignment=""Center"" Margin=""8"" />
@@ -616,6 +617,7 @@ namespace AppGroup {
     xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
     <StackPanel VerticalAlignment=""Center"" HorizontalAlignment=""Center""
           Width=""{BUTTON_SIZE_WITH_LABEL}"" Height=""{BUTTON_SIZE_WITH_LABEL}""
+ Background=""Transparent""
           ToolTipService.ToolTip=""{{Binding ToolTip}}"">
         <Image Source=""{{Binding Icon}}"" Width=""{ICON_SIZE}"" Height=""{ICON_SIZE}""
                Stretch=""Uniform"" HorizontalAlignment=""Center"" Margin=""4,6,4,2"" />
@@ -639,6 +641,7 @@ namespace AppGroup {
                 $@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
     xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
     <Grid Width=""{BUTTON_WIDTH_HORIZONTAL_LABEL}"" Height=""{BUTTON_HEIGHT_HORIZONTAL_LABEL}""
+ Background=""Transparent""
           ToolTipService.ToolTip=""{{Binding ToolTip}}"">
         <StackPanel Orientation=""Horizontal"" VerticalAlignment=""Center"" HorizontalAlignment=""Left"">
             <Image Source=""{{Binding Icon}}"" Width=""{ICON_SIZE}"" Height=""{ICON_SIZE}""

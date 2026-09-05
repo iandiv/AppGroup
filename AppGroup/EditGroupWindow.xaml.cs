@@ -50,7 +50,8 @@
 
             private const int DEFAULT_LABEL_SIZE = 12;
             private const string DEFAULT_LABEL_POSITION = "Bottom";
-            private IntPtr _hwnd;
+        private const string DEFAULT_SORT_MODE = "Manual";
+        private IntPtr _hwnd;
             private NativeMethods.SubclassProc _subclassProc;
             private const int SUBCLASS_ID = 3;
             private bool _isFirstActivation = true;
@@ -162,8 +163,27 @@
                 catch { }
                 return 16;
             }
+        private List<ExeFileModel> GetDisplayOrderedExeFiles() {
+            bool alphabetical = (SortModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() == "Alphabetical";
+            return alphabetical
+                ? ExeFiles.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList()
+                : ExeFiles.ToList();
+        }
+        private void ApplyExeListDisplay() {
+            if (ExeListView == null || SortModeComboBox == null) return;   // guard: may fire during InitializeComponent
 
-            private void PlayWindowFadeIn() {
+            bool alphabetical = (SortModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() == "Alphabetical";
+            ExeListView.CanReorderItems = !alphabetical;
+            ExeListView.ItemsSource = alphabetical
+                ? ExeFiles.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList()
+                : (IEnumerable<ExeFileModel>)ExeFiles;
+        }
+        private void SortModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+            ApplyExeListDisplay();
+            if (!regularIcon && IconGridComboBox.SelectedItem != null)
+                CreateGridIcon();
+        }
+        private void PlayWindowFadeIn() {
                 IntPtr hWnd = _hwnd;
                 int exStyle = NativeMethods.GetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE);
                 NativeMethods.SetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE,
@@ -411,8 +431,9 @@
       
             // Fix: extracted shared list-view refresh logic to avoid duplication and bugs
             private void RefreshListViewState() {
-                ExeListView.ItemsSource = ExeFiles;
-                lastSelectedItem = GroupColComboBox.SelectedItem as string;
+            //ExeListView.ItemsSource = ExeFiles;
+            ApplyExeListDisplay();
+            lastSelectedItem = GroupColComboBox.SelectedItem as string;
 
                 ApplicationCount.Text = ExeListView.Items.Count > 1
                     ? ExeListView.Items.Count + " Items"
@@ -515,7 +536,7 @@
                             JsonObject paths = groupNode["path"]?.AsObject();
                             string headerPosition = groupNode["headerPosition"]?.GetValue<string>() ?? "Top";
                             string layout = groupNode["layout"]?.GetValue<string>() ?? "Default";
-
+                            string sortMode = groupNode["sortMode"]?.GetValue<string>() ?? DEFAULT_SORT_MODE;
                             // Fix: guard File.Copy — only copy if the icon file actually exists
                             string resolvedTempIcon = null;
                             if (!string.IsNullOrEmpty(groupIcon) && File.Exists(groupIcon)) {
@@ -557,6 +578,9 @@
                                     .OfType<ComboBoxItem>()
                                     .FirstOrDefault(i => i.Content.ToString() == layout);
 
+                                SortModeComboBox.SelectedItem = SortModeComboBox.Items
+    .OfType<ComboBoxItem>()
+    .FirstOrDefault(i => i.Content.ToString() == sortMode);
                                 // Fix: clear ExeFiles before adding on reload to avoid accumulation
                                 ExeFiles.Clear();
                             });
@@ -630,6 +654,7 @@
                                         regularIcon = false;
                                         IconGridComboBox.Visibility = Visibility.Visible;
                                     }
+                                    ApplyExeListDisplay();
                                 });
                             }
                         }
@@ -658,6 +683,10 @@
                     IconPreviewImage.Source = new BitmapImage(new Uri("ms-appx:///default_preview.png"));
                     ApplicationCount.Text = string.Empty;
                     ExeFiles.Clear();
+                    SortModeComboBox.SelectedItem = SortModeComboBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(i => i.Content.ToString() == DEFAULT_SORT_MODE);
+                    ApplyExeListDisplay();
                     IconGridComboBox.Items.Clear();
                     IconGridComboBox.Visibility = Visibility.Collapsed;
 
@@ -676,8 +705,10 @@
             private async void CreateGridIcon() {
                 var selectedItem = IconGridComboBox.SelectedItem;
                 if (selectedItem != null && int.TryParse(selectedItem.ToString(), out int selectedSize)) {
-                    var selectedItems = ExeFiles.Take(selectedSize * selectedSize).ToList();
-                    try {
+                var selectedItems = GetDisplayOrderedExeFiles().Take(selectedSize * selectedSize).ToList();   // was: ExeFiles.Take(...)
+
+                //var selectedItems = ExeFiles.Take(selectedSize * selectedSize).ToList();
+                try {
                         IconHelper iconHelper = new IconHelper();
                         selectedIconPath = await iconHelper.CreateGridIconAsync(
                             selectedItems, selectedSize, IconPreviewImage, IconPreviewBorder);
@@ -880,8 +911,8 @@
 
                     if (!regularIcon && IconGridComboBox.SelectedItem != null)
                         CreateGridIcon();
-
-                    EditItemDialog.Hide();
+                ApplyExeListDisplay();
+                EditItemDialog.Hide();
                 }
             }
 
@@ -915,8 +946,9 @@
                 if (sender is Button button && button.Tag is ExeFileModel item)
                     ExeFiles.Remove(item);
 
-                ExeListView.ItemsSource = ExeFiles;
-                ApplicationCount.Text = ExeListView.Items.Count > 0
+            //ExeListView.ItemsSource = ExeFiles;
+            ApplyExeListDisplay();
+            ApplicationCount.Text = ExeListView.Items.Count > 0
                     ? ExeListView.Items.Count + " Items" : "Item";
 
                 IconGridComboBox.Items.Clear();
@@ -967,8 +999,8 @@
 
                     string headerPosition = (HeaderPositionComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Top";
                     string layout = (LayoutComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Default";
-
-                    string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string sortMode = (SortModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? DEFAULT_SORT_MODE;
+                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                     string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
                     string groupsFolder = Path.Combine(appDataPath, "Groups");
                     Directory.CreateDirectory(groupsFolder);
@@ -1052,13 +1084,16 @@
                             ? int.Parse(LabelSizeComboBox.SelectedItem.ToString()) : DEFAULT_LABEL_SIZE;
                         string labelPosition = LabelPositionComboBox.SelectedItem?.ToString() ?? DEFAULT_LABEL_POSITION;
 
-                        JsonConfigHelper.AddGroupToJson(
-                            JsonConfigHelper.GetDefaultConfigPath(),
-                            GroupId, newGroupName, groupHeader, icoFilePath, groupCol,
-                            showLabels, labelSize, labelPosition, headerPosition, layout, ShowOnTray.IsOn, paths);
+                    //JsonConfigHelper.AddGroupToJson(
+                    //    JsonConfigHelper.GetDefaultConfigPath(),
+                    //    GroupId, newGroupName, groupHeader, icoFilePath, groupCol,
+                    //    showLabels, labelSize, labelPosition, headerPosition, layout, ShowOnTray.IsOn, paths);
 
-
-                        GroupTrayManager.SyncFromJson();
+                    JsonConfigHelper.AddGroupToJson(
+    JsonConfigHelper.GetDefaultConfigPath(),
+    GroupId, newGroupName, groupHeader, icoFilePath, groupCol,
+    showLabels, labelSize, labelPosition, headerPosition, layout, ShowOnTray.IsOn, sortMode, paths);
+                    GroupTrayManager.SyncFromJson();
                         // Fix: clean up the field-level tempIcon, not a separate local
                         if (!string.IsNullOrEmpty(tempIcon) && File.Exists(tempIcon)) {
                             try { File.Delete(tempIcon); }

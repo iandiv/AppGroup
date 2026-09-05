@@ -337,6 +337,7 @@ namespace AppGroup {
                         string newGroupName = property.Value?["groupName"]?.GetValue<string>();
                         string newGroupIcon = IconHelper.FindOrigIcon(property.Value?["groupIcon"]?.GetValue<string>());
                         var paths = property.Value?["path"]?.AsObject();
+                        string sortMode = property.Value?["sortMode"]?.GetValue<string>() ?? "Manual";   // new
 
                         var tooltips = new Dictionary<string, string>();
                         var args = new Dictionary<string, string>();
@@ -344,7 +345,18 @@ namespace AppGroup {
                         var iconPaths = new List<string>();
 
                         if (paths?.Count > 0) {
-                            foreach (var path in paths.Where(p => p.Value != null)) {
+                            var pathEntries = paths.Where(p => p.Value != null).ToList();
+                            if (sortMode == "Alphabetical") {
+                                pathEntries = pathEntries
+                                    .OrderBy(p => {
+                                        string tooltip = p.Value["tooltip"]?.GetValue<string>();
+                                        return !string.IsNullOrEmpty(tooltip) ? tooltip : Path.GetFileNameWithoutExtension(p.Key);
+                                    }, StringComparer.OrdinalIgnoreCase)
+                                    .ToList();
+                            }
+
+                            foreach (var path in pathEntries) {
+                                //foreach (var path in paths.Where(p => p.Value != null)) {
                                 string filePath = path.Key;
                                 string tooltip = path.Value["tooltip"]?.GetValue<string>();
                                 string argVal = path.Value["args"]?.GetValue<string>();
@@ -680,9 +692,19 @@ namespace AppGroup {
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup", "Icons");
                 Directory.CreateDirectory(outputDirectory);
-
+                string sortMode = groupNode?["sortMode"]?.GetValue<string>() ?? "Manual";   // new
+                var pathEntries = paths.Where(p => p.Value != null).ToList();
+                if (sortMode == "Alphabetical") {
+                    pathEntries = pathEntries
+                        .OrderBy(p => {
+                            string tooltip = p.Value["tooltip"]?.GetValue<string>();
+                            return !string.IsNullOrEmpty(tooltip) ? tooltip : Path.GetFileNameWithoutExtension(p.Key);
+                        }, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
                 var iconPaths = new List<string>();
-                foreach (var path in paths.Where(p => p.Value != null)) {
+                //foreach (var path in paths.Where(p => p.Value != null)) {
+                foreach (var path in pathEntries) {
                     if (_windowCloseCts.IsCancellationRequested) break;
 
                     string filePath = path.Key;

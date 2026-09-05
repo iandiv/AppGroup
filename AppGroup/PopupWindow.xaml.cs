@@ -45,6 +45,7 @@ namespace AppGroup {
         public string Layout { get; set; } = "Default";
 
      public   bool ShowOnTray { get; set; } = false;
+        public string SortMode { get; set; } = "Manual";
         public Dictionary<string, PathData> Path { get; set; }
     }
 
@@ -109,7 +110,7 @@ namespace AppGroup {
         private ItemsPanelTemplate _panelTemplate;
         private ItemsPanelTemplate _panelTemplateWithLabel;
         private ItemsPanelTemplate _panelTemplateHorizontalLabel;
-
+        private string _sortMode = "Manual";
         private bool _showLabels = false;
         private int _labelSize = DEFAULT_LABEL_SIZE;
         private string _labelPosition = DEFAULT_LABEL_POSITION;
@@ -146,6 +147,8 @@ namespace AppGroup {
         private static NativeMethods.POINT _lastClickPos;
         private static IntPtr _mouseHookHandle;
         private static NativeMethods.LowLevelMouseProc _mouseHookProc;
+
+
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
 
@@ -745,7 +748,7 @@ namespace AppGroup {
                     IsItemClickEnabled = true,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     CanDragItems = true,
-                    CanReorderItems = true,
+                    CanReorderItems = _sortMode != "Alphabetical",   // changed from: true
                     AllowDrop = true,
                     ItemTemplate = selectedItemTemplate,
                     ItemsPanel = selectedPanelTemplate,
@@ -813,6 +816,7 @@ namespace AppGroup {
                 _currentColumns = maxColumns;
                 headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
                 layout = filteredGroup.Value.Layout ?? "Default";
+                _sortMode = filteredGroup.Value.SortMode ?? "Manual";
 
                 if (_showLabels) CreateLabelTemplates(_labelSize);
                 if (!int.TryParse(filteredGroup.Key, out _groupId))
@@ -867,6 +871,8 @@ namespace AppGroup {
             }
             else if (IsLaunchedFromTaskbar(_receivedCursorPos)) {
                 _wasLaunchedFromTaskbar = true;
+                NativeMethods.PositionWindowOffScreenBelow(this.GetWindowHandle());
+
                 NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
 
                 var settings = await SettingsHelper.LoadSettingsAsync();
@@ -1176,6 +1182,7 @@ namespace AppGroup {
                     filteredGroup.Value.HeaderPosition ?? "Top",
                     filteredGroup.Value.Layout ?? "Default",
                     filteredGroup.Value.ShowOnTray,
+                      filteredGroup.Value.SortMode ?? "Manual",
                     reorderedPaths);
 
                 string configPath = JsonConfigHelper.GetDefaultConfigPath();
@@ -1217,6 +1224,7 @@ namespace AppGroup {
                         filteredGroup.Value.HeaderPosition ?? "Top",
                         filteredGroup.Value.Layout ?? "Default",
                           filteredGroup.Value.ShowOnTray,
+                            filteredGroup.Value.SortMode ?? "Manual",
                         newPathOrder);
                 }
 
@@ -1279,6 +1287,9 @@ namespace AppGroup {
 
                     result.Add(popupItem);
                 }
+                if (_sortMode == "Alphabetical")
+                    result = result.OrderBy(i => i.ToolTip, StringComparer.OrdinalIgnoreCase).ToList();
+
                 return result;
             });
 

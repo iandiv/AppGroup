@@ -126,7 +126,22 @@
                 </Grid>
                 <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="500">
                     <StackPanel Spacing="0" Padding="15,0,15,15">
-
+                        <StackPanel Orientation="Vertical" Grid.Column="1" Margin="0,0,0,2" VerticalAlignment="Center" Padding="10,15,15,15" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
+                            <Grid HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Sort Order"/>
+                                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Sets the app order" FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                                <ComboBox x:Name="SortModeComboBox" Grid.Column="1" SelectionChanged="SortModeComboBox_SelectionChanged">
+                                    <ComboBoxItem Content="Manual" IsSelected="True"/>
+                                    <ComboBoxItem Content="Alphabetical"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
                         <StackPanel Orientation="Vertical" Grid.Column="1" Margin="0,0,0,2" VerticalAlignment="Center" Padding="10,15,15,15" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
                             <Grid HorizontalAlignment="Stretch">
                                 <Grid.ColumnDefinitions>

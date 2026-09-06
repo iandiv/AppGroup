@@ -152,12 +152,14 @@ namespace AppGroup {
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
 
-            _mouseHookProc = MouseHookCallback;
-            _mouseHookHandle = NativeMethods.SetWindowsHookEx(
-                NativeMethods.WH_MOUSE_LL,
-                _mouseHookProc,
-                NativeMethods.GetModuleHandle(null),
-                0);
+            if (_mouseHookHandle == IntPtr.Zero) {
+                _mouseHookProc = MouseHookCallback;
+                _mouseHookHandle = NativeMethods.SetWindowsHookEx(
+                    NativeMethods.WH_MOUSE_LL,
+                    _mouseHookProc,
+                    NativeMethods.GetModuleHandle(null),
+                    0);
+            }
             _groupFilter = groupFilter;
             this.Title = "Popup Window";
 

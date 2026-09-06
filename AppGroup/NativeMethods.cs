@@ -771,7 +771,9 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
             if (mi.rcWork.right < mi.rcMonitor.right) return TaskbarPosition.Right;
             return TaskbarPosition.Bottom;
         }
+        
 
+        
         private static TaskbarPosition GetTaskbarPositionFromAppBarInfo() {
             var data = new APPBARDATA();
             data.cbSize = (uint)Marshal.SizeOf(typeof(APPBARDATA));
@@ -810,13 +812,13 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
                 int spacing;
                 if (autoHide) {
                     spacing = IsCursorOnTaskbar(cursor, mi, tbPos)
-                        ? (int)(baseTaskbarH * dpiScale)
-                        : (int)(11 * dpiScale);    // 6 + 5 original logic
+                        ? (int)Math.Round(baseTaskbarH * dpiScale)
+                        : (int)Math.Round(11 * dpiScale);    // 6 + 5 original logic
                 }
                 else {
                     spacing = tbPos == TaskbarPosition.Top
-                        ? (int)(10 * dpiScale)
-                        : (int)(6 * dpiScale);
+                        ? (int)Math.Round(10 * dpiScale)
+                        : (int)Math.Round(6 * dpiScale);
                 }
 
                 int x = cursor.X - windowWidth / 2;

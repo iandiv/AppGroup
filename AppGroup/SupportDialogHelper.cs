@@ -92,15 +92,10 @@ namespace AppGroup {
         }
 
         private string GetUsageFilePath() {
-            string appDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AppGroup"
-            );
-
-            return Path.Combine(appDataFolder, USAGE_COUNT_FILENAME);
+            return Path.Combine(AppPaths.BaseDataPath, USAGE_COUNT_FILENAME);
         }
 
-      
+
         private async Task ShowSupportDialogAsync() {
             try {
                 if (_ownerWindow == null || _ownerWindow.Content == null || _ownerWindow.Content.XamlRoot == null) {

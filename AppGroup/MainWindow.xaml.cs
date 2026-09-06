@@ -688,9 +688,7 @@ namespace AppGroup {
 
             var paths = groupNode?["path"]?.AsObject();
             if (paths?.Count > 0) {
-                string outputDirectory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "AppGroup", "Icons");
+                string outputDirectory = Path.Combine(AppPaths.BaseDataPath, "Icons");
                 Directory.CreateDirectory(outputDirectory);
                 string sortMode = groupNode?["sortMode"]?.GetValue<string>() ?? "Manual";   // new
                 var pathEntries = paths.Where(p => p.Value != null).ToList();
@@ -815,8 +813,7 @@ namespace AppGroup {
 
         private void SaveGroupIdToFile(string groupId) {
             try {
-                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string filePath = Path.Combine(appDataPath, "AppGroup", "lastEdit");
+                string filePath = Path.Combine(AppPaths.BaseDataPath, "lastEdit");
                 Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? "");
                 File.WriteAllText(filePath, groupId);
             }
@@ -862,6 +859,36 @@ namespace AppGroup {
                 await errorDialog.ShowAsync();
             }
         }
+        //private async void GroupIcon_DragStarting(UIElement sender, DragStartingEventArgs e) {
+        //    if (((FrameworkElement)sender).DataContext is not GroupItem draggedItem) return;
+        //    if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) return;
+
+        //    _isIconDragging = true;
+        //    var deferral = e.GetDeferral();
+        //    try {
+        //        string appDataPath = AppPaths.BaseDataPath;
+        //        string fullShortcutPath = Path.GetFullPath(
+        //            Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk"));
+
+        //        if (!File.Exists(fullShortcutPath)) {
+        //            _isIconDragging = false;
+        //            return;
+        //        }
+
+        //        var storageFile = await StorageFile.GetFileFromPathAsync(fullShortcutPath);
+        //        e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
+        //        e.AllowedOperations = DataPackageOperation.Link;
+        //        e.Data.RequestedOperation = DataPackageOperation.Link;
+
+        //    }
+        //    catch (Exception ex) {
+        //        _isIconDragging = false;
+        //        Debug.WriteLine($"GroupIcon drag error: {ex.Message}");
+        //    }
+        //    finally {
+        //        deferral.Complete();
+        //    }
+        //}
         private async void GroupIcon_DragStarting(UIElement sender, DragStartingEventArgs e) {
             if (((FrameworkElement)sender).DataContext is not GroupItem draggedItem) return;
             if (string.IsNullOrWhiteSpace(draggedItem.GroupName)) return;
@@ -869,8 +896,7 @@ namespace AppGroup {
             _isIconDragging = true;
             var deferral = e.GetDeferral();
             try {
-                string appDataPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
+                string appDataPath = AppPaths.BaseDataPath;
                 string fullShortcutPath = Path.GetFullPath(
                     Path.Combine(appDataPath, "Groups", draggedItem.GroupName, $"{draggedItem.GroupName}.lnk"));
 
@@ -879,7 +905,16 @@ namespace AppGroup {
                     return;
                 }
 
-                var storageFile = await StorageFile.GetFileFromPathAsync(fullShortcutPath);
+                // StorageFile.GetFileFromPathAsync can throw UNABLE_TO_MASK_PATH for files
+                // outside trusted locations (e.g. a portable exe's own folder). Stage a copy
+                // in %Temp% before handing it to the drag broker.
+                string dragTempDir = Path.Combine(Path.GetTempPath(), "AppGroup", "DragTemp");
+                Directory.CreateDirectory(dragTempDir);
+                string tempShortcutPath = Path.Combine(dragTempDir, $"{draggedItem.GroupName}.lnk");
+                File.Copy(fullShortcutPath, tempShortcutPath, overwrite: true);
+                _tempDragFiles[draggedItem.GroupId] = tempShortcutPath;
+
+                var storageFile = await StorageFile.GetFileFromPathAsync(tempShortcutPath);
                 e.Data.SetStorageItems(new List<IStorageItem> { storageFile });
                 e.AllowedOperations = DataPackageOperation.Link;
                 e.Data.RequestedOperation = DataPackageOperation.Link;
@@ -893,7 +928,6 @@ namespace AppGroup {
                 deferral.Complete();
             }
         }
-
 
         private async void ImportTbgButton_Click(object sender, RoutedEventArgs e) {
             var picker = new Windows.Storage.Pickers.FolderPicker();
@@ -970,8 +1004,17 @@ namespace AppGroup {
             }
         }
 
+        //private void GroupIcon_DropCompleted(UIElement sender, DropCompletedEventArgs e) {
+        //    // nothing to clean up
+        //}
         private void GroupIcon_DropCompleted(UIElement sender, DropCompletedEventArgs e) {
-            // nothing to clean up
+            // Fix: do NOT delete the temp .lnk. A Link-type drop makes the shell create
+            // a new shortcut pointing back at this file, so deleting it leaves that shortcut
+            // dangling (Windows can't find ...\DragTemp\{name}.lnk). File.Copy(overwrite:true)
+            // in GroupIcon_DragStarting keeps it in sync on the next drag, so there's nothing
+            // to clean up here.
+            if (((FrameworkElement)sender).DataContext is GroupItem draggedItem)
+                _tempDragFiles.Remove(draggedItem.GroupId);
         }
         private async void DuplicateButton_Click(object sender, RoutedEventArgs e) {
             if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is GroupItem selectedGroup) {

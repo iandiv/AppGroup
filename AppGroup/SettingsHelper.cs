@@ -9,11 +9,7 @@ namespace AppGroup {
     public class SettingsHelper {
         private const string STARTUP_REGISTRY_KEY = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private const string APP_NAME = "AppGroup";
-        private static readonly string SettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "AppGroup",
-            "settings.json"
-        );
+        private static string SettingsPath => Path.Combine(AppPaths.BaseDataPath, "settings.json");
 
         public class AppSettings {
             public bool ShowSystemTrayIcon { get; set; } = true;

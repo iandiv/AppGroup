@@ -50,11 +50,10 @@ namespace AppGroup {
                 var progressTask = progressDialog.ShowAsync();
 
                 // Paths
-                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string configPath = Path.Combine(localAppDataPath, "AppGroup", "appgroups.json");
-                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string appDataPath = AppPaths.BaseDataPath;
+                string configPath = Path.Combine(appDataPath, "appgroups.json");
                 string groupsPath = Path.Combine(appDataPath, "Groups");
-               
+
                 //string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
                 string tempZipPath = Path.Combine(Path.GetTempPath(), $"AppGroup_Backup_{Guid.NewGuid()}.zip");
 
@@ -122,19 +121,21 @@ namespace AppGroup {
                 var progressTask = progressDialog.ShowAsync();
 
                 // Paths
-                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string appGroupLocalPath = Path.Combine(localAppDataPath, "AppGroup");
+                string appGroupLocalPath = AppPaths.BaseDataPath;
                 string configPath = Path.Combine(appGroupLocalPath, "appgroups.json");
-                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                string appDataPath = appGroupLocalPath;
                 string groupsPath = Path.Combine(appDataPath, "Groups");
-
-                //string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
                 string iconsPath = Path.Combine(appGroupLocalPath, "Icons");
 
+                //string groupsPath = Path.Combine(AppContext.BaseDirectory, "Groups");
+                //string iconsPath = Path.Combine(appGroupLocalPath, "Icons");
+
                 // Temporary variables to store configuration and path validation
+                //Dictionary<string, GroupConfig> config = null;
+                //var groupsWithInvalidPaths = new Dictionary<string, List<string>>();
                 Dictionary<string, GroupConfig> config = null;
                 var groupsWithInvalidPaths = new Dictionary<string, List<string>>();
-
+                HashSet<string> selectedNames = null;
                 // First, examine the zip file contents without extracting
                 using (var archive = ZipFile.OpenRead(backupFile.Path)) {
                     // Find the configuration file entry
@@ -314,7 +315,7 @@ namespace AppGroup {
                             }
 
                             // Filter config to only selected groups
-                            var selectedNames = previewDialog.GetSelectedNames();
+                            selectedNames = previewDialog.GetSelectedNames();
 
                             var importedNames = importedConfig.Values
                                 .Select(g => g.groupName)
@@ -507,6 +508,12 @@ namespace AppGroup {
                                 destinationPath = configPath;
                             }
                             else if (entry.FullName.StartsWith("Groups/")) {
+                                // Skip files belonging to groups the user unchecked in the preview
+                                string[] segments = entry.FullName.Split('/');
+                                string entryGroupName = segments.Length > 1 ? segments[1] : null;
+                                if (selectedNames != null && entryGroupName != null && !selectedNames.Contains(entryGroupName))
+                                    continue;
+
                                 // Groups files go to executable directory
                                 destinationPath = Path.Combine(appDataPath, entry.FullName);
 

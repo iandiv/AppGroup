@@ -678,7 +678,7 @@ namespace AppGroup {
                 _lastConfigLoad = File.GetLastWriteTime(configPath);
 
                 if (_groups != null) {
-                    InitializeWindow();
+                    await InitializeWindow();
                     await CreateDynamicContent();
 
                     if (!string.IsNullOrEmpty(_groupFilter)) {
@@ -689,6 +689,9 @@ namespace AppGroup {
                             string layout = filteredGroup.Value.Layout ?? "Default";
                             _isCardLayout = (layout == "Card");
                             bool groupHeader = filteredGroup.Value.GroupHeader;
+
+                            Debug.WriteLine($"[HeaderDebug] group={_groupFilter} headerPosition={headerPosition} isSubPopup={_parentPopup != null} groupHeader={groupHeader}");
+
                             ApplyGroupLayout(headerPosition, layout, groupHeader);
                         }
                     }
@@ -713,7 +716,13 @@ namespace AppGroup {
             _iconLoadCts.Cancel();
             _iconLoadCts = new CancellationTokenSource();
 
-            foreach (var group in _groups) {
+            // Fix: snapshot _groups locally. The field can be nulled by a concurrent
+            // deactivation/cleanup (queued via DispatcherQueue) while this loop is
+            // suspended at the `await LoadGridItems` below, during rapid open/close.
+            var groupsSnapshot = _groups;
+            if (groupsSnapshot == null) return;
+
+            foreach (var group in groupsSnapshot) {
                 if (_groupFilter != null && !group.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -833,8 +842,9 @@ namespace AppGroup {
                 _currentColumns = maxColumns;
             }
 
-            DispatcherQueue.TryEnqueue(() => ApplyGroupLayout(headerPosition, layout, groupHeader));
-
+            //DispatcherQueue.TryEnqueue(() => ApplyGroupLayout(headerPosition, layout, groupHeader));
+            ApplyGroupLayout(headerPosition, layout, groupHeader);
+            MainGrid.UpdateLayout();
             bool useHorizontalLabels = _showLabels && _labelPosition == "Right";
             int buttonWidth = useHorizontalLabels ? BUTTON_WIDTH_HORIZONTAL_LABEL
                 : _showLabels ? BUTTON_SIZE_WITH_LABEL : BUTTON_SIZE;
@@ -849,7 +859,11 @@ namespace AppGroup {
                 dynamicWidth = Math.Max(dynamicWidth, BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2));
 
             int dynamicHeight = numberOfRows * (buttonHeight + BUTTON_MARGIN * 2);
-            var displayInfo = GetDisplayInformation();
+            NativeMethods.POINT? dpiTargetPoint = _parentPopup != null
+       ? _lastClickPos
+       : (_receivedCursorPos ?? (NativeMethods.GetCursorPos(out var liveCursor) ? liveCursor : (NativeMethods.POINT?)null));
+
+            var displayInfo = GetDisplayInformation(dpiTargetPoint);
             float scaleFactor = displayInfo.Item1;
 
             int scaledWidth = (int)(dynamicWidth * scaleFactor);
@@ -869,6 +883,7 @@ namespace AppGroup {
             _windowHelper.IsAlwaysOnTop = true;
             if (_parentPopup != null) {
                 PositionSubPopupNearParent();
+                MainGrid.UpdateLayout();
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
           
             }
@@ -940,14 +955,14 @@ namespace AppGroup {
 
             var transform = new Microsoft.UI.Xaml.Media.TranslateTransform {
                 X = slideOnX ? slideFrom : 0,
-                Y = slideOnX ? 0 : slideFrom
+                Y = slideOnX ? 0.5 : slideFrom
             };
             GridPanel.RenderTransform = transform;
 
             var sb = new Storyboard();
             var slideAnim = new DoubleAnimation {
                 From = slideFrom,
-                To = 0,
+                To = slideOnX ? 0 : 0.5,
                 Duration = new Duration(TimeSpan.FromMilliseconds(350)),
                 EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut }
             };
@@ -966,6 +981,10 @@ namespace AppGroup {
             sb.Children.Add(fadeAnim);
             _entranceStoryboard = sb;
             _entranceStarted = true;
+            sb.Completed += (s, e) => {
+                GridPanel.RenderTransform = null;
+            };
+
             sb.Begin();
         }
         private void StopEntranceStoryboard() {
@@ -1250,7 +1269,31 @@ namespace AppGroup {
             }
             return Path.GetFileNameWithoutExtension(filePath);
         }
+
         private async Task LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
+            // Fix: WshShell/IWshShortcut is a COM automation object. Reading it from a
+            // Task.Run thread-pool thread (MTA, uninitialized apartment) intermittently
+            // fails, which silently left IsSubgroup=false and made nested-group icons
+            // launch as a regular app instead of opening the sub-popup. Read shortcut
+            // comments here on the calling (UI) thread instead, before handing off to
+            // Task.Run for the rest of the item-building work.
+            var subgroupInfo = new Dictionary<string, (bool isSubgroup, string subgroupName)>();
+            foreach (var path in pathsWithProperties.Keys) {
+                if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) continue;
+                try {
+                    IWshShell shell = new WshShell();
+                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+                    string comment = shortcut.Description;
+                    if (!string.IsNullOrEmpty(comment) &&
+                        comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
+                        subgroupInfo[path] = (true, comment.Replace("- AppGroup Shortcut", "").Trim());
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
+                }
+            }
+
             var items = await Task.Run(() => {
                 var result = new List<PopupItem>();
                 foreach (var pathEntry in pathsWithProperties) {
@@ -1270,23 +1313,10 @@ namespace AppGroup {
                         CustomIconPath = customIconPath
                     };
 
-                    if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
-                        try {
-                            IWshShell shell = new WshShell();
-                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                            string comment = shortcut.Description;
-                            if (!string.IsNullOrEmpty(comment) &&
-                                comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
-                                popupItem.IsSubgroup = true;
-                                popupItem.SubgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
-                            }
-                        }
-                        catch (Exception ex) {
-                            Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
-                        }
+                    if (subgroupInfo.TryGetValue(path, out var info)) {
+                        popupItem.IsSubgroup = info.isSubgroup;
+                        popupItem.SubgroupName = info.subgroupName;
                     }
-
-                   
 
                     result.Add(popupItem);
                 }
@@ -1296,8 +1326,54 @@ namespace AppGroup {
                 return result;
             });
 
+            //private async Task LoadGridItems(Dictionary<string, PathData> pathsWithProperties) {
+            //    var items = await Task.Run(() => {
+            //        var result = new List<PopupItem>();
+            //        foreach (var pathEntry in pathsWithProperties) {
+            //            string path = pathEntry.Key;
+            //            PathData properties = pathEntry.Value;
+            //            string tooltip = !string.IsNullOrEmpty(properties.Tooltip)
+            //                ? properties.Tooltip : GetDisplayNameBackground(path);
+            //            string customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
+
+            //            var popupItem = new PopupItem {
+            //                Path = path,
+            //                Name = Path.GetFileNameWithoutExtension(path),
+            //                ToolTip = tooltip,
+            //                Icon = null,
+            //                Args = properties.Args ?? "",
+            //                IconPath = customIconPath,
+            //                CustomIconPath = customIconPath
+            //            };
+
+            //            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+            //                try {
+            //                    IWshShell shell = new WshShell();
+            //                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
+            //                    string comment = shortcut.Description;
+            //                    if (!string.IsNullOrEmpty(comment) &&
+            //                        comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
+            //                        popupItem.IsSubgroup = true;
+            //                        popupItem.SubgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
+            //                    }
+            //                }
+            //                catch (Exception ex) {
+            //                    Debug.WriteLine($"Failed to read shortcut comment: {ex.Message}");
+            //                }
+            //            }
+
+
+
+            //            result.Add(popupItem);
+            //        }
+            //        if (_sortMode == "Alphabetical")
+            //            result = result.OrderBy(i => i.ToolTip, StringComparer.OrdinalIgnoreCase).ToList();
+
+            //        return result;
+            //    });
+
             var loadToken = _iconLoadCts.Token;
-            var placeholder = GetOrCreatePlaceholder();
+        var placeholder = GetOrCreatePlaceholder();
 
             foreach (var item in items) {
                 if (loadToken.IsCancellationRequested) break;
@@ -1311,47 +1387,47 @@ namespace AppGroup {
                 return;
             }
 
-            
-            int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 2.6)));
-           
-               
-         
-              
-            int loadedCount = 0;
-            bool revealed = false;
-            var revealLock = new object();
 
-            void OnIconLoaded() {
+int revealThreshold = Math.Max(1, Math.Min(total, (int)Math.Ceiling(total * 2.6)));
 
-                int count = Interlocked.Increment(ref loadedCount);
-                if (!revealed && count >= revealThreshold) {
-                    bool shouldReveal = false;
-                    lock (revealLock) {
-                        if (!revealed) { revealed = true; shouldReveal = true; }
-                    }
-                    if (shouldReveal) {
-                        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, async () => {
-                            if (loadToken.IsCancellationRequested) return;
-                            var settings = await SettingsHelper.LoadSettingsAsync();
-                            if (settings.EnableContentSlideAnimation)
-                                TriggerContentAnimation();
-                            else
-                                GridPanel.Opacity = 1;
 
-                        });
-                    }
-                }
-            }
 
-            var iconTasks = items
-                .Where(_ => !loadToken.IsCancellationRequested)
-                .Select(async item => {
-                    await LoadIconAsync(item, item.Path, loadToken);
-                    OnIconLoaded();
-                })
-                .ToList();
 
-            _ = Task.WhenAll(iconTasks);
+int loadedCount = 0;
+bool revealed = false;
+var revealLock = new object();
+
+void OnIconLoaded() {
+
+    int count = Interlocked.Increment(ref loadedCount);
+    if (!revealed && count >= revealThreshold) {
+        bool shouldReveal = false;
+        lock (revealLock) {
+            if (!revealed) { revealed = true; shouldReveal = true; }
+        }
+        if (shouldReveal) {
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, async () => {
+                if (loadToken.IsCancellationRequested) return;
+                var settings = await SettingsHelper.LoadSettingsAsync();
+                if (settings.EnableContentSlideAnimation)
+                    TriggerContentAnimation();
+                else
+                    GridPanel.Opacity = 1;
+
+            });
+        }
+    }
+}
+
+var iconTasks = items
+    .Where(_ => !loadToken.IsCancellationRequested)
+    .Select(async item => {
+        await LoadIconAsync(item, item.Path, loadToken);
+        OnIconLoaded();
+    })
+    .ToList();
+
+_ = Task.WhenAll(iconTasks);
         }
         
         private async Task LoadIconAsync(PopupItem item, string path, CancellationToken token) {
@@ -1664,7 +1740,7 @@ namespace AppGroup {
                 if (_parentPopup != null) return;
                 if (_focusTimer != null) return;
                 if (_isClosing) return;
-
+               
                 _isClosing = true;
 
                 bool wasLoaded = _isLoaded;
@@ -1680,6 +1756,8 @@ namespace AppGroup {
                         _wasLaunchedFromTaskbar = false;
                         this.Hide();
                         var offscreen = GetOffscreenSize();
+                        _windowHelper.IsAlwaysOnTop = false;
+
                         _windowHelper.SetSize(offscreen.Width, offscreen.Height);
                         NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
 
@@ -1968,13 +2046,15 @@ namespace AppGroup {
             return Path.GetFileNameWithoutExtension(filePath);
         }
 
-        private Tuple<float, int, int> GetDisplayInformation() {
-            var hwnd = WindowNative.GetWindowHandle(this);
-            uint dpi = NativeMethods.GetDpiForWindow(hwnd);
-            float scaleFactor = (float)dpi / 96.0f;
-            IntPtr monitor = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
-            NativeMethods.MONITORINFOEX monitorInfo = new NativeMethods.MONITORINFOEX();
-            monitorInfo.cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFOEX));
+        private Tuple<float, int, int> GetDisplayInformation(NativeMethods.POINT? targetPoint = null) {
+            IntPtr monitor = targetPoint.HasValue
+                ? NativeMethods.MonitorFromPoint(targetPoint.Value, NativeMethods.MONITOR_DEFAULTTONEAREST)
+                : NativeMethods.MonitorFromWindow(WindowNative.GetWindowHandle(this), NativeMethods.MONITOR_DEFAULTTONEAREST);
+
+            NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MDT_EFFECTIVE_DPI, out uint dpiX, out _);
+            float scaleFactor = dpiX / 96f;
+
+            var monitorInfo = new NativeMethods.MONITORINFOEX { cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFOEX)) };
             NativeMethods.GetMonitorInfo(monitor, ref monitorInfo);
             int screenWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
             int screenHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;

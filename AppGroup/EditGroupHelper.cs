@@ -40,8 +40,7 @@ namespace AppGroup {
 
         private void SaveGroupIdToFile(string groupId) {
             try {
-                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string filePath = Path.Combine(appDataPath, "AppGroup", "lastEdit");
+                string filePath = Path.Combine(AppPaths.BaseDataPath, "lastEdit");
                 Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? "");
                 File.WriteAllText(filePath, groupId);
             }

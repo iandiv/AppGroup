@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace AppGroup {
     public static class IconCache {
         private static readonly Dictionary<string, string> _iconCache = new Dictionary<string, string>();
-        private static readonly string CacheFilePath = GetCacheFilePath();
+        private static string CacheFilePath => GetCacheFilePath();
         private static readonly object _cacheLock = new object();
 
         // Per-file semaphores — concurrent callers for the same source file
@@ -26,8 +26,7 @@ namespace AppGroup {
         // ── private helpers ───────────────────────────────────────────────────
 
         private static string GetCacheFilePath() {
-            string folder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string appGroupFolder = Path.Combine(folder, "AppGroup");
+            string appGroupFolder = AppPaths.BaseDataPath;
             Directory.CreateDirectory(appGroupFolder);
             return Path.Combine(appGroupFolder, "icon_cache.json");
         }
@@ -110,8 +109,8 @@ namespace AppGroup {
                 }
 
                 string outputDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "AppGroup", "Icons");
+                    AppPaths.BaseDataPath,
+                    "Icons");
                 Directory.CreateDirectory(outputDir);
 
                 // Pass folderPath directly — SHGetFileInfo handles directories
@@ -165,8 +164,8 @@ namespace AppGroup {
                 }
 
                 string outputDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "AppGroup", "Icons");
+                    AppPaths.BaseDataPath,
+                    "Icons");
                 Directory.CreateDirectory(outputDir);
 
                 string extracted = await IconHelper.ExtractIconAndSaveAsync(

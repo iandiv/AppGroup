@@ -94,8 +94,7 @@ namespace AppGroup {
         }
 
         public static async Task<int> ImportSelectedAsync(List<TbgGroupPreview> selected) {
-            string appGroupBase = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
+            string appGroupBase = AppPaths.BaseDataPath;
             string iconsDir = Path.Combine(appGroupBase, "Icons");
             string groupsDir = Path.Combine(appGroupBase, "Groups");
             string jsonPath = JsonConfigHelper.GetDefaultConfigPath();

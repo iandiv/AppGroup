@@ -67,13 +67,14 @@
 
                 var iconPath = Path.Combine(AppContext.BaseDirectory, "EditGroup.ico");
                 this.AppWindow.SetIcon(iconPath);
-                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+            //string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            //string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
 
-                if (!Directory.Exists(appDataPath))
-                    Directory.CreateDirectory(appDataPath);
+            //if (!Directory.Exists(appDataPath))
+            //    Directory.CreateDirectory(appDataPath);
 
-                ExeListView.ItemsSource = ExeFiles;
+            string appDataPath = AppPaths.BaseDataPath;
+            ExeListView.ItemsSource = ExeFiles;
 
                 MinHeight = 600;
                 MinWidth = 530;
@@ -96,9 +97,8 @@
 
             // Fix: initialize a no-op file watcher so the field is never null
             private void SetupFileWatcher() {
-                string watchDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup");
-                Directory.CreateDirectory(watchDir);
+            string watchDir = AppPaths.BaseDataPath;
+            //Directory.CreateDirectory(watchDir);
                 fileWatcher = new FileSystemWatcher(watchDir) {
                     EnableRaisingEvents = false
                 };
@@ -274,11 +274,11 @@
                     ExpanderLabel.IsExpanded = false;
 
                     try {
-                        string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                        string appFolderPath = Path.Combine(appDataPath, "AppGroup");
-                        string filePath = Path.Combine(appFolderPath, "lastEdit");
-
-                        if (File.Exists(filePath)) {
+                    //string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    //string appFolderPath = Path.Combine(appDataPath, "AppGroup");
+                    //string filePath = Path.Combine(appFolderPath, "lastEdit");
+                    string filePath = Path.Combine(AppPaths.BaseDataPath, "lastEdit");
+                    if (File.Exists(filePath)) {
                             string fileGroupIdText = File.ReadAllText(filePath).Trim();
                             if (!string.IsNullOrEmpty(fileGroupIdText) && int.TryParse(fileGroupIdText, out int fileGroupId))
                                 newGroupId = fileGroupId;
@@ -387,14 +387,10 @@
                                 // Resolve DragTemp .lnk back to the real Groups path
                                 string resolvedPath = file.Path;
                                 if (file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
-                                    string dragTempDir = Path.Combine(
-                                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                        "AppGroup", "DragTemp");
-                                    if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
-                                        string groupsDir = Path.Combine(
-                                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                            "AppGroup", "Groups");
-                                        string fileName = Path.GetFileNameWithoutExtension(file.Path);
+                                string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
+                                if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
+                                    string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
+                                    string fileName = Path.GetFileNameWithoutExtension(file.Path);
                                         string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
                                         if (File.Exists(realPath))
                                             resolvedPath = realPath;
@@ -862,12 +858,13 @@
                     TooltipTextBox.Text = item.Tooltip;
                     ArgsTextBox.Text = item.Args;
 
-                    string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
-                    string groupsFolder = Path.Combine(appDataPath, "Groups");
-                    Directory.CreateDirectory(groupsFolder);
-
-                    string gName = GroupNameTextBox.Text?.Trim();
+                //string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                //string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
+                //string groupsFolder = Path.Combine(appDataPath, "Groups");
+                //Directory.CreateDirectory(groupsFolder);
+                string groupsFolder = Path.Combine(AppPaths.BaseDataPath, "Groups");
+                Directory.CreateDirectory(groupsFolder);
+                string gName = GroupNameTextBox.Text?.Trim();
                     string groupFolder = Path.Combine(groupsFolder, gName);
                     currentGroupPath = Path.Combine(groupFolder, gName);
 
@@ -996,16 +993,19 @@
                         await ShowDialog("Error", "Please select an icon.");
                         return;
                     }
+              
 
-                    string headerPosition = (HeaderPositionComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Top";
+                if (GroupNameExists(newGroupName, GroupId)) {
+                    await ShowDialog("Error", "A group with this name already exists.");
+                    return;
+                }
+                string headerPosition = (HeaderPositionComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Top";
                     string layout = (LayoutComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Default";
                 string sortMode = (SortModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? DEFAULT_SORT_MODE;
-                string localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    string appDataPath = Path.Combine(localAppDataPath, "AppGroup");
-                    string groupsFolder = Path.Combine(appDataPath, "Groups");
-                    Directory.CreateDirectory(groupsFolder);
+                string groupsFolder = Path.Combine(AppPaths.BaseDataPath, "Groups");
+                Directory.CreateDirectory(groupsFolder);
 
-                    string oldGroupName = GetOldGroupName();
+                string oldGroupName = GetOldGroupName();
                     string oldGroupFolder = Path.Combine(groupsFolder, oldGroupName);
 
                     if (!string.IsNullOrEmpty(oldGroupName) && Directory.Exists(oldGroupFolder) && oldGroupName != newGroupName) {
@@ -1128,14 +1128,27 @@
             }
 
             private string GetOldGroupName() => groupName ?? "";
+        private bool GroupNameExists(string candidateName, int excludeGroupId) {
+            string jsonFilePath = JsonConfigHelper.GetDefaultConfigPath();
+            if (!File.Exists(jsonFilePath)) return false;
 
-            private void SaveGroupIdToFile(string groupId) {
+            JsonNode jsonObject = JsonNode.Parse(File.ReadAllText(jsonFilePath)) ?? new JsonObject();
+            foreach (var kvp in jsonObject.AsObject()) {
+                if (!int.TryParse(kvp.Key, out int existingGroupId) || existingGroupId == excludeGroupId)
+                    continue;
+
+                string existingName = kvp.Value?["groupName"]?.GetValue<string>();
+                if (string.Equals(existingName, candidateName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+        private void SaveGroupIdToFile(string groupId) {
                 try {
-                    string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    string filePath = Path.Combine(appDataPath, "AppGroup", "lastEdit");
-                    Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? "");
-                    File.WriteAllText(filePath, groupId);
-                }
+                string filePath = Path.Combine(AppPaths.BaseDataPath, "lastEdit");
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? "");
+                File.WriteAllText(filePath, groupId);
+            }
                 catch (Exception ex) {
                     Debug.WriteLine($"Failed to save group ID: {ex.Message}");
                 }

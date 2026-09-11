@@ -357,40 +357,180 @@
                 }
             }
 
-            private void ExeListView_DragOver(object sender, DragEventArgs e) {
-                e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
+        //private void ExeListView_DragOver(object sender, DragEventArgs e) {
+        //    e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
+        //        ? DataPackageOperation.Copy | DataPackageOperation.Link
+        //        : DataPackageOperation.None;
+        //}
+        private void ExeListView_DragOver(object sender, DragEventArgs e) {
+            e.AcceptedOperation = (e.DataView.Contains(StandardDataFormats.StorageItems)
+                                    || e.DataView.Contains("Shell IDList Array"))
+                ? DataPackageOperation.Copy | DataPackageOperation.Link
+                : DataPackageOperation.None;
+        }
+
+        private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
+            try {
+                bool hasStorageItems = e.DataView.Contains(StandardDataFormats.StorageItems);
+                bool hasShellIdList = e.DataView.Contains("Shell IDList Array");
+
+                e.AcceptedOperation = (hasStorageItems || hasShellIdList)
                     ? DataPackageOperation.Copy | DataPackageOperation.Link
                     : DataPackageOperation.None;
             }
-
-            private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
-                try {
-                    e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
-                        ? DataPackageOperation.Copy | DataPackageOperation.Link
-                        : DataPackageOperation.None;
-                }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Drag Enter Error: {ex.Message}");
-                }
+            catch (Exception ex) {
+                Debug.WriteLine($"Drag Enter Error: {ex.Message}");
             }
+        }
+        //private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
+        //    try {
+        //        e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
+        //            ? DataPackageOperation.Copy | DataPackageOperation.Link
+        //            : DataPackageOperation.None;
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Drag Enter Error: {ex.Message}");
+        //    }
+        //}
 
-            private async void ExeListView_Drop(object sender, DragEventArgs e) {
-                try {
-                    if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
-                        var items = await e.DataView.GetStorageItemsAsync();
-                        foreach (var item in items) {
-                            if (item is StorageFile file &&
-                                (file.FileType.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-                                 file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
-                                 file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))) {
+        //private async void ExeListView_Drop(object sender, DragEventArgs e) {
+        //    Debug.WriteLine($"[Drop] fired. HasStorageItems={e.DataView.Contains(StandardDataFormats.StorageItems)}, HasShellIdList={e.DataView.Contains("Shell IDList Array")}");
+        //    try {
+        //          if (e.DataView.Contains("Shell IDList Array")) {
+        //            var raw = await e.DataView.GetDataAsync("Shell IDList Array");
+        //            byte[] bytes = await ExtractBytesAsync(raw);
+        //            if (bytes == null) return;
+
+        //            var items = ShellInterop.ParseShellIdList(bytes);
+        //            foreach (var item in items) {
+        //                string resolvedPath;
+        //                string displayName;
+
+        //                if (item.IsFileSystem) {
+        //                    resolvedPath = item.Path;
+        //                    displayName = Path.GetFileNameWithoutExtension(resolvedPath);
+        //                }
+        //                else if (item.Aumid != null) {
+        //                    displayName = item.Aumid.Split('!')[0]; // fallback label; refine if you resolve a friendly name elsewhere
+        //                    resolvedPath = ShellInterop.CreateAppsFolderShortcut(item.Aumid, displayName);
+        //                }
+        //                else continue;
+
+        //                string icon = await IconCache.GetIconPathAsync(resolvedPath);
+        //                if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
+        //                    icon = await IconCache.GetIconPathAsync(resolvedPath);
+
+        //                ExeFiles.Add(new ExeFileModel {
+        //                    FileName = Path.GetFileName(resolvedPath),
+        //                    Icon = icon,
+        //                    FilePath = resolvedPath,
+        //                    IconPath = icon
+        //                });
+        //            }
+        //            RefreshListViewState();
+        //        }
+        //        else if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
+        //            var items = await e.DataView.GetStorageItemsAsync();
+        //            foreach (var item in items) {
+        //                if (item is StorageFile file &&
+        //                    (file.FileType.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+        //                     file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
+        //                     file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))) {
+
+        //                    // Resolve DragTemp .lnk back to the real Groups path
+        //                    string resolvedPath = file.Path;
+        //                    if (file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+        //                        string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
+        //                        if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
+        //                            string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
+        //                            string fileName = Path.GetFileNameWithoutExtension(file.Path);
+        //                            string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
+        //                            if (File.Exists(realPath))
+        //                                resolvedPath = realPath;
+        //                        }
+        //                    }
+
+        //                    string icon;
+        //                    if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))
+        //                        icon = await IconHelper.GetUrlFileIconAsync(resolvedPath);
+        //                    else
+        //                        icon = await IconCache.GetIconPathAsync(resolvedPath);
+
+        //                    if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
+        //                        icon = await IconCache.GetIconPathAsync(resolvedPath);
+
+        //                    ExeFiles.Add(new ExeFileModel {
+        //                        FileName = Path.GetFileName(resolvedPath),
+        //                        Icon = icon,
+        //                        FilePath = resolvedPath,
+        //                        IconPath = icon
+        //                    });
+        //                }
+
+        //            }
+        //            RefreshListViewState();
+        //        }
+
+        //    }
+        //        catch (Exception ex) {
+        //            Debug.WriteLine($"Drop Error: {ex.Message}");
+        //        }
+        //    }
+
+
+        private async void ExeListView_Drop(object sender, DragEventArgs e) {
+            Debug.WriteLine($"[Drop] fired. HasStorageItems={e.DataView.Contains(StandardDataFormats.StorageItems)}, HasShellIdList={e.DataView.Contains("Shell IDList Array")}");
+            try {
+                if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
+                    var items = await e.DataView.GetStorageItemsAsync();
+                    foreach (var item in items) {
+                        if (item is StorageFile file) {
+                            string resolvedPath = file.Path;
+                            string extension = file.FileType;
+                            string displayName = file.Name;
+
+                            // Start Menu tiles don't have a real Path/FileType — resolve via shell properties
+                            if (string.IsNullOrEmpty(extension) || !File.Exists(resolvedPath)) {
+                                try {
+                                    var props = await file.Properties.RetrievePropertiesAsync(new[] {
+                                "System.Link.TargetParsingPath",
+                                "System.AppUserModel.ID"
+                            });
+
+                                    props.TryGetValue("System.Link.TargetParsingPath", out var targetObj);
+                                    props.TryGetValue("System.AppUserModel.ID", out var aumidObj);
+
+                                    string target = targetObj as string;
+                                    string aumid = aumidObj as string;
+                                    if (!string.IsNullOrEmpty(target) && File.Exists(target)) {
+                                        // Prefer the real shortcut from shell:Common Programs / shell:Programs if one exists
+                                        string existingLnk = FindExistingShortcut(target);
+                                        resolvedPath = existingLnk ?? ShellInterop.CreateFileShortcut(target, displayName);
+                                        extension = ".lnk";
+                                        displayName = Path.GetFileName(resolvedPath); // matches shell:Common Programs naming exactly
+                                    }
+                                    else if (!string.IsNullOrEmpty(aumid) && aumid.Contains('!')) {
+                                        string existingLnk = FindExistingAppShortcut(aumid);
+                                        resolvedPath = existingLnk ?? ShellInterop.CreateAppsFolderShortcut(aumid, displayName);
+                                        extension = ".lnk";
+                                        displayName = Path.GetFileName(resolvedPath);
+                                    }
+                                }
+                                catch (Exception ex) {
+                                    Debug.WriteLine($"[Drop] Shell property resolve failed: {ex.Message}");
+                                }
+                            }
+
+                            if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
+                                extension.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
 
                                 // Resolve DragTemp .lnk back to the real Groups path
-                                string resolvedPath = file.Path;
-                                if (file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
-                                string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
-                                if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
-                                    string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
-                                    string fileName = Path.GetFileNameWithoutExtension(file.Path);
+                                if (extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                                    string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
+                                    if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
+                                        string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
+                                        string fileName = Path.GetFileNameWithoutExtension(resolvedPath);
                                         string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
                                         if (File.Exists(realPath))
                                             resolvedPath = realPath;
@@ -398,7 +538,7 @@
                                 }
 
                                 string icon;
-                                if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))
+                                if (extension.Equals(".url", StringComparison.OrdinalIgnoreCase))
                                     icon = await IconHelper.GetUrlFileIconAsync(resolvedPath);
                                 else
                                     icon = await IconCache.GetIconPathAsync(resolvedPath);
@@ -407,22 +547,137 @@
                                     icon = await IconCache.GetIconPathAsync(resolvedPath);
 
                                 ExeFiles.Add(new ExeFileModel {
-                                    FileName = Path.GetFileName(resolvedPath),
+                                    FileName = displayName,
                                     Icon = icon,
                                     FilePath = resolvedPath,
                                     IconPath = icon
                                 });
                             }
-                      
                         }
-                        RefreshListViewState();
                     }
-                }
-                catch (Exception ex) {
-                    Debug.WriteLine($"Drop Error: {ex.Message}");
+                    RefreshListViewState();
                 }
             }
-            private void BrowseFilesClick(object sender, RoutedEventArgs e) => BrowseFiles();
+            catch (Exception ex) {
+                Debug.WriteLine($"Drop Error: {ex.Message}");
+            }
+
+
+        }
+        private static string FindExistingShortcut(string targetExePath) {
+            string[] searchDirs = {
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),      // shell:Common Programs
+        Environment.GetFolderPath(Environment.SpecialFolder.Programs)             // shell:Programs (per-user)
+    };
+
+            foreach (var dir in searchDirs) {
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (var lnkPath in Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories)) {
+                    try {
+                        var shellLink = (ShellInterop.IShellLinkW)new ShellInterop.CShellLink();
+                        var persistFile = (ShellInterop.IPersistFile)shellLink;
+                        persistFile.Load(lnkPath, 0); // STGM_READ
+
+                        var sb = new System.Text.StringBuilder(260);
+                        shellLink.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
+
+                        if (string.Equals(sb.ToString(), targetExePath, StringComparison.OrdinalIgnoreCase))
+                            return lnkPath;
+                    }
+                    catch {
+                        // unreadable/corrupt .lnk — skip it
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static string FindExistingAppShortcut(string aumid) {
+            string[] searchDirs = {
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
+        Environment.GetFolderPath(Environment.SpecialFolder.Programs)
+    };
+
+            foreach (var dir in searchDirs) {
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (var lnkPath in Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories)) {
+                    try {
+                        var shellLink = (ShellInterop.IShellLinkW)new ShellInterop.CShellLink();
+                        var persistFile = (ShellInterop.IPersistFile)shellLink;
+                        persistFile.Load(lnkPath, 0); // STGM_READ
+
+                        shellLink.GetIDList(out IntPtr pidl);
+                        if (pidl == IntPtr.Zero) continue;
+
+                        try {
+                            Guid iid = ShellInterop.IID_IShellItem2;
+                            int hr = ShellInterop.SHCreateItemFromIDList(pidl, ref iid, out ShellInterop.IShellItem2 item);
+                            if (hr != 0 || item == null) continue;
+
+                            var key = ShellInterop.PKEY_AppUserModel_ID;
+                            int shr = item.GetString(ref key, out IntPtr aumidPtr);
+                            if (shr != 0 || aumidPtr == IntPtr.Zero) continue;
+
+                            string foundAumid = Marshal.PtrToStringUni(aumidPtr);
+                            Marshal.FreeCoTaskMem(aumidPtr);
+
+                            if (string.Equals(foundAumid, aumid, StringComparison.OrdinalIgnoreCase))
+                                return lnkPath;
+                        }
+                        finally {
+                            ShellInterop.CoTaskMemFree(pidl);
+                        }
+                    }
+                    catch {
+                        // unreadable/corrupt .lnk — skip it
+                    }
+                }
+            }
+            return null;
+        }
+        private static async Task<byte[]> ExtractBytesAsync(object data) {
+            Debug.WriteLine($"[ShellIDList] payload type: {data?.GetType()}");
+            switch (data) {
+                case Windows.Storage.Streams.IRandomAccessStreamReference streamRef: {
+                        using var stream = await streamRef.OpenReadAsync();
+                        var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+                        await reader.LoadAsync((uint)stream.Size);
+                        var buf = new byte[stream.Size];
+                        reader.ReadBytes(buf);
+                        return buf;
+                    }
+                case byte[] b:
+                    return b;
+                case System.Collections.Generic.IReadOnlyList<Windows.Storage.IStorageItem> storageItems: {
+                        foreach (var si in storageItems) {
+                            Debug.WriteLine($"[Drop] StorageItem: Name='{si.Name}', Path='{si.Path}', Type={si.GetType()}");
+
+                            if (si is Windows.Storage.StorageFile sf) {
+                                try {
+                                    var props = await sf.Properties.RetrievePropertiesAsync(new[] {
+                    "System.AppUserModel.ID",
+                    "System.Link.TargetParsingPath"
+                });
+                                    foreach (var kv in props) {
+                                        Debug.WriteLine($"[Drop] Property: {kv.Key} = '{kv.Value}'");
+                                    }
+                                }
+                                catch (Exception ex) {
+                                    Debug.WriteLine($"[Drop] RetrievePropertiesAsync failed: {ex.Message}");
+                                }
+                            }
+                        }
+                        return null;
+                    }
+
+                default:
+                    Debug.WriteLine($"Unexpected Shell IDList Array payload type: {data?.GetType()}");
+                    return null;
+            }
+        }
+        private void BrowseFilesClick(object sender, RoutedEventArgs e) => BrowseFiles();
 
       
             // Fix: extracted shared list-view refresh logic to avoid duplication and bugs

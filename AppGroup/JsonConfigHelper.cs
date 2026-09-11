@@ -423,7 +423,41 @@ namespace AppGroup
             return false;
         }
 
+        public static void CleanupStartAppShortcuts() {
+            try {
+                string shortcutsFolder = Path.Combine(AppPaths.BaseDataPath, "StartAppShortcuts");
+                if (!Directory.Exists(shortcutsFolder)) return;
 
+                string filePath = GetDefaultConfigPath();
+                if (!File.Exists(filePath)) return;
+
+                string jsonContent = ReadJsonFromFile(filePath);
+                JsonNode jsonObject = JsonNode.Parse(jsonContent) ?? new JsonObject();
+
+                var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var group in jsonObject.AsObject()) {
+                    JsonObject paths = group.Value?["path"]?.AsObject();
+                    if (paths == null) continue;
+                    foreach (var pathEntry in paths)
+                        usedPaths.Add(pathEntry.Key);
+                }
+
+                foreach (string lnkPath in Directory.EnumerateFiles(shortcutsFolder, "*.lnk")) {
+                    if (!usedPaths.Contains(lnkPath)) {
+                        try {
+                            File.Delete(lnkPath);
+                            Debug.WriteLine($"[Cleanup] Removed unused shortcut: {lnkPath}");
+                        }
+                        catch (Exception ex) {
+                            Debug.WriteLine($"[Cleanup] Failed to delete {lnkPath}: {ex.Message}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"[Cleanup] Error cleaning StartAppShortcuts: {ex.Message}");
+            }
+        }
         public static void OpenGroupFolder(int groupId) {
             try {
                 string filePath = GetDefaultConfigPath();

@@ -62,6 +62,7 @@ namespace AppGroup {
                         return;
                     }
                     CreateAllWindows();
+                    _ = Task.Run(() => JsonConfigHelper.CleanupStartAppShortcuts());
                     InitializeSystemTray();
                    await ApplySavedThemeAsync();
                     return;
@@ -72,6 +73,7 @@ namespace AppGroup {
                 }
 
                 CreateAllWindows();
+                _ = Task.Run(() => JsonConfigHelper.CleanupStartAppShortcuts());
                 InitializeSystemTray();
                 await ApplySavedThemeAsync();
                 if (cmdArgs.Length > 1) {

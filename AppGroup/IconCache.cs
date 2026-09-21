@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -138,18 +138,59 @@ namespace AppGroup {
         public static async Task<string> GetIconPathAsync(string filePath) {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
 
+            // If filePath is a virtual StartAppShortcuts link, resolve to real Start Menu link if possible
+            string runnable = ShellInterop.ResolveRunnablePath(filePath);
+            if (!string.Equals(runnable, filePath, StringComparison.OrdinalIgnoreCase) && File.Exists(runnable)) {
+                return await GetIconPathAsync(runnable).ConfigureAwait(false);
+            }
+
             string cacheKey = ComputeFileCacheKey(filePath);
             if (string.IsNullOrEmpty(cacheKey)) return null;
 
             // Fast path — valid cached PNG exists on disk
             lock (_cacheLock) {
                 if (_iconCache.TryGetValue(cacheKey, out var cached) &&
-                    !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                    !string.IsNullOrEmpty(cached) && File.Exists(cached)) {
+                    // If it's a .lnk file, verify it's not an old broken/tiny generic fallback icon (< 1.8 KB)
+                    if (filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                        try {
+                            var fi = new FileInfo(cached);
+                            if (fi.Length < 1800) {
+                                _iconCache.Remove(cacheKey);
+                                goto ExtractFresh;
+                            }
+
+                            // If this is a Chromium PWA that was previously cached with a .lnk shell overlay (arrow),
+                            // check if a clean raw PWA icon exists and re-extract once cleanly without arrow
+                            if (cached.Contains(".lnk_")) {
+                                string combined = filePath;
+                                if (ShellInterop.TryReadShortcut(filePath, out var t, out var a, out var ic, out _)) {
+                                    combined = $"{a} {t} {ic} {filePath}";
+                                }
+                                string? appId = ShellInterop.ExtractAppId(combined);
+                                if (!string.IsNullOrEmpty(appId)) {
+                                    string? pwaIco = ShellInterop.FindPwaIconPath(appId);
+                                    if (!string.IsNullOrEmpty(pwaIco) && File.Exists(pwaIco)) {
+                                        string pwaKey = $"{cacheKey}_pwa_v2";
+                                        if (!_iconCache.ContainsKey(pwaKey)) {
+                                            _iconCache.Remove(cacheKey);
+                                            _iconCache[pwaKey] = "1";
+                                            try { if (File.Exists(cached)) File.Delete(cached); } catch { }
+                                            goto ExtractFresh;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
                     return cached;
+                }
                 // Stale pointer — remove it so extraction runs cleanly
                 _iconCache.Remove(cacheKey);
             }
 
+        ExtractFresh:
             // Serialise extraction per source file so concurrent callers don't
             // each extract and then race to store the result.
             var sem = GetExtractionSemaphore(filePath);
@@ -158,10 +199,43 @@ namespace AppGroup {
                 // Re-check: another waiter may have populated the entry
                 lock (_cacheLock) {
                     if (_iconCache.TryGetValue(cacheKey, out var cached) &&
-                        !string.IsNullOrEmpty(cached) && File.Exists(cached))
+                        !string.IsNullOrEmpty(cached) && File.Exists(cached)) {
+                        if (filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                            try {
+                                var fi = new FileInfo(cached);
+                                if (fi.Length < 1800) {
+                                    _iconCache.Remove(cacheKey);
+                                    goto ProceedExtract;
+                                }
+
+                                if (cached.Contains(".lnk_")) {
+                                    string combined = filePath;
+                                    if (ShellInterop.TryReadShortcut(filePath, out var t, out var a, out var ic, out _)) {
+                                        combined = $"{a} {t} {ic} {filePath}";
+                                    }
+                                    string? appId = ShellInterop.ExtractAppId(combined);
+                                    if (!string.IsNullOrEmpty(appId)) {
+                                        string? pwaIco = ShellInterop.FindPwaIconPath(appId);
+                                        if (!string.IsNullOrEmpty(pwaIco) && File.Exists(pwaIco)) {
+                                            string pwaKey = $"{cacheKey}_pwa_v2";
+                                            if (!_iconCache.ContainsKey(pwaKey)) {
+                                                _iconCache.Remove(cacheKey);
+                                                _iconCache[pwaKey] = "1";
+                                                try { if (File.Exists(cached)) File.Delete(cached); } catch { }
+                                                goto ProceedExtract;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
                         return cached;
+                    }
                     _iconCache.Remove(cacheKey);
                 }
+
+            ProceedExtract:
 
                 string outputDir = Path.Combine(
                     AppPaths.BaseDataPath,

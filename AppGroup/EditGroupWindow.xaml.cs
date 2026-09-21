@@ -1,4 +1,4 @@
-﻿    using IWshRuntimeLibrary;
+    using IWshRuntimeLibrary;
     using Microsoft.UI.Windowing;
     using Microsoft.UI.Xaml;
     using Microsoft.UI.Xaml.Controls;
@@ -22,12 +22,12 @@
 
     namespace AppGroup {
         public class ExeFileModel {
-            public string FileName { get; set; }
-            public string FilePath { get; set; }
-            public string Icon { get; set; }
-            public string Tooltip { get; set; }
-            public string Args { get; set; }
-            public string IconPath { get; set; }
+            public string FileName { get; set; } = string.Empty;
+            public string FilePath { get; set; } = string.Empty;
+            public string Icon { get; set; } = string.Empty;
+            public string Tooltip { get; set; } = string.Empty;
+            public string Args { get; set; } = string.Empty;
+            public string IconPath { get; set; } = string.Empty;
         }
 
         public sealed partial class EditGroupWindow : WinUIEx.WindowEx {
@@ -38,14 +38,11 @@
             private bool regularIcon = true;
             private string? lastSelectedItem;
             private string? copiedImagePath;
-            private string tempIcon;           // Fix: field is now properly assigned in LoadGroupDataAsync
+            private string tempIcon = string.Empty;           // Fix: field is now properly assigned in LoadGroupDataAsync
             private string? groupName;
-            private FileSystemWatcher fileWatcher;
-            private string groupIdFilePath;
-            private int? lastGroupId = null;
-            private ExeFileModel CurrentItem { get; set; }
-            private string originalItemIconPath = null;
-            private bool _isDialogRepositioning = false;
+            private FileSystemWatcher fileWatcher = null!;
+            private ExeFileModel? CurrentItem { get; set; }
+            private string? originalItemIconPath = null;
             private bool _isLoadingData = false;  // Fix: guard against concurrent loads
 
             private const int DEFAULT_LABEL_SIZE = 12;
@@ -54,7 +51,6 @@
         private IntPtr _hwnd;
             private NativeMethods.SubclassProc _subclassProc;
             private const int SUBCLASS_ID = 3;
-            private bool _isFirstActivation = true;
             private bool _wasHidden = true;
       
             public EditGroupWindow(int groupId) {
@@ -340,10 +336,6 @@
             private void MainWindow_Closed(object sender, WindowEventArgs args) {
                 fileWatcher?.Dispose();
 
-                // Fix: groupIdFilePath is only non-empty when explicitly set; guard before delete
-                if (!string.IsNullOrEmpty(groupIdFilePath) && File.Exists(groupIdFilePath))
-                    File.Delete(groupIdFilePath);
-
                 // Fix: tempIcon field (not local variable) is now cleaned up correctly
                 if (!string.IsNullOrEmpty(tempIcon)) {
                     try {
@@ -357,323 +349,334 @@
                 }
             }
 
-        //private void ExeListView_DragOver(object sender, DragEventArgs e) {
-        //    e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
-        //        ? DataPackageOperation.Copy | DataPackageOperation.Link
-        //        : DataPackageOperation.None;
-        //}
         private void ExeListView_DragOver(object sender, DragEventArgs e) {
-            e.AcceptedOperation = (e.DataView.Contains(StandardDataFormats.StorageItems)
-                                    || e.DataView.Contains("Shell IDList Array"))
-                ? DataPackageOperation.Copy | DataPackageOperation.Link
-                : DataPackageOperation.None;
+            bool canAccept = e.DataView.Contains(StandardDataFormats.StorageItems)
+                          || e.DataView.Contains("Shell IDList Array")
+                          || e.DataView.Contains("FileDrop")
+                          || e.DataView.Contains(StandardDataFormats.Uri);
+
+            if (canAccept) {
+                e.AcceptedOperation = DataPackageOperation.Copy | DataPackageOperation.Link;
+                e.DragUIOverride.Caption = "Add to group";
+                e.DragUIOverride.IsCaptionVisible = true;
+                e.DragUIOverride.IsContentVisible = true;
+                e.DragUIOverride.IsGlyphVisible = true;
+            }
         }
 
-        private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
+        private void ExeListView_DragEnter(object sender, DragEventArgs e) {
             try {
-                bool hasStorageItems = e.DataView.Contains(StandardDataFormats.StorageItems);
-                bool hasShellIdList = e.DataView.Contains("Shell IDList Array");
+                bool canAccept = e.DataView.Contains(StandardDataFormats.StorageItems)
+                              || e.DataView.Contains("Shell IDList Array")
+                              || e.DataView.Contains("FileDrop")
+                              || e.DataView.Contains(StandardDataFormats.Uri);
 
-                e.AcceptedOperation = (hasStorageItems || hasShellIdList)
-                    ? DataPackageOperation.Copy | DataPackageOperation.Link
-                    : DataPackageOperation.None;
+                if (canAccept) {
+                    e.AcceptedOperation = DataPackageOperation.Copy | DataPackageOperation.Link;
+                }
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Drag Enter Error: {ex.Message}");
             }
         }
-        //private async void ExeListView_DragEnter(object sender, DragEventArgs e) {
-        //    try {
-        //        e.AcceptedOperation = e.DataView.Contains(StandardDataFormats.StorageItems)
-        //            ? DataPackageOperation.Copy | DataPackageOperation.Link
-        //            : DataPackageOperation.None;
-        //    }
-        //    catch (Exception ex) {
-        //        Debug.WriteLine($"Drag Enter Error: {ex.Message}");
-        //    }
-        //}
 
-        //private async void ExeListView_Drop(object sender, DragEventArgs e) {
-        //    Debug.WriteLine($"[Drop] fired. HasStorageItems={e.DataView.Contains(StandardDataFormats.StorageItems)}, HasShellIdList={e.DataView.Contains("Shell IDList Array")}");
-        //    try {
-        //          if (e.DataView.Contains("Shell IDList Array")) {
-        //            var raw = await e.DataView.GetDataAsync("Shell IDList Array");
-        //            byte[] bytes = await ExtractBytesAsync(raw);
-        //            if (bytes == null) return;
+        private async Task AddAppItemAsync(string targetPath, string? friendlyName = null) {
+            if (string.IsNullOrWhiteSpace(targetPath)) return;
 
-        //            var items = ShellInterop.ParseShellIdList(bytes);
-        //            foreach (var item in items) {
-        //                string resolvedPath;
-        //                string displayName;
+            // Handle Directory / Folder drops
+            if (Directory.Exists(targetPath)) {
+                try {
+                    var subFiles = Directory.EnumerateFiles(targetPath, "*.*", SearchOption.TopDirectoryOnly)
+                        .Where(f => {
+                            string ext = Path.GetExtension(f).ToLowerInvariant();
+                            return ext == ".lnk" || ext == ".exe" || ext == ".url";
+                        }).ToList();
 
-        //                if (item.IsFileSystem) {
-        //                    resolvedPath = item.Path;
-        //                    displayName = Path.GetFileNameWithoutExtension(resolvedPath);
-        //                }
-        //                else if (item.Aumid != null) {
-        //                    displayName = item.Aumid.Split('!')[0]; // fallback label; refine if you resolve a friendly name elsewhere
-        //                    resolvedPath = ShellInterop.CreateAppsFolderShortcut(item.Aumid, displayName);
-        //                }
-        //                else continue;
+                    if (subFiles.Count > 0) {
+                        foreach (var subFile in subFiles) {
+                            await AddAppItemAsync(subFile);
+                        }
+                        return;
+                    }
+                }
+                catch (Exception ex) {
+                    Debug.WriteLine($"Error enumerating folder items for {targetPath}: {ex.Message}");
+                }
 
-        //                string icon = await IconCache.GetIconPathAsync(resolvedPath);
-        //                if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
-        //                    icon = await IconCache.GetIconPathAsync(resolvedPath);
+                string folderIcon = await IconCache.GetFolderIconPathAsync(targetPath);
+                string folderDisplayName = !string.IsNullOrWhiteSpace(friendlyName)
+                    ? friendlyName
+                    : Path.GetFileName(targetPath.TrimEnd('\\', '/'));
 
-        //                ExeFiles.Add(new ExeFileModel {
-        //                    FileName = Path.GetFileName(resolvedPath),
-        //                    Icon = icon,
-        //                    FilePath = resolvedPath,
-        //                    IconPath = icon
-        //                });
-        //            }
-        //            RefreshListViewState();
-        //        }
-        //        else if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
-        //            var items = await e.DataView.GetStorageItemsAsync();
-        //            foreach (var item in items) {
-        //                if (item is StorageFile file &&
-        //                    (file.FileType.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-        //                     file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
-        //                     file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))) {
+                ExeFiles.Add(new ExeFileModel {
+                    FileName = folderDisplayName,
+                    Icon = folderIcon,
+                    FilePath = targetPath,
+                    IconPath = folderIcon,
+                    Tooltip = folderDisplayName,
+                    Args = ""
+                });
+                return;
+            }
 
-        //                    // Resolve DragTemp .lnk back to the real Groups path
-        //                    string resolvedPath = file.Path;
-        //                    if (file.FileType.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
-        //                        string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
-        //                        if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
-        //                            string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
-        //                            string fileName = Path.GetFileNameWithoutExtension(file.Path);
-        //                            string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
-        //                            if (File.Exists(realPath))
-        //                                resolvedPath = realPath;
-        //                        }
-        //                    }
+            string extension = Path.GetExtension(targetPath).ToLowerInvariant();
+            string displayName = !string.IsNullOrWhiteSpace(friendlyName)
+                ? friendlyName
+                : Path.GetFileNameWithoutExtension(targetPath);
 
-        //                    string icon;
-        //                    if (file.FileType.Equals(".url", StringComparison.OrdinalIgnoreCase))
-        //                        icon = await IconHelper.GetUrlFileIconAsync(resolvedPath);
-        //                    else
-        //                        icon = await IconCache.GetIconPathAsync(resolvedPath);
+            // Resolve DragTemp .lnk back to the real Groups path
+            if (extension == ".lnk") {
+                string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
+                if (targetPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
+                    string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
+                    string fileName = Path.GetFileNameWithoutExtension(targetPath);
+                    string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
+                    if (File.Exists(realPath))
+                        targetPath = realPath;
+                }
+            }
 
-        //                    if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
-        //                        icon = await IconCache.GetIconPathAsync(resolvedPath);
+            string icon;
+            if (extension == ".url") {
+                icon = await IconHelper.GetUrlFileIconAsync(targetPath);
+            }
+            else {
+                icon = await IconCache.GetIconPathAsync(targetPath);
+                if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon)) {
+                    icon = await IconCache.GetIconPathAsync(targetPath);
+                }
+            }
 
-        //                    ExeFiles.Add(new ExeFileModel {
-        //                        FileName = Path.GetFileName(resolvedPath),
-        //                        Icon = icon,
-        //                        FilePath = resolvedPath,
-        //                        IconPath = icon
-        //                    });
-        //                }
-
-        //            }
-        //            RefreshListViewState();
-        //        }
-
-        //    }
-        //        catch (Exception ex) {
-        //            Debug.WriteLine($"Drop Error: {ex.Message}");
-        //        }
-        //    }
-
+            ExeFiles.Add(new ExeFileModel {
+                FileName = displayName,
+                Icon = icon,
+                FilePath = targetPath,
+                IconPath = icon,
+                Tooltip = displayName,
+                Args = ""
+            });
+        }
 
         private async void ExeListView_Drop(object sender, DragEventArgs e) {
-            Debug.WriteLine($"[Drop] fired. HasStorageItems={e.DataView.Contains(StandardDataFormats.StorageItems)}, HasShellIdList={e.DataView.Contains("Shell IDList Array")}");
+            bool isExternal = e.DataView.Contains(StandardDataFormats.StorageItems)
+                           || e.DataView.Contains("Shell IDList Array")
+                           || e.DataView.Contains("FileDrop")
+                           || e.DataView.Contains(StandardDataFormats.Uri);
+            if (!isExternal) return;
+
+            e.Handled = true;
+            var deferral = e.GetDeferral();
             try {
-                if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
-                    var items = await e.DataView.GetStorageItemsAsync();
-                    foreach (var item in items) {
-                        if (item is StorageFile file) {
-                            string resolvedPath = file.Path;
-                            string extension = file.FileType;
-                            string displayName = file.Name;
+                Debug.WriteLine($"[Drop] fired. HasStorageItems={e.DataView.Contains(StandardDataFormats.StorageItems)}, HasShellIdList={e.DataView.Contains("Shell IDList Array")}");
 
-                            // Start Menu tiles don't have a real Path/FileType — resolve via shell properties
-                            if (string.IsNullOrEmpty(extension) || !File.Exists(resolvedPath)) {
-                                try {
-                                    var props = await file.Properties.RetrievePropertiesAsync(new[] {
-                                "System.Link.TargetParsingPath",
-                                "System.AppUserModel.ID"
-                            });
+                bool handled = false;
 
-                                    props.TryGetValue("System.Link.TargetParsingPath", out var targetObj);
-                                    props.TryGetValue("System.AppUserModel.ID", out var aumidObj);
+                // 1. Try "Shell IDList Array" (Primary format for Windows 11 Start Menu & Shell virtual items)
+                if (e.DataView.Contains("Shell IDList Array")) {
+                    try {
+                        var raw = await e.DataView.GetDataAsync("Shell IDList Array");
+                        byte[] bytes = await ExtractBytesAsync(raw);
+                        if (bytes != null && bytes.Length > 0) {
+                            var items = ShellInterop.ParseShellIdList(bytes);
+                            if (items != null && items.Count > 0) {
+                                foreach (var item in items) {
+                                    string resolvedPath = null;
+                                    string displayName = item.DisplayName;
 
-                                    string target = targetObj as string;
-                                    string aumid = aumidObj as string;
-                                    if (!string.IsNullOrEmpty(target) && File.Exists(target)) {
-                                        // Prefer the real shortcut from shell:Common Programs / shell:Programs if one exists
-                                        string existingLnk = FindExistingShortcut(target);
-                                        resolvedPath = existingLnk ?? ShellInterop.CreateFileShortcut(target, displayName);
-                                        extension = ".lnk";
-                                        displayName = Path.GetFileName(resolvedPath); // matches shell:Common Programs naming exactly
+                                    // First priority: Check if matching real .lnk exists in Start Menu
+                                    string? realLnk = ShellInterop.FindShortcutInStartMenu(displayName, item.Aumid);
+                                    if (!string.IsNullOrEmpty(realLnk) && File.Exists(realLnk)) {
+                                        resolvedPath = realLnk;
+                                        displayName = Path.GetFileNameWithoutExtension(realLnk);
                                     }
-                                    else if (!string.IsNullOrEmpty(aumid) && aumid.Contains('!')) {
-                                        string existingLnk = FindExistingAppShortcut(aumid);
-                                        resolvedPath = existingLnk ?? ShellInterop.CreateAppsFolderShortcut(aumid, displayName);
-                                        extension = ".lnk";
-                                        displayName = Path.GetFileName(resolvedPath);
+                                    else if (item.IsFileSystem && !string.IsNullOrEmpty(item.Path)) {
+                                        resolvedPath = item.Path;
+                                        if (string.IsNullOrEmpty(displayName))
+                                            displayName = Path.GetFileNameWithoutExtension(resolvedPath);
+                                    }
+                                    else if (!string.IsNullOrEmpty(item.Aumid)) {
+                                        if (string.IsNullOrEmpty(displayName))
+                                            displayName = item.Aumid.Contains('!') ? item.Aumid.Split('!')[0] : item.Aumid;
+                                        resolvedPath = ShellInterop.CreateAppsFolderShortcut(item.Aumid, displayName, item.ExtractedIconPath);
+                                    }
+
+                                    if (!string.IsNullOrEmpty(resolvedPath)) {
+                                        IconCache.InvalidateEntry(resolvedPath);
+
+                                        if (!string.IsNullOrEmpty(item.ExtractedIconPath) && File.Exists(item.ExtractedIconPath)) {
+                                            if (item.ExtractedIconPath.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                                try {
+                                                    using var ico = new System.Drawing.Icon(item.ExtractedIconPath, 256, 256);
+                                                    using var bmp = new System.Drawing.Bitmap(ico.ToBitmap());
+                                                    string outputDir = Path.Combine(AppPaths.BaseDataPath, "Icons");
+                                                    Directory.CreateDirectory(outputDir);
+                                                    string pngPath = Path.Combine(outputDir, $"{displayName}_{Math.Abs(resolvedPath.GetHashCode())}.png");
+                                                    bmp.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                                                    IconCache.StoreEntry(resolvedPath, pngPath);
+                                                }
+                                                catch { }
+                                            }
+                                            else {
+                                                IconCache.StoreEntry(resolvedPath, item.ExtractedIconPath);
+                                            }
+                                        }
+
+                                        if (!ExeFiles.Any(x => string.Equals(x.FilePath, resolvedPath, StringComparison.OrdinalIgnoreCase))) {
+                                            await AddAppItemAsync(resolvedPath, displayName);
+                                            handled = true;
+                                        }
                                     }
                                 }
-                                catch (Exception ex) {
-                                    Debug.WriteLine($"[Drop] Shell property resolve failed: {ex.Message}");
-                                }
-                            }
-
-                            if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-                                extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
-                                extension.Equals(".url", StringComparison.OrdinalIgnoreCase)) {
-
-                                // Resolve DragTemp .lnk back to the real Groups path
-                                if (extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)) {
-                                    string dragTempDir = Path.Combine(AppPaths.BaseDataPath, "DragTemp");
-                                    if (resolvedPath.StartsWith(dragTempDir, StringComparison.OrdinalIgnoreCase)) {
-                                        string groupsDir = Path.Combine(AppPaths.BaseDataPath, "Groups");
-                                        string fileName = Path.GetFileNameWithoutExtension(resolvedPath);
-                                        string realPath = Path.Combine(groupsDir, fileName, $"{fileName}.lnk");
-                                        if (File.Exists(realPath))
-                                            resolvedPath = realPath;
-                                    }
-                                }
-
-                                string icon;
-                                if (extension.Equals(".url", StringComparison.OrdinalIgnoreCase))
-                                    icon = await IconHelper.GetUrlFileIconAsync(resolvedPath);
-                                else
-                                    icon = await IconCache.GetIconPathAsync(resolvedPath);
-
-                                if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon))
-                                    icon = await IconCache.GetIconPathAsync(resolvedPath);
-
-                                ExeFiles.Add(new ExeFileModel {
-                                    FileName = displayName,
-                                    Icon = icon,
-                                    FilePath = resolvedPath,
-                                    IconPath = icon
-                                });
                             }
                         }
                     }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"[Drop] Shell IDList Array handling failed: {ex.Message}");
+                    }
+                }
+
+                // 2. Try Standard StorageItems (Files, shortcuts from Explorer / Desktop)
+                if (!handled && e.DataView.Contains(StandardDataFormats.StorageItems)) {
+                    try {
+                        var items = await e.DataView.GetStorageItemsAsync();
+                        foreach (var item in items) {
+                            if (item is StorageFile file) {
+                                string resolvedPath = file.Path;
+                                string extension = file.FileType;
+                                string displayName = file.Name;
+
+                                // Start Menu tiles / virtual items don't have a direct File.Exists path — resolve via shell properties
+                                if (string.IsNullOrEmpty(extension) || !File.Exists(resolvedPath)) {
+                                    try {
+                                        var props = await file.Properties.RetrievePropertiesAsync(new[] {
+                                            "System.Link.TargetParsingPath",
+                                            "System.AppUserModel.ID"
+                                        });
+
+                                        props.TryGetValue("System.Link.TargetParsingPath", out var targetObj);
+                                        props.TryGetValue("System.AppUserModel.ID", out var aumidObj);
+
+                                        string target = targetObj as string;
+                                        string aumid = aumidObj as string;
+
+                                        // Prioritize finding real .lnk in Start Menu
+                                        string? matchingLnk = ShellInterop.FindShortcutInStartMenu(displayName, aumid);
+                                        if (!string.IsNullOrEmpty(matchingLnk) && File.Exists(matchingLnk)) {
+                                            resolvedPath = matchingLnk;
+                                            displayName = Path.GetFileNameWithoutExtension(resolvedPath);
+                                        }
+                                        else if (!string.IsNullOrEmpty(target) && (File.Exists(target) || Directory.Exists(target))) {
+                                            if (target.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                                                resolvedPath = target;
+                                            }
+                                            else {
+                                                bool isBrowser = target.EndsWith("chrome.exe", StringComparison.OrdinalIgnoreCase) ||
+                                                                target.EndsWith("brave.exe", StringComparison.OrdinalIgnoreCase) ||
+                                                                target.EndsWith("msedge.exe", StringComparison.OrdinalIgnoreCase);
+                                                if (isBrowser && !string.IsNullOrEmpty(aumid)) {
+                                                    resolvedPath = ShellInterop.CreateAppsFolderShortcut(aumid, displayName);
+                                                }
+                                                else {
+                                                    resolvedPath = ShellInterop.CreateFileShortcut(target, displayName);
+                                                }
+                                            }
+                                            displayName = Path.GetFileNameWithoutExtension(resolvedPath);
+                                        }
+                                        else if (!string.IsNullOrEmpty(aumid)) {
+                                            resolvedPath = ShellInterop.CreateAppsFolderShortcut(aumid, displayName);
+                                            displayName = Path.GetFileNameWithoutExtension(resolvedPath);
+                                        }
+                                    }
+                                    catch (Exception ex) {
+                                        Debug.WriteLine($"[Drop] StorageFile property retrieve failed: {ex.Message}");
+                                    }
+                                }
+
+                                if (!string.IsNullOrEmpty(resolvedPath)) {
+                                    if (!ExeFiles.Any(x => string.Equals(x.FilePath, resolvedPath, StringComparison.OrdinalIgnoreCase))) {
+                                        await AddAppItemAsync(resolvedPath, Path.GetFileNameWithoutExtension(displayName));
+                                        handled = true;
+                                    }
+                                }
+                            }
+                            else if (item is StorageFolder folder) {
+                                await AddAppItemAsync(folder.Path, folder.Name);
+                                handled = true;
+                            }
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"[Drop] StorageItems handling failed: {ex.Message}");
+                    }
+                }
+
+                // 3. Fallback: URI format (e.g. dropped web links or shell URIs)
+                if (!handled && e.DataView.Contains(StandardDataFormats.Uri)) {
+                    try {
+                        var uri = await e.DataView.GetUriAsync();
+                        if (uri != null) {
+                            await AddAppItemAsync(uri.AbsoluteUri, uri.Host);
+                            handled = true;
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"[Drop] Uri handling failed: {ex.Message}");
+                    }
+                }
+
+                if (handled) {
                     RefreshListViewState();
                 }
             }
             catch (Exception ex) {
-                Debug.WriteLine($"Drop Error: {ex.Message}");
+                Debug.WriteLine($"[Drop] General error: {ex.Message}");
             }
-
-
-        }
-        private static string FindExistingShortcut(string targetExePath) {
-            string[] searchDirs = {
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),      // shell:Common Programs
-        Environment.GetFolderPath(Environment.SpecialFolder.Programs)             // shell:Programs (per-user)
-    };
-
-            foreach (var dir in searchDirs) {
-                if (!Directory.Exists(dir)) continue;
-
-                foreach (var lnkPath in Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories)) {
-                    try {
-                        var shellLink = (ShellInterop.IShellLinkW)new ShellInterop.CShellLink();
-                        var persistFile = (ShellInterop.IPersistFile)shellLink;
-                        persistFile.Load(lnkPath, 0); // STGM_READ
-
-                        var sb = new System.Text.StringBuilder(260);
-                        shellLink.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
-
-                        if (string.Equals(sb.ToString(), targetExePath, StringComparison.OrdinalIgnoreCase))
-                            return lnkPath;
-                    }
-                    catch {
-                        // unreadable/corrupt .lnk — skip it
-                    }
-                }
+            finally {
+                deferral.Complete();
             }
-            return null;
-        }
-
-        private static string FindExistingAppShortcut(string aumid) {
-            string[] searchDirs = {
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
-        Environment.GetFolderPath(Environment.SpecialFolder.Programs)
-    };
-
-            foreach (var dir in searchDirs) {
-                if (!Directory.Exists(dir)) continue;
-
-                foreach (var lnkPath in Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories)) {
-                    try {
-                        var shellLink = (ShellInterop.IShellLinkW)new ShellInterop.CShellLink();
-                        var persistFile = (ShellInterop.IPersistFile)shellLink;
-                        persistFile.Load(lnkPath, 0); // STGM_READ
-
-                        shellLink.GetIDList(out IntPtr pidl);
-                        if (pidl == IntPtr.Zero) continue;
-
-                        try {
-                            Guid iid = ShellInterop.IID_IShellItem2;
-                            int hr = ShellInterop.SHCreateItemFromIDList(pidl, ref iid, out ShellInterop.IShellItem2 item);
-                            if (hr != 0 || item == null) continue;
-
-                            var key = ShellInterop.PKEY_AppUserModel_ID;
-                            int shr = item.GetString(ref key, out IntPtr aumidPtr);
-                            if (shr != 0 || aumidPtr == IntPtr.Zero) continue;
-
-                            string foundAumid = Marshal.PtrToStringUni(aumidPtr);
-                            Marshal.FreeCoTaskMem(aumidPtr);
-
-                            if (string.Equals(foundAumid, aumid, StringComparison.OrdinalIgnoreCase))
-                                return lnkPath;
-                        }
-                        finally {
-                            ShellInterop.CoTaskMemFree(pidl);
-                        }
-                    }
-                    catch {
-                        // unreadable/corrupt .lnk — skip it
-                    }
-                }
-            }
-            return null;
         }
         private static async Task<byte[]> ExtractBytesAsync(object data) {
-            Debug.WriteLine($"[ShellIDList] payload type: {data?.GetType()}");
+            if (data == null) return null;
+            Debug.WriteLine($"[ShellIDList] payload type: {data.GetType()}");
             switch (data) {
                 case Windows.Storage.Streams.IRandomAccessStreamReference streamRef: {
-                        using var stream = await streamRef.OpenReadAsync();
-                        var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
-                        await reader.LoadAsync((uint)stream.Size);
-                        var buf = new byte[stream.Size];
-                        reader.ReadBytes(buf);
-                        return buf;
-                    }
+                    using var stream = await streamRef.OpenReadAsync();
+                    using var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+                    await reader.LoadAsync((uint)stream.Size);
+                    var buf = new byte[stream.Size];
+                    reader.ReadBytes(buf);
+                    return buf;
+                }
+                case Windows.Storage.Streams.IRandomAccessStream stream: {
+                    using var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+                    await reader.LoadAsync((uint)stream.Size);
+                    var buf = new byte[stream.Size];
+                    reader.ReadBytes(buf);
+                    return buf;
+                }
                 case byte[] b:
                     return b;
+                case System.IO.MemoryStream ms:
+                    return ms.ToArray();
+                case System.IO.Stream s: {
+                    using var msStream = new System.IO.MemoryStream();
+                    await s.CopyToAsync(msStream);
+                    return msStream.ToArray();
+                }
+                case Windows.Storage.Streams.IBuffer ib: {
+                    var buf = new byte[ib.Length];
+                    using var dr = Windows.Storage.Streams.DataReader.FromBuffer(ib);
+                    dr.ReadBytes(buf);
+                    return buf;
+                }
                 case System.Collections.Generic.IReadOnlyList<Windows.Storage.IStorageItem> storageItems: {
-                        foreach (var si in storageItems) {
-                            Debug.WriteLine($"[Drop] StorageItem: Name='{si.Name}', Path='{si.Path}', Type={si.GetType()}");
-
-                            if (si is Windows.Storage.StorageFile sf) {
-                                try {
-                                    var props = await sf.Properties.RetrievePropertiesAsync(new[] {
-                    "System.AppUserModel.ID",
-                    "System.Link.TargetParsingPath"
-                });
-                                    foreach (var kv in props) {
-                                        Debug.WriteLine($"[Drop] Property: {kv.Key} = '{kv.Value}'");
-                                    }
-                                }
-                                catch (Exception ex) {
-                                    Debug.WriteLine($"[Drop] RetrievePropertiesAsync failed: {ex.Message}");
-                                }
-                            }
-                        }
-                        return null;
+                    foreach (var si in storageItems) {
+                        Debug.WriteLine($"[Drop] StorageItem: Name='{si.Name}', Path='{si.Path}', Type={si.GetType()}");
                     }
-
+                    return null;
+                }
                 default:
-                    Debug.WriteLine($"Unexpected Shell IDList Array payload type: {data?.GetType()}");
+                    Debug.WriteLine($"Unexpected Shell IDList Array payload type: {data.GetType()}");
                     return null;
             }
         }
@@ -860,6 +863,12 @@
                             if (paths != null) {
                                 foreach (var path in paths) {
                                     string filePath = path.Key;
+
+                                    // Auto-resolve any legacy StartAppShortcuts links to real Start Menu shortcuts if possible
+                                    string resolvedFilePath = ShellInterop.ResolveRunnablePath(filePath);
+                                    if (!string.IsNullOrEmpty(resolvedFilePath) && File.Exists(resolvedFilePath)) {
+                                        filePath = resolvedFilePath;
+                                    }
 
                                     if (string.IsNullOrEmpty(filePath) || (!File.Exists(filePath) && !Directory.Exists(filePath))) continue;
                                     string icon = null;
@@ -1119,8 +1128,8 @@
                 //Directory.CreateDirectory(groupsFolder);
                 string groupsFolder = Path.Combine(AppPaths.BaseDataPath, "Groups");
                 Directory.CreateDirectory(groupsFolder);
-                string gName = GroupNameTextBox.Text?.Trim();
-                    string groupFolder = Path.Combine(groupsFolder, gName);
+                string gName = GroupNameTextBox.Text?.Trim() ?? string.Empty;
+                string groupFolder = Path.Combine(groupsFolder, gName);
                     currentGroupPath = Path.Combine(groupFolder, gName);
 
                     originalItemIconPath = await IconCache.GetIconPathAsync(item.FilePath);
@@ -1146,7 +1155,7 @@
 
                     if (!string.IsNullOrEmpty(selectedItemIconPath)) {
                         if (selectedItemIconPath == originalItemIconPath) {
-                            CurrentItem.IconPath = null;
+                            CurrentItem.IconPath = string.Empty;
                             CurrentItem.Icon = originalItemIconPath;
                         }
                         else {
@@ -1239,7 +1248,7 @@
                 if (button != null) button.IsEnabled = false;
 
                 try {
-                    string newGroupName = GroupNameTextBox.Text?.Trim();
+                    string newGroupName = GroupNameTextBox.Text?.Trim() ?? string.Empty;
                     if (string.IsNullOrEmpty(newGroupName)) {
                         await ShowDialog("Error", "Please enter a group name.");
                         return;
@@ -1276,7 +1285,7 @@
 
                     string shortcutPath = Path.Combine(groupFolder, $"{newGroupName}.lnk");
                     string targetPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
-                        ?? Path.Combine(Path.GetDirectoryName(Environment.ProcessPath), "AppGroup.exe");
+                        ?? Path.Combine(Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "AppGroup.exe");
 
                     string iconBaseName = $"{newGroupName}_{(regularIcon ? "regular" : (IconGridComboBox.SelectedItem?.ToString() == "3" ? "grid3" : "grid"))}";
                     string icoFilePath = Path.Combine(uniqueFolderPath, $"{iconBaseName}.ico");
@@ -1311,14 +1320,13 @@
                         File.Copy(selectedIconPath, copiedImagePath, true);
                     }
 
-                    IWshShell wshShell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
-                    shortcut.TargetPath = targetPath;
-                    shortcut.Arguments = $"\"{newGroupName}\"";
-                    shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
-                    shortcut.IconLocation = icoFilePath;
-                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-                    shortcut.Save();
+                    ShellInterop.SaveShortcut(
+                        shortcutPath,
+                        targetPath,
+                        arguments: $"\"{newGroupName}\"",
+                        description: $"{newGroupName} - AppGroup Shortcut",
+                        iconLocation: icoFilePath,
+                        workingDirectory: Path.GetDirectoryName(targetPath));
 
                     bool isPinned = await TaskbarManager.IsShortcutPinnedToTaskbar(oldGroupName ?? newGroupName);
                     if (isPinned) {
@@ -1335,8 +1343,8 @@
                             ExeFiles.ToDictionary(f => f.FilePath, f => (f.Tooltip, f.Args, f.IconPath));
 
                         bool showLabels = ShowLabels.IsOn;
-                        int labelSize = LabelSizeComboBox.SelectedItem != null
-                            ? int.Parse(LabelSizeComboBox.SelectedItem.ToString()) : DEFAULT_LABEL_SIZE;
+                        int labelSize = (LabelSizeComboBox.SelectedItem != null && int.TryParse(LabelSizeComboBox.SelectedItem.ToString(), out int parsedSize))
+                            ? parsedSize : DEFAULT_LABEL_SIZE;
                         string labelPosition = LabelPositionComboBox.SelectedItem?.ToString() ?? DEFAULT_LABEL_POSITION;
 
                     //JsonConfigHelper.AddGroupToJson(
@@ -1353,7 +1361,7 @@
                         if (!string.IsNullOrEmpty(tempIcon) && File.Exists(tempIcon)) {
                             try { File.Delete(tempIcon); }
                             catch (Exception ex) { await ShowDialog("Error", $"An error occurred: {ex.Message}"); }
-                            tempIcon = null;
+                            tempIcon = string.Empty;
                         }
 
                         string[] oldFolders = Directory.GetDirectories(groupFolder);
@@ -1361,7 +1369,7 @@
                             if (oldFolder != uniqueFolderPath)
                                 Directory.Delete(oldFolder, true);
 
-                        IntPtr hWnd = NativeMethods.FindWindow(null, "App Group");
+                        IntPtr hWnd = NativeMethods.FindAppGroupWindow("App Group", excludeCurrentProcess: false);
                         if (hWnd != IntPtr.Zero)
                             NativeMethods.SetForegroundWindow(hWnd);
 
@@ -1392,7 +1400,7 @@
                 if (!int.TryParse(kvp.Key, out int existingGroupId) || existingGroupId == excludeGroupId)
                     continue;
 
-                string existingName = kvp.Value?["groupName"]?.GetValue<string>();
+                string? existingName = kvp.Value?["groupName"]?.GetValue<string>();
                 if (string.Equals(existingName, candidateName, StringComparison.OrdinalIgnoreCase))
                     return true;
             }

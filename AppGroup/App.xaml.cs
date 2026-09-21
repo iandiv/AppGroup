@@ -1,4 +1,4 @@
-﻿
+
 
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -21,7 +21,6 @@ namespace AppGroup {
         private PopupWindow? popupWindow;
         private EditGroupWindow? editWindow;
 
-        private nint hWnd;
         private bool useFileMode = false;
 
         public App() {
@@ -424,11 +423,7 @@ namespace AppGroup {
 
         private void ShowAppGroup() {
             try {
-                IntPtr hwnd = NativeMethods.FindWindow(null, "App Group");
-                if (hwnd != IntPtr.Zero) {
-                    NativeMethods.SendString(hwnd, "__SHOW_MAIN__");
-                }
-               
+                ShowMainWindow();
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error showing AppGroup: {ex.Message}");

@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -50,15 +50,15 @@ namespace AppGroup {
     }
 
     public class PopupItem : INotifyPropertyChanged {
-        public string Path { get; set; }
-        public string Name { get; set; }
-        public string ToolTip { get; set; }
-        public string Args { get; set; }
-        public string IconPath { get; set; }
-        public string CustomIconPath { get; set; }
+        public string Path { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string ToolTip { get; set; } = string.Empty;
+        public string Args { get; set; } = string.Empty;
+        public string? IconPath { get; set; }
+        public string? CustomIconPath { get; set; }
 
-        private BitmapImage _icon;
-        public BitmapImage Icon {
+        private BitmapImage? _icon;
+        public BitmapImage? Icon {
             get => _icon;
             set {
                 if (_icon != value) {
@@ -67,9 +67,9 @@ namespace AppGroup {
                 }
             }
         }
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
         public bool IsSubgroup { get; set; }
-        public string SubgroupName { get; set; }
+        public string? SubgroupName { get; set; }
       
     }
 
@@ -85,8 +85,6 @@ namespace AppGroup {
         private bool _hasBeenLoaded = false;
 
         private IntPtr _hwnd;
-        private IntPtr _oldWndProc;
-        private NativeMethods.WndProcDelegate _newWndProc;
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions {
             PropertyNameCaseInsensitive = true,
@@ -96,11 +94,11 @@ namespace AppGroup {
         private readonly Dictionary<int, EditGroupWindow> _openEditWindows = new Dictionary<int, EditGroupWindow>();
         private readonly WindowHelper _windowHelper;    
         private ObservableCollection<PopupItem> PopupItems = new ObservableCollection<PopupItem>();
-        private Dictionary<string, GroupData> _groups;
-        private GridView _gridView;
-        private PopupItem _clickedItem;
+        private Dictionary<string, GroupData>? _groups;
+        private GridView? _gridView;
+        private PopupItem? _clickedItem;
         private int _groupId;
-        internal string _groupFilter = null;
+        internal string? _groupFilter = null;
         private NativeMethods.POINT? _receivedCursorPos;
         private string _json = "";
         private bool _anyGroupDisplayed;
@@ -116,12 +114,12 @@ namespace AppGroup {
         private string _labelPosition = DEFAULT_LABEL_POSITION;
         private int _currentColumns = 1;
 
-        private string _originalIconPath;
-        private string _iconWithBackgroundPath;
-        private string iconGroup;
-        private static string _cachedAppFolderPath;
-        private static string _cachedLastOpenPath;
-        private UISettings _uiSettings;
+        private string? _originalIconPath;
+        private string? _iconWithBackgroundPath;
+        private string iconGroup = string.Empty;
+        private static string? _cachedAppFolderPath;
+        private static string? _cachedLastOpenPath;
+        private UISettings? _uiSettings;
         private bool _isUISettingsSubscribed = false;
 
         
@@ -132,7 +130,7 @@ namespace AppGroup {
         private NativeMethods.SubclassProc _subclassProc;
         private const int SUBCLASS_ID = 1;
         private readonly Dictionary<string, PopupWindow> _openSubPopups = new Dictionary<string, PopupWindow>();
-        private PopupWindow _parentPopup = null;
+        private PopupWindow? _parentPopup = null;
         private Storyboard _entranceStoryboard;
         private bool _entranceStarted = false;  
         private bool _wasLaunchedFromTaskbar = false;
@@ -142,11 +140,11 @@ namespace AppGroup {
         private bool _isClosing = false;
         private readonly CancellationTokenSource _windowCts = new CancellationTokenSource();
         private static readonly SemaphoreSlim _iconLoadSemaphore = new SemaphoreSlim(6, 6);
-        private static BitmapImage _placeholderIcon;
+        private static BitmapImage? _placeholderIcon;
 
         private static NativeMethods.POINT _lastClickPos;
         private static IntPtr _mouseHookHandle;
-        private static NativeMethods.LowLevelMouseProc _mouseHookProc;
+        private static NativeMethods.LowLevelMouseProc? _mouseHookProc;
 
 
         public PopupWindow(string groupFilter = null) {
@@ -204,9 +202,7 @@ namespace AppGroup {
                     string path = pathEntry.Key;
                     if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
                         try {
-                            IWshShell shell = new WshShell();
-                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                            string comment = shortcut.Description;
+                            string? comment = ShellInterop.ReadShortcutDescription(path);
                             if (!string.IsNullOrEmpty(comment) &&
                                 comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
                                 string subgroupName = comment.Replace("- AppGroup Shortcut", "").Trim();
@@ -1114,10 +1110,7 @@ namespace AppGroup {
 
                 string shortcutPath = Path.Combine(groupFolder, $"{_groupFilter}.lnk");
                 if (File.Exists(shortcutPath)) {
-                    IWshShell wshShell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
-                    shortcut.IconLocation = newIconPath;
-                    shortcut.Save();
+                    ShellInterop.UpdateShortcutIcon(shortcutPath, newIconPath);
                 }
 
                 await UpdateJsonConfiguration(newIconPath, gridSize);
@@ -1283,9 +1276,7 @@ namespace AppGroup {
             foreach (var path in pathsWithProperties.Keys) {
                 if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) continue;
                 try {
-                    IWshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                    string comment = shortcut.Description;
+                    string? comment = ShellInterop.ReadShortcutDescription(path);
                     if (!string.IsNullOrEmpty(comment) &&
                         comment.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase)) {
                         subgroupInfo[path] = (true, comment.Replace("- AppGroup Shortcut", "").Trim());
@@ -1303,7 +1294,7 @@ namespace AppGroup {
                     PathData properties = pathEntry.Value;
                     string tooltip = !string.IsNullOrEmpty(properties.Tooltip)
                         ? properties.Tooltip : GetDisplayNameBackground(path);
-                    string customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
+                    string? customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
 
                     var popupItem = new PopupItem {
                         Path = path,
@@ -1439,15 +1430,15 @@ _ = Task.WhenAll(iconTasks);
 
                 // Resolve icon file path (background thread work)
                 string iconPath;
-                string customIcon = string.IsNullOrWhiteSpace(item.CustomIconPath) ? null : item.CustomIconPath;
+                string? customIcon = string.IsNullOrWhiteSpace(item.CustomIconPath) ? null : item.CustomIconPath;
                 if (customIcon != null && File.Exists(customIcon)) {
                     iconPath = customIcon;
                 }
-               
                 else {
-                    iconPath = Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)
-                        ? await IconHelper.GetUrlFileIconAsync(path).ConfigureAwait(false)
-                        : await IconCache.GetIconPathAsync(path).ConfigureAwait(false);
+                    string resolvedSource = ShellInterop.ResolveRunnablePath(path);
+                    iconPath = Path.GetExtension(resolvedSource).Equals(".url", StringComparison.OrdinalIgnoreCase)
+                        ? await IconHelper.GetUrlFileIconAsync(resolvedSource).ConfigureAwait(false)
+                        : await IconCache.GetIconPathAsync(resolvedSource).ConfigureAwait(false);
                 }
 
                 if (token.IsCancellationRequested) return;
@@ -1469,8 +1460,8 @@ _ = Task.WhenAll(iconTasks);
                         stream.Seek(0);
 
                         var bmp = new BitmapImage();
-                        bmp.DecodePixelWidth = ICON_SIZE;   // decode at display size — saves memory
-                        bmp.DecodePixelHeight = ICON_SIZE;
+                        bmp.DecodePixelWidth = 64;   // Sharp high-DPI rendering for all scale factors (100% - 250%)
+                        bmp.DecodePixelHeight = 64;
                         await bmp.SetSourceAsync(stream);
 
                         if (!token.IsCancellationRequested)
@@ -1491,7 +1482,7 @@ _ = Task.WhenAll(iconTasks);
         }
        
 
-        private System.Threading.Timer _focusTimer = null;
+        private System.Threading.Timer? _focusTimer = null;
         private DateTime _lastSubPopupOpenTime = DateTime.MinValue;
 
         //private void OpenSubPopup(string groupName) {
@@ -1620,7 +1611,7 @@ _ = Task.WhenAll(iconTasks);
             old?.Dispose();
 
             var windowCts = _windowCts; // capture so callback doesn't touch disposed object
-            System.Threading.Timer newTimer = null;
+            System.Threading.Timer? newTimer = null;
             newTimer = new System.Threading.Timer(_ => {
                 if (windowCts.IsCancellationRequested) { newTimer?.Dispose(); return; }
                 if ((DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds < 400) return;
@@ -1686,7 +1677,7 @@ _ = Task.WhenAll(iconTasks);
         }
         private void GridView_ItemClick(object sender, ItemClickEventArgs e) {
             if (e.ClickedItem is PopupItem popupItem) {
-                if (popupItem.IsSubgroup) {
+                if (popupItem.IsSubgroup && !string.IsNullOrEmpty(popupItem.SubgroupName)) {
                     OpenSubPopup(popupItem.SubgroupName);
                 }
               
@@ -1863,7 +1854,7 @@ _ = Task.WhenAll(iconTasks);
                     _isUISettingsSubscribed = true;
                 }
 
-                UpdateMainGridBackground(_uiSettings);
+                if (_uiSettings != null) UpdateMainGridBackground(_uiSettings);
 
                 if (_openSubPopups.Count > 0 &&
                     (DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds > 400) {
@@ -1873,7 +1864,10 @@ _ = Task.WhenAll(iconTasks);
 
                 _ = this.DispatcherQueue.TryEnqueue(() => {
                     _ = Task.Run(async () => {
-                        try { await UpdateTaskbarIcon(_groupFilter); }
+                        try {
+                            if (!string.IsNullOrEmpty(_groupFilter))
+                                await UpdateTaskbarIcon(_groupFilter);
+                        }
                         catch (Exception ex) { Debug.WriteLine($"Background taskbar update error: {ex.Message}"); }
                     });
                 });
@@ -1904,9 +1898,10 @@ _ = Task.WhenAll(iconTasks);
 
         private void TryLaunchApp(string path, string args) {
             try {
+                string runnablePath = ShellInterop.ResolveRunnablePath(path);
                 var psi = new System.Diagnostics.ProcessStartInfo {
                     FileName = "cmd.exe",
-                    Arguments = $"/c start \"\" \"{path}\" {args}",
+                    Arguments = $"/c start \"\" \"{runnablePath}\" {args}",
                     UseShellExecute = true,
                     WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                 };
@@ -1920,10 +1915,12 @@ _ = Task.WhenAll(iconTasks);
 
         private void TryRunAsAdmin(string path, string args) {
             try {
-                Type shellType = Type.GetTypeFromProgID("Shell.Application");
+                string runnablePath = ShellInterop.ResolveRunnablePath(path);
+                Type? shellType = Type.GetTypeFromProgID("Shell.Application");
                 if (shellType == null) throw new InvalidOperationException("Shell.Application COM object not found.");
-                dynamic shell = Activator.CreateInstance(shellType);
-                shell.ShellExecute(path, args, "", "runas", 1);
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) throw new InvalidOperationException("Could not instantiate Shell.Application.");
+                shell.ShellExecute(runnablePath, args, "", "runas", 1);
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Failed to run as admin {path}: {ex.Message}");
@@ -1933,8 +1930,9 @@ _ = Task.WhenAll(iconTasks);
 
         private void OpenFileLocation(string path) {
             try {
-                string directory = Path.GetDirectoryName(path);
-                if (Directory.Exists(directory))
+                string runnablePath = ShellInterop.ResolveRunnablePath(path);
+                string? directory = Path.GetDirectoryName(runnablePath);
+                if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
                     System.Diagnostics.Process.Start("explorer.exe", directory);
                 else
                     throw new Exception("Directory does not exist.");

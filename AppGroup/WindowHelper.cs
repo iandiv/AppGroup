@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Microsoft.UI;
@@ -19,10 +19,8 @@ namespace AppGroup {
         private SystemBackdropConfiguration _configurationSource;
         private MicaBackdrop _micaBackdrop;
         private DesktopAcrylicController _acrylicController;
-        private bool _micaEnabled;
-        private bool _extendContent;
-        private bool _canMaximize;
         private bool _centerWindow;
+        private bool _micaEnabled = true;
         private int _minWidth = 0;
         private int _minHeight = 0;
 
@@ -44,6 +42,7 @@ namespace AppGroup {
 
         private const int WM_GETMINMAXINFO = 0x0024;
 
+#pragma warning disable CS0649
         private struct MINMAXINFO {
             public System.Drawing.Point ptReserved;
             public System.Drawing.Point ptMaxSize;
@@ -51,6 +50,7 @@ namespace AppGroup {
             public System.Drawing.Point ptMinTrackSize;
             public System.Drawing.Point ptMaxTrackSize;
         }
+#pragma warning restore CS0649
    
 
 

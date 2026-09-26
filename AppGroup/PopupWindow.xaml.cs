@@ -1904,11 +1904,14 @@ _ = Task.WhenAll(iconTasks);
 
         private void TryLaunchApp(string path, string args) {
             try {
+                string workingDirectory = Path.GetDirectoryName(path);
+
                 var psi = new System.Diagnostics.ProcessStartInfo {
                     FileName = "cmd.exe",
                     Arguments = $"/c start \"\" \"{path}\" {args}",
                     UseShellExecute = true,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                    WorkingDirectory = !string.IsNullOrEmpty(workingDirectory) ? workingDirectory : null
                 };
                 System.Diagnostics.Process.Start(psi)?.Close();
             }
@@ -1920,10 +1923,22 @@ _ = Task.WhenAll(iconTasks);
 
         private void TryRunAsAdmin(string path, string args) {
             try {
-                Type shellType = Type.GetTypeFromProgID("Shell.Application");
-                if (shellType == null) throw new InvalidOperationException("Shell.Application COM object not found.");
-                dynamic shell = Activator.CreateInstance(shellType);
-                shell.ShellExecute(path, args, "", "runas", 1);
+                string workingDirectory = Path.GetDirectoryName(path);
+
+                string psArgs = string.IsNullOrEmpty(args)
+                    ? $"-FilePath '{path.Replace("'", "''")}' -Verb RunAs"
+                    : $"-FilePath '{path.Replace("'", "''")}' -ArgumentList '{args.Replace("'", "''")}' -Verb RunAs";
+
+                if (!string.IsNullOrEmpty(workingDirectory))
+                    psArgs += $" -WorkingDirectory '{workingDirectory.Replace("'", "''")}'";
+
+                var psi = new System.Diagnostics.ProcessStartInfo {
+                    FileName = "powershell.exe",
+                    Arguments = $"-WindowStyle Hidden -Command \"Start-Process {psArgs}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                System.Diagnostics.Process.Start(psi)?.Close();
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Failed to run as admin {path}: {ex.Message}");

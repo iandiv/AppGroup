@@ -504,13 +504,13 @@
                                     string aumid = aumidObj as string;
                                     if (!string.IsNullOrEmpty(target) && File.Exists(target)) {
                                         // Prefer the real shortcut from shell:Common Programs / shell:Programs if one exists
-                                        string existingLnk = FindExistingShortcut(target);
+                                        string existingLnk = await Task.Run(() => FindExistingShortcut(target));
                                         resolvedPath = existingLnk ?? ShellInterop.CreateFileShortcut(target, displayName);
                                         extension = ".lnk";
                                         displayName = Path.GetFileName(resolvedPath); // matches shell:Common Programs naming exactly
                                     }
                                     else if (!string.IsNullOrEmpty(aumid) && aumid.Contains('!')) {
-                                        string existingLnk = FindExistingAppShortcut(aumid);
+                                     string existingLnk = await Task.Run(() => FindExistingAppShortcut(aumid));
                                         resolvedPath = existingLnk ?? ShellInterop.CreateAppsFolderShortcut(aumid, displayName);
                                         extension = ".lnk";
                                         displayName = Path.GetFileName(resolvedPath);
@@ -1194,34 +1194,42 @@
                 }
             }
 
-            private void RemoveItem_Click(object sender, RoutedEventArgs e) {
-                if (sender is Button button && button.Tag is ExeFileModel item)
-                    ExeFiles.Remove(item);
+        private void RemoveItem_Click(object sender, RoutedEventArgs e) {
+            if (sender is Button button && button.Tag is ExeFileModel item)
+                ExeFiles.Remove(item);
 
-            //ExeListView.ItemsSource = ExeFiles;
             ApplyExeListDisplay();
             ApplicationCount.Text = ExeListView.Items.Count > 0
                     ? ExeListView.Items.Count + " Items" : "Item";
 
-                IconGridComboBox.Items.Clear();
-                IconGridComboBox.Items.Add("2");
-                if (ExeFiles.Count >= 9)
-                    IconGridComboBox.Items.Add("3");
-                IconGridComboBox.SelectedItem = "2";
+            IconGridComboBox.Items.Clear();
+            IconGridComboBox.Items.Add("2");
+            if (ExeFiles.Count >= 9)
+                IconGridComboBox.Items.Add("3");
+            IconGridComboBox.SelectedItem = "2";
 
-                lastSelectedItem = GroupColComboBox.SelectedItem as string;
-                GroupColComboBox.Items.Clear();
-                for (int i = 1; i <= ExeFiles.Count; i++)
-                    GroupColComboBox.Items.Add(i.ToString());
+            lastSelectedItem = GroupColComboBox.SelectedItem as string;
+            GroupColComboBox.Items.Clear();
+            for (int i = 1; i <= ExeFiles.Count; i++)
+                GroupColComboBox.Items.Add(i.ToString());
 
-                if (lastSelectedItem != null && int.TryParse(lastSelectedItem, out int lastIdx)) {
-                    GroupColComboBox.SelectedItem = lastIdx > ExeFiles.Count
-                        ? ExeFiles.Count.ToString()
-                        : lastSelectedItem;
-                }
+            if (lastSelectedItem != null && int.TryParse(lastSelectedItem, out int lastIdx)) {
+                GroupColComboBox.SelectedItem = lastIdx > ExeFiles.Count
+                    ? ExeFiles.Count.ToString()
+                    : lastSelectedItem;
             }
 
-            private void GroupNameTextBox_GotFocus(object sender, RoutedEventArgs e) { }
+            if (!regularIcon) {
+                if (ExeFiles.Count == 0) {
+                    selectedIconPath = string.Empty;
+                    IconPreviewImage.Source = new BitmapImage(new Uri("ms-appx:///default_preview.png"));
+                }
+                else if (IconGridComboBox.SelectedItem != null) {
+                    CreateGridIcon();
+                }
+            }
+        }
+        private void GroupNameTextBox_GotFocus(object sender, RoutedEventArgs e) { }
 
             private void GroupNameTextBox_TextChanged(object sender, TextChangedEventArgs e) {
                 if (sender is TextBox textBox) {

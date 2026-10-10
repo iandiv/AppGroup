@@ -1858,7 +1858,8 @@ _ = Task.WhenAll(iconTasks);
                         CloseAllChildrenRecursive(root._openSubPopups);
                         root._openSubPopups.Clear();
                         root._isLoaded = false;
-
+                        _isPopupCurrentlyOpen = false;
+                        _lastHiddenAt = DateTime.Now;
                         var settings = await SettingsHelper.LoadSettingsAsync();
                         if (root._wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
                             root.AnimateWindowSlideDown(root.GetWindowHandle(), () => {
@@ -2221,14 +2222,15 @@ _ = Task.WhenAll(iconTasks);
 
         private void TryLaunchApp(string path, string args) {
             try {
-                string workingDirectory = Path.GetDirectoryName(path);
+
+                string? workingDirectory = Path.GetDirectoryName(path);
 
                 var psi = new System.Diagnostics.ProcessStartInfo {
                     FileName = "cmd.exe",
                     Arguments = $"/c start \"\" \"{path}\" {args}",
                     UseShellExecute = true,
                     WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-                    WorkingDirectory = !string.IsNullOrEmpty(workingDirectory) ? workingDirectory : null
+                    WorkingDirectory = (!string.IsNullOrEmpty(workingDirectory) && Directory.Exists(workingDirectory) ? workingDirectory : null)
                 };
                 System.Diagnostics.Process.Start(psi)?.Close();
             }
@@ -2238,31 +2240,50 @@ _ = Task.WhenAll(iconTasks);
             }
         }
 
+        //private void TryRunAsAdmin(string path, string args) {
+        //    try {
+        //        string workingDirectory = Path.GetDirectoryName(path);
+
+        //        string psArgs = string.IsNullOrEmpty(args)
+        //            ? $"-FilePath '{path.Replace("'", "''")}' -Verb RunAs"
+        //            : $"-FilePath '{path.Replace("'", "''")}' -ArgumentList '{args.Replace("'", "''")}' -Verb RunAs";
+
+        //        if (!string.IsNullOrEmpty(workingDirectory) && Directory.Exists(workingDirectory))
+        //            psArgs += $" -WorkingDirectory '{workingDirectory.Replace("'", "''")}'";
+
+        //        var psi = new System.Diagnostics.ProcessStartInfo {
+        //            FileName = "powershell.exe",
+        //            Arguments = $"-WindowStyle Hidden -Command \"Start-Process {psArgs}\"",
+        //            UseShellExecute = false,
+        //            CreateNoWindow = true
+        //        };
+        //        System.Diagnostics.Process.Start(psi)?.Close();
+        //    }
+        //    catch (Exception ex) {
+        //        Debug.WriteLine($"Failed to run as admin {path}: {ex.Message}");
+        //        ShowErrorDialog($"Failed to run as admin {path}: {ex.Message}");
+        //    }
+        //}
         private void TryRunAsAdmin(string path, string args) {
             try {
-                string workingDirectory = Path.GetDirectoryName(path);
-
-                string psArgs = string.IsNullOrEmpty(args)
-                    ? $"-FilePath '{path.Replace("'", "''")}' -Verb RunAs"
-                    : $"-FilePath '{path.Replace("'", "''")}' -ArgumentList '{args.Replace("'", "''")}' -Verb RunAs";
-
-                if (!string.IsNullOrEmpty(workingDirectory))
-                    psArgs += $" -WorkingDirectory '{workingDirectory.Replace("'", "''")}'";
-
+                string? dir = Path.GetDirectoryName(path);
                 var psi = new System.Diagnostics.ProcessStartInfo {
-                    FileName = "powershell.exe",
-                    Arguments = $"-WindowStyle Hidden -Command \"Start-Process {psArgs}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
+                    FileName = path,
+                    Arguments = args,
+                    Verb = "runas",
+                    UseShellExecute = true,
+                    WorkingDirectory = (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) ? dir : null
                 };
                 System.Diagnostics.Process.Start(psi)?.Close();
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) {
+                // User cancelled the UAC prompt, nothing to report
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Failed to run as admin {path}: {ex.Message}");
                 ShowErrorDialog($"Failed to run as admin {path}: {ex.Message}");
             }
         }
-
         private void OpenFileLocation(string path) {
             try {
                 string directory = Path.GetDirectoryName(path);

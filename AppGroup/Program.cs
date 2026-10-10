@@ -10,13 +10,15 @@ using System.Threading.Tasks;
 using Windows.UI.StartScreen;
 namespace AppGroup {
     public class Program {
-
+        private static Mutex _singleInstanceMutex;
         public static NativeMethods.POINT InitialClickPos;
         [STAThread]
         
 
         static void Main(string[] args) {
             NativeMethods.GetCursorPos(out InitialClickPos);
+
+
             // Register the same message as your receiver
             int msgId = NativeMethods.WM_UPDATE_GROUP;
             string[] cmdArgs = Environment.GetCommandLineArgs();
@@ -80,10 +82,8 @@ namespace AppGroup {
                 catch (Exception ex) {
                     System.Diagnostics.Debug.WriteLine($"Failed to find group ID for '{command}': {ex.Message}");
                 }
-
                 if (existingPopupHWnd != IntPtr.Zero) {
                     NativeMethods.SendString(existingPopupHWnd, command);
-                    NativeMethods.ForceForegroundWindow(existingPopupHWnd);
                     InitializeJumpListSync();
                     return;
                 }

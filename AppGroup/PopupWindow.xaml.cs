@@ -3,6 +3,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
@@ -148,6 +149,9 @@ namespace AppGroup {
         private static IntPtr _mouseHookHandle;
         private static NativeMethods.LowLevelMouseProc _mouseHookProc;
 
+        private static bool _isPopupCurrentlyOpen = false;
+        private static DateTime _lastHiddenAt = DateTime.MinValue;
+        private const int SLIDE_EXTRA_OFFSET = 60;
 
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
@@ -304,10 +308,10 @@ namespace AppGroup {
                 if (mi.rcWork.left > mi.rcMonitor.left) startX = finalX - windowWidth;
                 else if (mi.rcWork.right < mi.rcMonitor.right) startX = finalX + windowWidth;
                 else if (mi.rcWork.top > mi.rcMonitor.top) startY = finalY - windowHeight;
-                else startY = finalY + windowHeight;
+                else startY = finalY + windowHeight + SLIDE_EXTRA_OFFSET;
             }
             else {
-                startY = finalY + windowHeight;
+                startY = finalY + windowHeight + SLIDE_EXTRA_OFFSET;
             }
 
             if (!isSubPopup)
@@ -414,10 +418,10 @@ namespace AppGroup {
                 if (mi.rcWork.left > mi.rcMonitor.left) endX = startX - windowWidth;
                 else if (mi.rcWork.right < mi.rcMonitor.right) endX = startX + windowWidth;
                 else if (mi.rcWork.top > mi.rcMonitor.top) endY = startY - windowHeight;
-                else endY = startY + windowHeight;
+                else endY = startY + windowHeight + SLIDE_EXTRA_OFFSET;
             }
             else {
-                endY = startY + windowHeight;
+                endY = startY + windowHeight + SLIDE_EXTRA_OFFSET;
             }
 
             NativeMethods.SetWindowPos(hWnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
@@ -505,8 +509,15 @@ namespace AppGroup {
                             if (parts.Length == 2 && int.TryParse(parts[0], out int x) && int.TryParse(parts[1], out int y))
                                 parsedClickPos = new NativeMethods.POINT { X = x, Y = y };
                         }
-
                         this.DispatcherQueue.TryEnqueue(async () => {
+                            bool sameGroupAsCurrent = string.Equals(_groupFilter, groupName, StringComparison.OrdinalIgnoreCase);
+                            if (sameGroupAsCurrent &&
+                                (_isPopupCurrentlyOpen || _isClosing ||
+                                 (DateTime.Now - _lastHiddenAt) < TimeSpan.FromMilliseconds(400))) {
+                                return; // same group, still open/closing from this click — ignore
+                            }
+
+                            NativeMethods.ForceForegroundWindow(this.GetWindowHandle());
                             _groupFilter = groupName;
                             _receivedCursorPos = parsedClickPos ?? _lastClickPos;
                             await LoadConfiguration();
@@ -804,6 +815,128 @@ namespace AppGroup {
             }
         }
 
+        // private async Task InitializeWindow() {
+        //     int maxPathItems = 1;
+        //     int maxColumns = 1;
+        //     bool groupHeader = false;
+        //     string headerPosition = "top";
+        //     string layout = "Default";
+        //     _showLabels = false;
+        //     _labelSize = DEFAULT_LABEL_SIZE;
+        //     _labelPosition = DEFAULT_LABEL_POSITION;
+        //     _currentColumns = 1;
+
+        //     if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g =>
+        //         g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
+        //         var filteredGroup = _groups.FirstOrDefault(g =>
+        //             g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+
+        //         maxPathItems = filteredGroup.Value.Path.Count;
+        //         maxColumns = filteredGroup.Value.GroupCol;
+        //         groupHeader = filteredGroup.Value.GroupHeader;
+        //         iconGroup = filteredGroup.Value.GroupIcon;
+        //         _showLabels = filteredGroup.Value.ShowLabels;
+        //         _labelSize = filteredGroup.Value.LabelSize > 0 ? filteredGroup.Value.LabelSize : DEFAULT_LABEL_SIZE;
+        //         _labelPosition = filteredGroup.Value.LabelPosition ?? DEFAULT_LABEL_POSITION;
+        //         _currentColumns = maxColumns;
+        //         headerPosition = filteredGroup.Value.HeaderPosition ?? "Top";
+        //         layout = filteredGroup.Value.Layout ?? "Default";
+        //         _sortMode = filteredGroup.Value.SortMode ?? "Manual";
+
+        //         if (_showLabels) CreateLabelTemplates(_labelSize);
+        //         if (!int.TryParse(filteredGroup.Key, out _groupId))
+        //             Debug.WriteLine($"Error: Group key '{filteredGroup.Key}' is not a valid integer ID");
+        //     }
+        //     else {
+        //         foreach (var group in _groups.Values) {
+        //             maxPathItems = Math.Max(maxPathItems, group.Path.Count);
+        //             maxColumns = Math.Max(maxColumns, group.GroupCol);
+        //         }
+        //         _currentColumns = maxColumns;
+        //     }
+
+        //     //DispatcherQueue.TryEnqueue(() => ApplyGroupLayout(headerPosition, layout, groupHeader));
+        //     ApplyGroupLayout(headerPosition, layout, groupHeader);
+        //     MainGrid.UpdateLayout();
+        //     bool useHorizontalLabels = _showLabels && _labelPosition == "Right";
+        //     int buttonWidth = useHorizontalLabels ? BUTTON_WIDTH_HORIZONTAL_LABEL
+        //         : _showLabels ? BUTTON_SIZE_WITH_LABEL : BUTTON_SIZE;
+        //     int buttonHeight = useHorizontalLabels ? BUTTON_HEIGHT_HORIZONTAL_LABEL
+        //         : _showLabels ? BUTTON_SIZE_WITH_LABEL : BUTTON_SIZE;
+
+        //     int numberOfRows = (int)Math.Ceiling((double)maxPathItems / maxColumns);
+        //     int dynamicWidth = maxColumns * (buttonWidth + BUTTON_MARGIN * 2);
+        //     if (groupHeader && maxColumns < 2 && !useHorizontalLabels)
+        //         dynamicWidth = 2 * (buttonWidth + BUTTON_MARGIN * 2);
+        //     if (useHorizontalLabels)
+        //         dynamicWidth = Math.Max(dynamicWidth, BUTTON_WIDTH_HORIZONTAL_LABEL + (BUTTON_MARGIN * 2));
+
+        //     int dynamicHeight = numberOfRows * (buttonHeight + BUTTON_MARGIN * 2);
+        //     NativeMethods.POINT? dpiTargetPoint = _parentPopup != null
+        //? _lastClickPos
+        //: (_receivedCursorPos ?? (NativeMethods.GetCursorPos(out var liveCursor) ? liveCursor : (NativeMethods.POINT?)null));
+
+        //     var displayInfo = GetDisplayInformation(dpiTargetPoint);
+        //     float scaleFactor = displayInfo.Item1;
+
+        //     int scaledWidth = (int)(dynamicWidth * scaleFactor);
+        //     int scaledHeight = (int)(dynamicHeight * scaleFactor);
+        //     if (groupHeader) scaledHeight += 40;
+
+        //     int finalWidth = scaledWidth + 30;
+        //     int finalHeight = scaledHeight + 20;
+        //     if (layout == "Card" && groupHeader) finalHeight += 15;
+
+        //     int screenHeight = (int)DisplayArea.Primary.WorkArea.Height;
+        //     int maxAllowedHeight = screenHeight - 30;
+        //     if (finalHeight > maxAllowedHeight) finalHeight = maxAllowedHeight;
+
+        //     NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+        //     _windowHelper.SetSize(finalWidth, finalHeight);
+        //     MainGrid.UpdateLayout(); // force XAML layout pass synchronously
+
+
+        //     var compositor = ElementCompositionPreview.GetElementVisual(MainGrid).Compositor;
+        //     await compositor.RequestCommitAsync();
+        //     _windowHelper.IsAlwaysOnTop = true;
+        //     if (_parentPopup == null) _isPopupCurrentlyOpen = true;
+        //     if (_parentPopup != null) {
+        //         PositionSubPopupNearParent();
+        //         MainGrid.UpdateLayout();
+        //         NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+
+        //     }
+        //     else if (IsLaunchedFromTaskbar(_receivedCursorPos)) {
+        //         _wasLaunchedFromTaskbar = true;
+        //         NativeMethods.PositionWindowOffScreenBelow(this.GetWindowHandle());
+        //         MainGrid.UpdateLayout();
+
+        //         NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
+
+        //         var settings = await SettingsHelper.LoadSettingsAsync();
+        //         if (settings.EnableWindowSlideAnimation) {
+        //             AnimateWindowSlideUp(this.GetWindowHandle(), isSubPopup: false, onComplete: null, cursorOverride: _receivedCursorPos);
+        //         }
+        //         else {
+        //             NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+        //         }
+        //         _receivedCursorPos = null;
+        //         return;
+        //     }
+        //     else {
+        //         _wasLaunchedFromTaskbar = false;
+        //         NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
+        //         NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
+        //         _receivedCursorPos = null;
+        //     }
+
+
+
+        //     //DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
+
+
+        // }
+
         private async Task InitializeWindow() {
             int maxPathItems = 1;
             int maxColumns = 1;
@@ -814,12 +947,22 @@ namespace AppGroup {
             _labelSize = DEFAULT_LABEL_SIZE;
             _labelPosition = DEFAULT_LABEL_POSITION;
             _currentColumns = 1;
+            var filteredGroup = _groups.FirstOrDefault(g =>
+    g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
+            bool foundGroup = !string.IsNullOrEmpty(_groupFilter) && filteredGroup.Key != null;
 
-            if (!string.IsNullOrEmpty(_groupFilter) && _groups.Values.Any(g =>
-                g.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase))) {
-                var filteredGroup = _groups.FirstOrDefault(g =>
-                    g.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase));
 
+            if (!string.IsNullOrEmpty(_groupFilter)) {
+                foreach (var kvp in _groups) {
+                    if (kvp.Value.GroupName.Equals(_groupFilter, StringComparison.OrdinalIgnoreCase)) {
+                        filteredGroup = kvp;
+                        foundGroup = true;
+                        break;
+                    }
+                }
+            }
+
+            if (foundGroup) {
                 maxPathItems = filteredGroup.Value.Path.Count;
                 maxColumns = filteredGroup.Value.GroupCol;
                 groupHeader = filteredGroup.Value.GroupHeader;
@@ -862,8 +1005,8 @@ namespace AppGroup {
 
             int dynamicHeight = numberOfRows * (buttonHeight + BUTTON_MARGIN * 2);
             NativeMethods.POINT? dpiTargetPoint = _parentPopup != null
-       ? _lastClickPos
-       : (_receivedCursorPos ?? (NativeMethods.GetCursorPos(out var liveCursor) ? liveCursor : (NativeMethods.POINT?)null));
+        ? _lastClickPos
+        : (_receivedCursorPos ?? (NativeMethods.GetCursorPos(out var liveCursor) ? liveCursor : (NativeMethods.POINT?)null));
 
             var displayInfo = GetDisplayInformation(dpiTargetPoint);
             float scaleFactor = displayInfo.Item1;
@@ -882,16 +1025,23 @@ namespace AppGroup {
 
             NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
             _windowHelper.SetSize(finalWidth, finalHeight);
+            MainGrid.UpdateLayout(); // force XAML layout pass synchronously
+
+
+            var compositor = ElementCompositionPreview.GetElementVisual(MainGrid).Compositor;
+            await compositor.RequestCommitAsync();
             _windowHelper.IsAlwaysOnTop = true;
+            if (_parentPopup == null) _isPopupCurrentlyOpen = true;
             if (_parentPopup != null) {
                 PositionSubPopupNearParent();
                 MainGrid.UpdateLayout();
                 NativeMethods.ShowWindow(this.GetWindowHandle(), NativeMethods.SW_SHOWNOACTIVATE);
-          
+
             }
             else if (IsLaunchedFromTaskbar(_receivedCursorPos)) {
                 _wasLaunchedFromTaskbar = true;
                 NativeMethods.PositionWindowOffScreenBelow(this.GetWindowHandle());
+                MainGrid.UpdateLayout();
 
                 NativeMethods.PositionWindowAboveTaskbar(this.GetWindowHandle(), show: false, cursorOverride: _receivedCursorPos);
 
@@ -917,6 +1067,12 @@ namespace AppGroup {
             //DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, TriggerContentAnimation);
 
 
+        }
+        private void HideAndResetSize() {
+            this.Hide();
+            var offscreen = GetOffscreenSize();
+            _windowHelper.SetSize(offscreen.Width, offscreen.Height);
+            NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
         }
         private void TriggerContentAnimation() {
             GridPanel.Opacity = 1;
@@ -1640,14 +1796,14 @@ _ = Task.WhenAll(iconTasks);
                         if (_wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
                             AnimateWindowSlideDown(this.GetWindowHandle(), () => {
                                 DispatcherQueue.TryEnqueue(() => {
-                                    this.Hide();
+                                    HideAndResetSize();
                                     NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
                                 });
                             });
                         }
                         else {
                             StopEntranceStoryboard();
-                            this.Hide();
+                            HideAndResetSize();
                             var offscreen = GetOffscreenSize();
                             _windowHelper.SetSize(offscreen.Width, offscreen.Height);
                             NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
@@ -1707,7 +1863,7 @@ _ = Task.WhenAll(iconTasks);
                         if (root._wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
                             root.AnimateWindowSlideDown(root.GetWindowHandle(), () => {
                                 root.DispatcherQueue.TryEnqueue(() => {
-                                    root.Hide();
+                                    root.HideAndResetSize();
                                     NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
                                 });
                             });
@@ -1737,12 +1893,163 @@ _ = Task.WhenAll(iconTasks);
         private bool _isLoaded = false;
         private bool _isCardLayout;
 
+        //private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
+        //    if (e.WindowActivationState == WindowActivationState.Deactivated) {
+        //        if (_parentPopup != null) return;
+        //        if (_focusTimer != null) return;
+        //        if (_isClosing) return;
+
+        //        _isClosing = true;
+
+        //        bool wasLoaded = _isLoaded;
+        //        if (!_isFlyoutOpen)
+        //            _isLoaded = false;
+        //        CleanupUISettings();
+
+        //        if (_hasBeenLoaded && !string.IsNullOrEmpty(_groupFilter) && wasLoaded) {
+        //            var settings = await SettingsHelper.LoadSettingsAsync();
+
+        //            void DoCleanup() {
+
+        //                StopEntranceStoryboard();
+        //                _wasLaunchedFromTaskbar = false;
+        //                this.Hide();
+        //                var offscreen = GetOffscreenSize();
+        //                _windowHelper.IsAlwaysOnTop = false;
+
+        //                _windowHelper.SetSize(offscreen.Width, offscreen.Height);
+        //                NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
+
+
+
+        //                if (_parentPopup == null) {
+        //                    _isPopupCurrentlyOpen = false;
+        //                    _lastHiddenAt = DateTime.Now;
+        //                }
+        //                try {
+        //                    UnsubscribeGridViewHandlers();
+        //                    _iconLoadCts.Cancel();
+
+        //                    foreach (var item in PopupItems) {
+        //                        if (item.Icon != null) {
+        //                            item.Icon.UriSource = null;
+        //                            item.Icon = null;
+        //                        }
+        //                    }
+        //                    PopupItems.Clear();
+        //                    GridPanel.Children.Clear();
+        //                    Header.Visibility = Visibility.Collapsed;
+        //                    HeaderText.Text = "";
+        //                    _anyGroupDisplayed = false;
+
+        //                    foreach (var task in _backgroundTasks.ToList())
+        //                        if (task.IsCompleted) { task.Dispose(); _backgroundTasks.Remove(task); }
+
+        //                    _groups = null;
+        //                    _json = "";
+        //                    _clickedItem = null;
+        //                    _gridView = null;
+        //                }
+        //                catch (Exception ex) {
+        //                    Debug.WriteLine($"UI cleanup error: {ex.Message}");
+        //                }
+        //                finally {
+        //                    _isClosing = false;
+        //                }
+        //            }
+
+        //            this.DispatcherQueue.TryEnqueue(() => {
+        //                if (_wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
+        //                    AnimateWindowSlideDown(this.GetWindowHandle(), () => {
+        //                        DispatcherQueue.TryEnqueue(DoCleanup);
+        //                    });
+        //                }
+        //                else {
+        //                    DoCleanup();
+        //                }
+        //            });
+
+        //            if (settings.UseGrayscaleIcon) {
+        //                var task = Task.Run(async () => {
+        //                    try {
+        //                        await TaskbarManager.UpdateTaskbarShortcutIcon(_groupFilter, iconGroup);
+        //                        if (!string.IsNullOrEmpty(_iconWithBackgroundPath)) {
+        //                            IconHelper.RemoveBackgroundIcon(_iconWithBackgroundPath);
+        //                            _iconWithBackgroundPath = null;
+        //                        }
+        //                    }
+        //                    catch (Exception ex) {
+        //                        Debug.WriteLine($"Background cleanup error: {ex.Message}");
+        //                    }
+        //                });
+        //                _backgroundTasks.Add(task);
+        //            }
+
+        //            _ = Task.Run(() => GC.Collect(0, GCCollectionMode.Optimized));
+        //        }
+        //        else {
+        //            _isClosing = false;
+        //        }
+        //    }
+        //    else if (e.WindowActivationState == WindowActivationState.CodeActivated ||
+        //             e.WindowActivationState == WindowActivationState.PointerActivated) {
+        //    MainGrid.UpdateLayout();
+
+        //        if (_isClosing) return;
+
+        //        if (!_isLoaded && !_isFlyoutOpen) {
+        //            await LoadConfiguration();
+        //            _isLoaded = true;
+        //            _hasBeenLoaded = true;
+        //        }
+
+        //        if (useFileMode) {
+        //            if (_cachedAppFolderPath == null) {
+        //                string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        //                _cachedAppFolderPath = Path.Combine(appDataPath, "AppGroup");
+        //                _cachedLastOpenPath = Path.Combine(_cachedAppFolderPath, "lastOpen");
+        //            }
+        //            try {
+        //                if (File.Exists(_cachedLastOpenPath)) {
+        //                    string fileGroupFilter = File.ReadAllText(_cachedLastOpenPath).Trim();
+        //                    if (!string.IsNullOrEmpty(fileGroupFilter))
+        //                        _groupFilter = fileGroupFilter;
+        //                }
+        //            }
+        //            catch (Exception ex) {
+        //                Debug.WriteLine($"Error reading group name from file: {ex.Message}");
+        //            }
+        //        }
+
+        //        if (!_isUISettingsSubscribed) {
+        //            _uiSettings ??= new UISettings();
+        //            _uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged;
+        //            _isUISettingsSubscribed = true;
+        //        }
+
+        //        UpdateMainGridBackground(_uiSettings);
+
+        //        if (_openSubPopups.Count > 0 &&
+        //            (DateTime.Now - _lastSubPopupOpenTime).TotalMilliseconds > 400) {
+        //            CloseAllChildrenRecursive(_openSubPopups);
+        //            _openSubPopups.Clear();
+        //        }
+
+        //        _ = this.DispatcherQueue.TryEnqueue(() => {
+        //            _ = Task.Run(async () => {
+        //                try { await UpdateTaskbarIcon(_groupFilter); }
+        //                catch (Exception ex) { Debug.WriteLine($"Background taskbar update error: {ex.Message}"); }
+        //            });
+        //        });
+        //    }
+        //}
+
         private async void Window_Activated(object sender, WindowActivatedEventArgs e) {
             if (e.WindowActivationState == WindowActivationState.Deactivated) {
                 if (_parentPopup != null) return;
                 if (_focusTimer != null) return;
                 if (_isClosing) return;
-               
+
                 _isClosing = true;
 
                 bool wasLoaded = _isLoaded;
@@ -1754,6 +2061,7 @@ _ = Task.WhenAll(iconTasks);
                     var settings = await SettingsHelper.LoadSettingsAsync();
 
                     void DoCleanup() {
+
                         StopEntranceStoryboard();
                         _wasLaunchedFromTaskbar = false;
                         this.Hide();
@@ -1763,6 +2071,12 @@ _ = Task.WhenAll(iconTasks);
                         _windowHelper.SetSize(offscreen.Width, offscreen.Height);
                         NativeMethods.PositionWindowOffScreen(this.GetWindowHandle());
 
+
+
+                        if (_parentPopup == null) {
+                            _isPopupCurrentlyOpen = false;
+                            _lastHiddenAt = DateTime.Now;
+                        }
                         try {
                             UnsubscribeGridViewHandlers();
                             _iconLoadCts.Cancel();
@@ -1779,8 +2093,12 @@ _ = Task.WhenAll(iconTasks);
                             HeaderText.Text = "";
                             _anyGroupDisplayed = false;
 
-                            foreach (var task in _backgroundTasks.ToList())
-                                if (task.IsCompleted) { task.Dispose(); _backgroundTasks.Remove(task); }
+                            for (int i = _backgroundTasks.Count - 1; i >= 0; i--) {
+                                if (_backgroundTasks[i].IsCompleted) {
+                                    _backgroundTasks[i].Dispose();
+                                    _backgroundTasks.RemoveAt(i);
+                                }
+                            }
 
                             _groups = null;
                             _json = "";
@@ -1821,8 +2139,6 @@ _ = Task.WhenAll(iconTasks);
                         });
                         _backgroundTasks.Add(task);
                     }
-
-                    _ = Task.Run(() => GC.Collect(0, GCCollectionMode.Optimized));
                 }
                 else {
                     _isClosing = false;
@@ -1830,7 +2146,8 @@ _ = Task.WhenAll(iconTasks);
             }
             else if (e.WindowActivationState == WindowActivationState.CodeActivated ||
                      e.WindowActivationState == WindowActivationState.PointerActivated) {
-            
+                MainGrid.UpdateLayout();
+
                 if (_isClosing) return;
 
                 if (!_isLoaded && !_isFlyoutOpen) {

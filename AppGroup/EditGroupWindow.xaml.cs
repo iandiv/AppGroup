@@ -1361,8 +1361,8 @@
                             if (oldFolder != uniqueFolderPath)
                                 Directory.Delete(oldFolder, true);
 
-                        IntPtr hWnd = NativeMethods.FindWindow(null, "App Group");
-                        if (hWnd != IntPtr.Zero)
+                    IntPtr hWnd = NativeMethods.FindAppGroupWindow("App Group", excludeCurrentProcess: false);
+                    if (hWnd != IntPtr.Zero)
                             NativeMethods.SetForegroundWindow(hWnd);
 
                         // Fix: set GroupId = -1 only after all async work is done and we're about to hide

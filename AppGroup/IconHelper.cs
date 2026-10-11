@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -397,30 +397,214 @@ namespace AppGroup {
         //
         // Option 2 - Add black bottom border (15px):
         // string blackBorderIconPath = await CreateIconWithBottomBorderAsync("C:\\path\\to\\icon.png", System.Drawing.Color.Black, 15);
-        private static async Task<Bitmap> ExtractWindowsAppIconAsync(string shortcutPath, string outputDirectory) {
+
+        /// <summary>
+        /// Safely converts a 32-bit GDI HBITMAP (including PARGB / premultiplied alpha from IShellItemImageFactory)
+        /// into a System.Drawing.Bitmap preserving transparency and true colors.
+        /// </summary>
+        public static Bitmap? CreateBitmapFromHBitmap(IntPtr hBitmap) {
+            if (hBitmap == IntPtr.Zero) return null;
+
+            NativeMethods.BITMAP bm = new NativeMethods.BITMAP();
+            if (NativeMethods.GetObject(hBitmap, Marshal.SizeOf(typeof(NativeMethods.BITMAP)), ref bm) == 0)
+                return null;
+
+            int width = bm.bmWidth;
+            int height = Math.Abs(bm.bmHeight);
+            if (width <= 0 || height <= 0) return null;
+
+            Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var data = bitmap.LockBits(
+                new Rectangle(0, 0, width, height),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
             try {
-                // Get the shortcut target using Shell COM objects
-                Type shellType = Type.GetTypeFromProgID("Shell.Application");
-                if (shellType == null) return null;
+                NativeMethods.BITMAPINFOHEADER bih = new NativeMethods.BITMAPINFOHEADER {
+                    biSize = Marshal.SizeOf(typeof(NativeMethods.BITMAPINFOHEADER)),
+                    biWidth = width,
+                    biHeight = -height, // Negative height indicates top-down DIB so rows match BitmapData
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = 0 // BI_RGB
+                };
 
-                dynamic shell = Activator.CreateInstance(shellType);
-                dynamic folder = shell.Namespace(Path.GetDirectoryName(shortcutPath));
-                dynamic shortcutItem = folder.ParseName(Path.GetFileName(shortcutPath));
+                IntPtr hdc = NativeMethods.GetDC(IntPtr.Zero);
+                try {
+                    NativeMethods.GetDIBits(hdc, hBitmap, 0, (uint)height, data.Scan0, ref bih, 0);
+                }
+                finally {
+                    NativeMethods.ReleaseDC(IntPtr.Zero, hdc);
+                }
+            }
+            finally {
+                bitmap.UnlockBits(data);
+            }
 
-                // Find the "Link target" property
-                string linkTarget = null;
-                for (int i = 0; i < 500; i++) {
-                    string propertyName = folder.GetDetailsOf(null, i);
-                    if (propertyName == "Link target") {
-                        linkTarget = folder.GetDetailsOf(shortcutItem, i);
+            CheckAndFixAlpha(bitmap);
+            return bitmap;
+        }
+
+        private static unsafe void CheckAndFixAlpha(Bitmap bitmap) {
+            var data = bitmap.LockBits(
+                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadWrite,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            try {
+                int totalPixels = bitmap.Width * bitmap.Height;
+                byte* ptr = (byte*)data.Scan0.ToPointer();
+                bool hasNonZeroAlpha = false;
+
+                for (int i = 0; i < totalPixels; i++) {
+                    if (ptr[i * 4 + 3] > 0) {
+                        hasNonZeroAlpha = true;
                         break;
+                    }
+                }
+
+                if (!hasNonZeroAlpha) {
+                    for (int i = 0; i < totalPixels; i++) {
+                        ptr[i * 4 + 3] = 255;
+                    }
+                }
+                else {
+                    // Un-premultiply alpha so standard ARGB colors are preserved without dark fringes
+                    for (int i = 0; i < totalPixels; i++) {
+                        byte a = ptr[i * 4 + 3];
+                        if (a > 0 && a < 255) {
+                            ptr[i * 4 + 0] = (byte)Math.Min(255, (ptr[i * 4 + 0] * 255 + a / 2) / a);
+                            ptr[i * 4 + 1] = (byte)Math.Min(255, (ptr[i * 4 + 1] * 255 + a / 2) / a);
+                            ptr[i * 4 + 2] = (byte)Math.Min(255, (ptr[i * 4 + 2] * 255 + a / 2) / a);
+                        }
+                    }
+                }
+            }
+            finally {
+                bitmap.UnlockBits(data);
+            }
+        }
+
+        /// <summary>
+        /// Extracts modern application or virtual shell item icons via IShellItemImageFactory.
+        /// Resolves the exact full-color official asset directly from Windows Shell at the requested size.
+        /// </summary>
+        public static Bitmap? ExtractAppIconViaShellFactory(string parsingName, int size = 256) {
+            if (string.IsNullOrWhiteSpace(parsingName)) return null;
+
+            try {
+                Bitmap? result = null;
+
+                void Action() {
+                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                    try {
+                        Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"); // IShellItemImageFactory
+                        int hr = NativeMethods.SHCreateItemFromParsingName(parsingName, IntPtr.Zero, ref iid, out NativeMethods.IShellItemImageFactory factory);
+                        if (hr == 0 && factory != null) {
+                            try {
+                                IntPtr hBitmap = IntPtr.Zero;
+                                hr = factory.GetImage(new NativeMethods.SIZE(size, size), NativeMethods.SIIGBF.SIIGBF_BIGGERSIZEOK | NativeMethods.SIIGBF.SIIGBF_ICONONLY, out hBitmap);
+                                if (hr != 0 || hBitmap == IntPtr.Zero) {
+                                    hr = factory.GetImage(new NativeMethods.SIZE(size, size), NativeMethods.SIIGBF.SIIGBF_BIGGERSIZEOK, out hBitmap);
+                                }
+
+                                if (hBitmap != IntPtr.Zero) {
+                                    try {
+                                        using var rawBmp = CreateBitmapFromHBitmap(hBitmap);
+                                        if (rawBmp != null) {
+                                            result = ResizeAndCropImageToSquare(rawBmp, size);
+                                        }
+                                    }
+                                    finally {
+                                        NativeMethods.DeleteObject(hBitmap);
+                                    }
+                                }
+                            }
+                            finally {
+                                Marshal.ReleaseComObject(factory);
+                            }
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"[ExtractAppIconViaShellFactory] Inner error: {ex.Message}");
+                    }
+                    finally {
+                        NativeMethods.CoUninitialize();
+                    }
+                }
+
+                if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA) {
+                    Action();
+                }
+                else {
+                    var thread = new Thread(Action);
+                    thread.SetApartmentState(ApartmentState.STA);
+                    thread.Start();
+                    thread.Join();
+                }
+
+                return result;
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"[ExtractAppIconViaShellFactory] Error: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static async Task<Bitmap?> ExtractWindowsAppIconAsync(string shortcutPath, string outputDirectory) {
+            try {
+                // 1. Get the shortcut target using native ShellInterop
+                string linkTarget = ShellInterop.GetShortcutTarget(shortcutPath);
+                if (string.IsNullOrEmpty(linkTarget)) {
+                    ShellInterop.TryReadShortcut(shortcutPath, out linkTarget, out _, out _, out _);
+                }
+
+                if (string.IsNullOrEmpty(linkTarget)) {
+                    // Fallback to Shell COM objects
+                    Type shellType = Type.GetTypeFromProgID("Shell.Application");
+                    if (shellType != null) {
+                        dynamic shell = Activator.CreateInstance(shellType);
+                        dynamic folder = shell.Namespace(Path.GetDirectoryName(shortcutPath));
+                        dynamic shortcutItem = folder?.ParseName(Path.GetFileName(shortcutPath));
+                        if (folder != null && shortcutItem != null) {
+                            for (int i = 0; i < 50; i++) {
+                                string propertyName = folder.GetDetailsOf(null, i);
+                                if (propertyName == "Link target" || propertyName == "هدف الارتباط") {
+                                    linkTarget = folder.GetDetailsOf(shortcutItem, i);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (string.IsNullOrEmpty(linkTarget)) return null;
 
-                // Extract the app name from the link target (remove everything after the first "_")
-                string appName = System.Text.RegularExpressions.Regex.Replace(linkTarget, "_.*$", "");
+                // Priority 1: Check if this is a shell:AppsFolder target or modern packaged AUMID
+                string aumidCandidate = linkTarget;
+                if (aumidCandidate.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase)) {
+                    aumidCandidate = aumidCandidate.Substring("shell:AppsFolder\\".Length);
+                }
+
+                if (aumidCandidate.Contains('!') || aumidCandidate.Contains("_8wekyb3d8bbwe") || linkTarget.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase)) {
+                    string shellPath = $"shell:AppsFolder\\{aumidCandidate}";
+                    Bitmap? shellFactoryBmp = ExtractAppIconViaShellFactory(shellPath, 256);
+                    if (shellFactoryBmp != null) {
+                        return shellFactoryBmp;
+                    }
+                }
+
+                // Priority 2: Try IShellItemImageFactory on the shortcut file itself
+                if (File.Exists(shortcutPath)) {
+                    Bitmap? lnkShellBmp = ExtractAppIconViaShellFactory(shortcutPath, 256);
+                    if (lnkShellBmp != null) {
+                        return lnkShellBmp;
+                    }
+                }
+
+                // Extract the app name (remove !AppId and _hash)
+                string appName = aumidCandidate.Split('!')[0];
+                appName = System.Text.RegularExpressions.Regex.Replace(appName, "_.*$", "");
                 if (string.IsNullOrEmpty(appName)) return null;
 
                 // Use Windows Runtime API to find the package
@@ -428,7 +612,10 @@ namespace AppGroup {
                 IEnumerable<Windows.ApplicationModel.Package> packages = packageManager.FindPackagesForUser("");
 
                 // Find the package that matches the app name
-                Windows.ApplicationModel.Package appPackage = packages.FirstOrDefault(p => p.Id.Name.StartsWith(appName, StringComparison.OrdinalIgnoreCase));
+                Windows.ApplicationModel.Package appPackage = packages.FirstOrDefault(p =>
+                    string.Equals(p.Id.Name, appName, StringComparison.OrdinalIgnoreCase) ||
+                    p.Id.Name.StartsWith(appName, StringComparison.OrdinalIgnoreCase) ||
+                    p.Id.FullName.StartsWith(appName, StringComparison.OrdinalIgnoreCase));
                 if (appPackage == null) return null;
 
                 string installPath = appPackage.InstalledLocation.Path;
@@ -444,26 +631,57 @@ namespace AppGroup {
                 XmlNamespaceManager nsManager = new XmlNamespaceManager(manifest.NameTable);
                 nsManager.AddNamespace("ns", "http://schemas.microsoft.com/appx/manifest/foundation/windows10");
 
-                // Get logo path from manifest
-                XmlNode logoNode = manifest.SelectSingleNode("/ns:Package/ns:Properties/ns:Logo", nsManager);
-                if (logoNode == null) return null;
+                // Prefer VisualElements logos (Square150x150Logo or Square44x44Logo) over Properties/Logo (StoreLogo)
+                XmlNode visualElements = manifest.SelectSingleNode("//*[local-name()='VisualElements']");
+                string? mainLogoPath = visualElements?.Attributes?["Square150x150Logo"]?.Value
+                                    ?? visualElements?.Attributes?["Square44x44Logo"]?.Value
+                                    ?? visualElements?.Attributes?["Logo"]?.Value;
 
-                string logoPath = logoNode.InnerText;
-                string logoDir = Path.Combine(installPath, Path.GetDirectoryName(logoPath));
+                string logoDir = installPath;
+                if (!string.IsNullOrEmpty(mainLogoPath)) {
+                    string candidate = Path.Combine(installPath, Path.GetDirectoryName(mainLogoPath));
+                    if (Directory.Exists(candidate)) logoDir = candidate;
+                }
+                else {
+                    XmlNode logoNode = manifest.SelectSingleNode("/ns:Package/ns:Properties/ns:Logo", nsManager);
+                    if (logoNode != null) {
+                        string candidate = Path.Combine(installPath, Path.GetDirectoryName(logoNode.InnerText));
+                        if (Directory.Exists(candidate)) logoDir = candidate;
+                    }
+                }
 
                 if (!Directory.Exists(logoDir)) return null;
 
                 string[] logoPatterns = new[] {
-
-    "*StoreLogo*.png",
-
-        };
+                    "*Square150x150Logo*.scale-200.png",
+                    "*Square150x150Logo*.scale-150.png",
+                    "*Square150x150Logo*.scale-100.png",
+                    "*Square150x150Logo*.png",
+                    "*Square44x44Logo*.targetsize-256*.png",
+                    "*Square44x44Logo*.targetsize-48*.png",
+                    "*Square44x44Logo*.scale-200.png",
+                    "*Square44x44Logo*.png",
+                    "*AppList*.scale-200.png",
+                    "*AppList*.png",
+                    "*Logo*.scale-200.png",
+                    "*Logo*.png",
+                    "*StoreLogo*.scale-200.png",
+                    "*StoreLogo*.png"
+                };
 
                 string highestResLogoPath = null;
                 long highestSize = 0;
 
+                // Pass 1: Look for full-color assets (skip high-contrast black/white and monochrome unplated silhouettes)
                 foreach (string pattern in logoPatterns) {
                     foreach (string file in Directory.GetFiles(logoDir, pattern, SearchOption.AllDirectories)) {
+                        string fname = Path.GetFileName(file);
+                        if (fname.IndexOf("contrast-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            fname.IndexOf("altform-unplated", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            fname.IndexOf("altform-lightunplated", StringComparison.OrdinalIgnoreCase) >= 0) {
+                            continue;
+                        }
+
                         FileInfo fileInfo = new FileInfo(file);
                         if (fileInfo.Length > highestSize) {
                             highestSize = fileInfo.Length;
@@ -474,13 +692,32 @@ namespace AppGroup {
                     if (highestResLogoPath != null) break;
                 }
 
+                // Pass 2: Fallback allowing unplated, but still skipping contrast-black / contrast-white
+                if (highestResLogoPath == null) {
+                    foreach (string pattern in logoPatterns) {
+                        foreach (string file in Directory.GetFiles(logoDir, pattern, SearchOption.AllDirectories)) {
+                            string fname = Path.GetFileName(file);
+                            if (fname.IndexOf("contrast-", StringComparison.OrdinalIgnoreCase) >= 0) {
+                                continue;
+                            }
+
+                            FileInfo fileInfo = new FileInfo(file);
+                            if (fileInfo.Length > highestSize) {
+                                highestSize = fileInfo.Length;
+                                highestResLogoPath = file;
+                            }
+                        }
+
+                        if (highestResLogoPath != null) break;
+                    }
+                }
+
                 if (string.IsNullOrEmpty(highestResLogoPath) || !File.Exists(highestResLogoPath)) return null;
 
-                // Load the image and resize/crop it to 200x200
+                // Load the image and resize/crop it to 256x256 (matching standard Jumbo icon size)
                 using (FileStream stream = new FileStream(highestResLogoPath, FileMode.Open, FileAccess.Read)) {
                     using (var originalBitmap = new Bitmap(stream)) {
-                        // Create a square bitmap of 200x200
-                        var resizedIcon = ResizeAndCropImageToSquare(originalBitmap, 200);
+                        var resizedIcon = ResizeAndCropImageToSquare(originalBitmap, 256);
                         return resizedIcon;
                     }
                 }
@@ -491,41 +728,56 @@ namespace AppGroup {
             }
         }
 
-        /// <summary>
-        /// Resizes and crops an image to a square with the specified size
-        /// </summary>
-        private static Bitmap ResizeAndCropImageToSquare(Bitmap originalImage, int size, float zoomFactor = 1.3f) {
+        private static Rectangle GetNonTransparentBounds(Bitmap bmp) {
+            int minX = bmp.Width, minY = bmp.Height, maxX = -1, maxY = -1;
             try {
-                // Create a new square bitmap
-                Bitmap resizedImage = new Bitmap(size, size);
+                for (int y = 0; y < bmp.Height; y++) {
+                    for (int x = 0; x < bmp.Width; x++) {
+                        if (bmp.GetPixel(x, y).A > 15) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+            }
+            catch { }
 
-                // Calculate dimensions for maintaining aspect ratio
-                int sourceWidth = originalImage.Width;
-                int sourceHeight = originalImage.Height;
+            if (maxX < minX || maxY < minY) {
+                return new Rectangle(0, 0, bmp.Width, bmp.Height);
+            }
 
-                // Find the smallest dimension and calculate the crop area
-                int cropSize = Math.Min(sourceWidth, sourceHeight);
+            int w = maxX - minX + 1;
+            int h = maxY - minY + 1;
 
-                // Apply zoom factor (smaller crop size = more zoom)
-                cropSize = (int)(cropSize / zoomFactor);
+            return new Rectangle(minX, minY, w, h);
+        }
 
-                // Center the cropping rectangle
-                int cropX = (sourceWidth - cropSize) / 2;
-                int cropY = (sourceHeight - cropSize) / 2;
+        /// <summary>
+        /// Resizes an image cleanly to fit a square canvas of the specified size, preserving full aspect ratio and transparency.
+        /// Automatically trims transparent borders so the icon content fills the tile matching master.
+        /// </summary>
+        private static Bitmap ResizeAndCropImageToSquare(Bitmap originalImage, int size, float zoomFactor = 1.0f) {
+            try {
+                Rectangle contentBounds = GetNonTransparentBounds(originalImage);
 
-                // Create a graphics object to perform the resize
+                Bitmap resizedImage = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+                float scale = Math.Min((float)size / contentBounds.Width, (float)size / contentBounds.Height);
+                int drawWidth = Math.Max(1, (int)(contentBounds.Width * scale));
+                int drawHeight = Math.Max(1, (int)(contentBounds.Height * scale));
+                int drawX = (size - drawWidth) / 2;
+                int drawY = (size - drawHeight) / 2;
+
                 using (Graphics g = Graphics.FromImage(resizedImage)) {
-                    // Set high quality mode for better results
+                    g.Clear(System.Drawing.Color.Transparent);
                     g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                     g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
                     g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
                     g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
 
-                    // Draw the centered and cropped image to maintain aspect ratio
-                    g.DrawImage(originalImage,
-                        new Rectangle(0, 0, size, size),
-                        new Rectangle(cropX, cropY, cropSize, cropSize),
-                        GraphicsUnit.Pixel);
+                    g.DrawImage(originalImage, new Rectangle(drawX, drawY, drawWidth, drawHeight), contentBounds, GraphicsUnit.Pixel);
                 }
 
                 return resizedImage;
@@ -630,24 +882,129 @@ namespace AppGroup {
                             iconBitmap = await ExtractWindowsAppIconAsync(filePath, outputDirectory);
 
                             if (iconBitmap == null) {
-                                dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
-                                dynamic shortcut = shell.CreateShortcut(filePath);
-                                string iconPath = shortcut.IconLocation;
-                                string targetPath = shortcut.TargetPath;
-                                if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
-                                    string[] iconInfo = iconPath.Split(',');
-                                    string actualIconPath = iconInfo[0].Trim();
-                                    int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
-                                    if (File.Exists(actualIconPath)) {
-                                        iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
+                                string iconPath = null;
+                                string targetPath = null;
+                                string arguments = null;
+                                int iconIndex = 0;
+
+                                if (ShellInterop.TryReadShortcut(filePath, out targetPath, out arguments, out iconPath, out iconIndex)) {
+                                    // 1. Direct icon path defined in the shortcut (strip quotes if present)
+                                    if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
+                                        string[] iconInfo = iconPath.Split(',');
+                                        string cleanIconPath = iconInfo[0].Trim().Trim('"', '\'');
+                                        string actualIconPath = Environment.ExpandEnvironmentVariables(cleanIconPath);
+                                        int parsedIdx = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out int idx) ? idx : iconIndex;
+
+                                        if (File.Exists(actualIconPath)) {
+                                            if (actualIconPath.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                                try {
+                                                    using (var ico = new Icon(actualIconPath, 256, 256)) {
+                                                        iconBitmap = new Bitmap(ico.ToBitmap());
+                                                    }
+                                                }
+                                                catch { }
+
+                                                if (iconBitmap == null) {
+                                                    try {
+                                                        iconBitmap = ExtractJumboIcon(actualIconPath);
+                                                    }
+                                                    catch { }
+                                                }
+
+                                                if (iconBitmap == null) {
+                                                    iconBitmap = ExtractSpecificIcon(actualIconPath, parsedIdx);
+                                                }
+                                            }
+                                            else if (actualIconPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) {
+                                                try {
+                                                    iconBitmap = new Bitmap(actualIconPath);
+                                                }
+                                                catch { }
+                                            }
+                                            else {
+                                                iconBitmap = ExtractSpecificIcon(actualIconPath, parsedIdx);
+                                            }
+                                        }
                                     }
-                                }
-                                if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
-                                    iconBitmap = ExtractIconWithoutArrow(targetPath);
+
+                                    // 2. PWA fallback: check if shortcut arguments, targetPath, or filePath contain a chromium app-id
+                                    // This MUST run BEFORE any .lnk shell icon extraction to avoid getting the shortcut arrow overlay!
+                                    if (iconBitmap == null) {
+                                        string combined = $"{arguments} {targetPath} {filePath}";
+                                        string? appId = ShellInterop.ExtractAppId(combined);
+                                        if (!string.IsNullOrEmpty(appId)) {
+                                            string? pwaIco = ShellInterop.FindPwaIconPath(appId);
+                                            if (!string.IsNullOrEmpty(pwaIco) && File.Exists(pwaIco)) {
+                                                try {
+                                                    if (pwaIco.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                                        using var ico = new Icon(pwaIco, 256, 256);
+                                                        iconBitmap = new Bitmap(ico.ToBitmap());
+                                                    }
+                                                    else {
+                                                        iconBitmap = new Bitmap(pwaIco);
+                                                    }
+                                                }
+                                                catch { }
+                                            }
+                                        }
+                                    }
+
+                                    // 3. Start Menu real shortcut fallback by app name (read its icon or PWA id cleanly without arrow)
+                                    if (iconBitmap == null) {
+                                        string startAppShortcuts = Path.Combine(AppPaths.BaseDataPath, "StartAppShortcuts");
+                                        bool isStartApp = filePath.StartsWith(startAppShortcuts, StringComparison.OrdinalIgnoreCase);
+                                        if (!isStartApp) {
+                                            string appName = Path.GetFileNameWithoutExtension(filePath);
+                                            string? realLnk = ShellInterop.FindShortcutInStartMenu(appName);
+                                            if (!string.IsNullOrEmpty(realLnk) && !string.Equals(realLnk, filePath, StringComparison.OrdinalIgnoreCase) && File.Exists(realLnk)) {
+                                                try {
+                                                    if (ShellInterop.TryReadShortcut(realLnk, out string rTarget, out string rArgs, out string rIcon, out int rIdx)) {
+                                                        if (!string.IsNullOrEmpty(rIcon) && rIcon != ",") {
+                                                            string cleanR = rIcon.Split(',')[0].Trim().Trim('"', '\'');
+                                                            string actualR = Environment.ExpandEnvironmentVariables(cleanR);
+                                                            if (File.Exists(actualR)) {
+                                                                if (actualR.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                                                    using var ico = new Icon(actualR, 256, 256);
+                                                                    iconBitmap = new Bitmap(ico.ToBitmap());
+                                                                }
+                                                                else {
+                                                                    iconBitmap = new Bitmap(actualR);
+                                                                }
+                                                            }
+                                                        }
+                                                        if (iconBitmap == null) {
+                                                            string? rAppId = ShellInterop.ExtractAppId($"{rArgs} {rTarget} {realLnk}");
+                                                            if (!string.IsNullOrEmpty(rAppId)) {
+                                                                string? rPwaIco = ShellInterop.FindPwaIconPath(rAppId);
+                                                                if (!string.IsNullOrEmpty(rPwaIco) && File.Exists(rPwaIco)) {
+                                                                    using var ico = new Icon(rPwaIco, 256, 256);
+                                                                    iconBitmap = new Bitmap(ico.ToBitmap());
+                                                                }
+                                                            }
+                                                        }
+                                                        if (iconBitmap == null && !string.IsNullOrEmpty(rTarget) && File.Exists(rTarget)) {
+                                                            iconBitmap = ExtractIconWithoutArrow(rTarget);
+                                                        }
+                                                    }
+                                                }
+                                                catch { }
+                                            }
+                                        }
+                                    }
+
+                                    // 4. Target executable fallback without arrow
+                                    if (iconBitmap == null && !string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
+                                        iconBitmap = ExtractIconWithoutArrow(targetPath);
+                                    }
+
+                                    // 5. Last resort on the .lnk file itself
+                                    if (iconBitmap == null) {
+                                        iconBitmap = ExtractJumboIcon(filePath);
+                                    }
                                 }
                                 if (iconBitmap == null) {
                                     Icon icon = Icon.ExtractAssociatedIcon(filePath);
-                                    iconBitmap = icon.ToBitmap();
+                                    iconBitmap = icon?.ToBitmap();
                                 }
                             }
                         }
@@ -691,14 +1048,11 @@ namespace AppGroup {
 
 
         public static string ResolveLnkTarget(string lnkPath) {
-
-
             try {
-                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                dynamic shell = Activator.CreateInstance(shellType);
-                var shortcut = shell.CreateShortcut(lnkPath);
-                string target = shortcut.TargetPath;
-                return File.Exists(target) ? target : lnkPath;
+                if (ShellInterop.TryReadShortcut(lnkPath, out string target, out _, out _, out _) && File.Exists(target)) {
+                    return target;
+                }
+                return lnkPath;
             }
             catch {
                 return lnkPath;
@@ -790,31 +1144,58 @@ namespace AppGroup {
         public static async Task<BitmapImage> ExtractLnkIconWithoutArrowAsync(string lnkPath, DispatcherQueue dispatcher) {
             return await Task.Run(() => {
                 try {
-                    dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");
-                    dynamic shortcut = shell.CreateShortcut(lnkPath);
+                    if (ShellInterop.TryReadShortcut(lnkPath, out string targetPath, out string arguments, out string iconPath, out int iconIndex)) {
+                        if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
+                            string[] iconInfo = iconPath.Split(',');
+                            string cleanIconPath = iconInfo[0].Trim().Trim('"', '\'');
+                            string actualIconPath = Environment.ExpandEnvironmentVariables(cleanIconPath);
+                            int parsedIdx = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out int idx) ? idx : iconIndex;
 
-                    string iconPath = shortcut.IconLocation;
-                    string targetPath = shortcut.TargetPath;
+                            if (File.Exists(actualIconPath)) {
+                                if (actualIconPath.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                    try {
+                                        using var ico = new Icon(actualIconPath, 256, 256);
+                                        using var bmp = new Bitmap(ico.ToBitmap());
+                                        return CreateBitmapImageFromBitmap(bmp, dispatcher);
+                                    }
+                                    catch { }
+                                }
+                                using (var extractedIcon = ExtractSpecificIcon(actualIconPath, parsedIdx)) {
+                                    if (extractedIcon != null) {
+                                        return CreateBitmapImageFromBitmap(extractedIcon, dispatcher);
+                                    }
+                                }
+                            }
+                        }
 
-                    if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
-                        // Split the icon path and index
-                        string[] iconInfo = iconPath.Split(',');
-                        string actualIconPath = iconInfo[0].Trim();
-                        int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                        // PWA fallback
+                        string combined = $"{arguments} {targetPath} {lnkPath}";
+                        string? appId = ShellInterop.ExtractAppId(combined);
+                        if (!string.IsNullOrEmpty(appId)) {
+                            string? pwaIco = ShellInterop.FindPwaIconPath(appId);
+                            if (!string.IsNullOrEmpty(pwaIco) && File.Exists(pwaIco)) {
+                                try {
+                                    using var ico = new Icon(pwaIco, 256, 256);
+                                    using var bmp = new Bitmap(ico.ToBitmap());
+                                    return CreateBitmapImageFromBitmap(bmp, dispatcher);
+                                }
+                                catch { }
+                            }
+                        }
 
-                        if (File.Exists(actualIconPath)) {
-                            using (var extractedIcon = ExtractSpecificIcon(actualIconPath, iconIndex)) {
-                                if (extractedIcon != null) {
-                                    return CreateBitmapImageFromBitmap(extractedIcon, dispatcher);
+                        if (!string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
+                            using (var targetIcon = ExtractIconWithoutArrow(targetPath)) {
+                                if (targetIcon != null) {
+                                    return CreateBitmapImageFromBitmap(targetIcon, dispatcher);
                                 }
                             }
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(targetPath) && File.Exists(targetPath)) {
-                        using (var targetIcon = ExtractIconWithoutArrow(targetPath)) {
-                            if (targetIcon != null) {
-                                return CreateBitmapImageFromBitmap(targetIcon, dispatcher);
+                    using (var fallbackIcon = Icon.ExtractAssociatedIcon(lnkPath)) {
+                        if (fallbackIcon != null) {
+                            using (var bmp = fallbackIcon.ToBitmap()) {
+                                return CreateBitmapImageFromBitmap(bmp, dispatcher);
                             }
                         }
                     }
@@ -822,7 +1203,7 @@ namespace AppGroup {
                     return null;
                 }
                 catch (Exception ex) {
-                    Debug.WriteLine($"Error extracting .lnk icon: {ex.Message}");
+                    Debug.WriteLine($"Error extracting LNK icon: {ex.Message}");
                     return null;
                 }
             });
@@ -1153,6 +1534,26 @@ namespace AppGroup {
             }
         }
         public static Bitmap ExtractJumboIcon(string filePath) {
+            if (System.Threading.Thread.CurrentThread.GetApartmentState() != System.Threading.ApartmentState.STA) {
+                Bitmap res = null;
+                var thread = new System.Threading.Thread(() => {
+                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                    try {
+                        res = ExtractJumboIconCore(filePath);
+                    }
+                    finally {
+                        NativeMethods.CoUninitialize();
+                    }
+                });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                thread.Start();
+                thread.Join();
+                return res;
+            }
+            return ExtractJumboIconCore(filePath);
+        }
+
+        private static Bitmap ExtractJumboIconCore(string filePath) {
             try {
                 var shfi = new NativeMethods.SHFILEINFO();
                 var result = NativeMethods.SHGetFileInfo(
@@ -1200,12 +1601,57 @@ namespace AppGroup {
         public static async Task<string> GetLnkIconAsync(string lnkPath) {
             return await Task.Run(() => {
                 try {
-                    var shell = new WshShell();
-                    var shortcut = (IWshShortcut)shell.CreateShortcut(lnkPath);
-                    string targetPath = Environment.ExpandEnvironmentVariables(shortcut.TargetPath?.Trim() ?? "");
+                    string targetPath = string.Empty;
+                    string iconPath = string.Empty;
+                    string arguments = string.Empty;
+                    int iconIndex = 0;
 
-                    if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                    if (!ShellInterop.TryReadShortcut(lnkPath, out targetPath, out arguments, out iconPath, out iconIndex)) {
                         targetPath = ResolveLnkViaShellLink(lnkPath);
+                    }
+
+                    // 1. If shortcut points directly to an .ico or .png file (e.g. PWAs or custom icons)
+                    if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
+                        string cleanIcon = iconPath.Split(',')[0].Trim().Trim('"', '\'');
+                        string actualIcon = Environment.ExpandEnvironmentVariables(cleanIcon);
+                        if (File.Exists(actualIcon)) {
+                            if (actualIcon.EndsWith(".ico", StringComparison.OrdinalIgnoreCase)) {
+                                try {
+                                    using var ico = new Icon(actualIcon, 256, 256);
+                                    using var bmp = new Bitmap(ico.ToBitmap());
+                                    string outputDir = Path.Combine(
+                                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                        "AppGroup", "Icons");
+                                    Directory.CreateDirectory(outputDir);
+                                    string outPath = Path.Combine(outputDir, $"{Path.GetFileNameWithoutExtension(lnkPath)}.png");
+                                    bmp.Save(outPath, ImageFormat.Png);
+                                    IconCache.StoreEntry(lnkPath, outPath);
+                                    return outPath;
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+
+                    // 2. Check if this is a PWA (e.g. chrome_proxy.exe with --app-id)
+                    string? appId = ShellInterop.ExtractAppId($"{arguments} {targetPath} {lnkPath}");
+                    if (!string.IsNullOrEmpty(appId)) {
+                        string? pwaIco = ShellInterop.FindPwaIconPath(appId);
+                        if (!string.IsNullOrEmpty(pwaIco) && File.Exists(pwaIco)) {
+                            try {
+                                using var ico = new Icon(pwaIco, 256, 256);
+                                using var bmp = new Bitmap(ico.ToBitmap());
+                                string outputDir = Path.Combine(
+                                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                    "AppGroup", "Icons");
+                                Directory.CreateDirectory(outputDir);
+                                string outPath = Path.Combine(outputDir, $"{Path.GetFileNameWithoutExtension(lnkPath)}.png");
+                                bmp.Save(outPath, ImageFormat.Png);
+                                IconCache.StoreEntry(lnkPath, outPath);
+                                return outPath;
+                            }
+                            catch { }
+                        }
                     }
 
                     string ext = Path.GetExtension(targetPath).ToLowerInvariant();
@@ -1216,8 +1662,6 @@ namespace AppGroup {
                         if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
                             return cachedPath;
 
-
-                        // Not cached yet — extract and store under target's cache key
                         Bitmap result = null;
                         var thread = new System.Threading.Thread(() => {
                             NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
@@ -1251,7 +1695,6 @@ namespace AppGroup {
                         string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
                         if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
                             return cachedPath;
-
 
                         Bitmap result = null;
                         var thread = new System.Threading.Thread(() => {

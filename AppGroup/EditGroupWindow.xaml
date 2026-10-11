@@ -349,58 +349,11 @@ CornerRadius="5">
 
             <Grid Grid.Row="1" Padding="10,10,10,0">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Spacing="0"  CornerRadius="5" Padding="0,0,0,0" Orientation="Vertical" VerticalAlignment="Center">
-
-                    <Grid HorizontalAlignment="Stretch">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                    <Grid ColumnSpacing="2" Margin="0,0,0,2" CornerRadius="5" VerticalAlignment="Center">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                       
-                    </Grid>
-                    <!--<Grid ColumnSpacing="2" Margin="0,0,0,0" CornerRadius="5" VerticalAlignment="Center">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Vertical" VerticalAlignment="Center" Padding="6" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5">
-                            <Grid HorizontalAlignment="Stretch">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="50"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Text="Show Labels"/>
-                                <ToggleSwitch Grid.Column="1" x:Name="ShowLabels" OnContent="" OffContent="" Toggled="ShowLabels_Toggled"/>
-                            </Grid>
-                        </StackPanel>
-                        <StackPanel x:Name="LabelSizePanel"  Orientation="Vertical" Grid.Column="1" VerticalAlignment="Center" Padding="10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="5" Opacity="0.5">
-                            <Grid HorizontalAlignment="Stretch">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center">Label Size</TextBlock>
-                                <ComboBox x:Name="LabelSizeComboBox" Grid.Column="1" IsEnabled="False"/>
-                            </Grid>
-                        </StackPanel>
-                    </Grid>-->
-                </StackPanel>
-
-
-                 <Grid Grid.Row="2" Margin="0,5,0,0" HorizontalAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
+                <Grid Grid.Row="0" Margin="0,5,0,0" HorizontalAlignment="Stretch" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -427,9 +380,9 @@ CornerRadius="5">
                         </Button>
                     </Grid>
 
-                    <Grid Grid.Row="2" Margin="10,0,10,10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
+                    <Grid Grid.Row="1" Margin="10,0,10,10" Background="{ThemeResource CardBackgroundFillColorDefault}" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" Padding="1" CornerRadius="5">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ListView x:Name="ExeListView" ScrollViewer.IsDeferredScrollingEnabled="True"  Background="Transparent" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" Drop="ExeListView_Drop"   DragOver="ExeListView_DragOver" DragItemsCompleted="ExeListView_DragItemsCompleted" AllowDrop="True" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
+                            <ListView x:Name="ExeListView" ScrollViewer.IsDeferredScrollingEnabled="True" Background="Transparent" AllowDrop="True" CanReorderItems="True" CanDragItems="True" DragEnter="ExeListView_DragEnter" DragOver="ExeListView_DragOver" Drop="ExeListView_Drop" DragItemsCompleted="ExeListView_DragItemsCompleted" SelectionChanged="ExeListView_SelectionChanged" Margin="0,5,0,5" SelectionMode="Single">
                                 <ListView.Resources>
                                     <x:Boolean x:Key="ListViewItemSelectionIndicatorVisualEnabled">False</x:Boolean>
                                 </ListView.Resources>
@@ -459,7 +412,7 @@ CornerRadius="5">
                     </Grid>
                 </Grid>
 
-                <Button Grid.Row="3" x:Name="CreateShortcutButton" Content="Save" Margin="0,10,0,20"  HorizontalAlignment="Right" Click="CreateShortcut_Click" Style="{StaticResource AccentButtonStyle}">
+                <Button Grid.Row="1" x:Name="CreateShortcutButton" Content="Save" Margin="0,10,0,20"  HorizontalAlignment="Right" Click="CreateShortcut_Click" Style="{StaticResource AccentButtonStyle}">
                     
                 </Button>
             </Grid>

@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -518,7 +518,10 @@ namespace AppGroup {
                                 destinationPath = Path.Combine(appDataPath, entry.FullName);
 
                                 // Ensure directory exists for this entry
-                                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
+                                string? destDir = Path.GetDirectoryName(destinationPath);
+                                if (!string.IsNullOrEmpty(destDir)) {
+                                    Directory.CreateDirectory(destDir);
+                                }
                             }
                             else if (entry.FullName.StartsWith("Icons/")) {
                                 // Icons files go to the icons directory
@@ -537,7 +540,7 @@ namespace AppGroup {
                             }
 
                             // Ensure parent directory exists for the file
-                            string parentDir = Path.GetDirectoryName(destinationPath);
+                            string? parentDir = Path.GetDirectoryName(destinationPath);
                             if (!string.IsNullOrEmpty(parentDir)) {
                                 Directory.CreateDirectory(parentDir);
                             }
@@ -776,23 +779,19 @@ namespace AppGroup {
                     File.Delete(shortcutPath);
                 }
 
-                // Create a new shortcut using the IWshShortcut COM object
-                dynamic wshShell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
-                dynamic shortcut = wshShell.CreateShortcut(shortcutPath);
+                // Create a new shortcut using native IShellLinkW COM object
+                string targetExe = Path.Combine(baseDir, "AppGroup.exe");
+                bool created = ShellInterop.SaveShortcut(
+                    shortcutPath,
+                    targetExe,
+                    arguments: $"\"{groupName}\"",
+                    description: $"{groupName} - AppGroup Shortcut",
+                    iconLocation: iconPath,
+                    workingDirectory: baseDir);
 
-                // Set the properties of the shortcut
-                shortcut.TargetPath = Path.Combine(baseDir, "AppGroup.exe");
-                shortcut.Arguments = $"\"{groupName}\"";
-                shortcut.Description = $"{groupName} - AppGroup Shortcut";
-                shortcut.IconLocation = iconPath;
-
-                // Set working directory to the base directory
-                shortcut.WorkingDirectory = baseDir;
-
-                // Save the shortcut
-                shortcut.Save();
-
-                Debug.WriteLine($"Shortcut created successfully at {shortcutPath}");
+                if (created) {
+                    Debug.WriteLine($"Shortcut created successfully at {shortcutPath}");
+                }
             }
             catch (Exception ex) {
                 Debug.WriteLine($"Error creating shortcut: {ex.Message}");
@@ -827,16 +826,16 @@ namespace AppGroup {
 
         // Helper class to deserialize configuration
         public class GroupConfig {
-            public string groupName { get; set; }
+            public string groupName { get; set; } = string.Empty;
             public bool groupHeader { get; set; }
             public int groupCol { get; set; }
-            public string groupIcon { get; set; }
-            public Dictionary<string, PathConfig> path { get; set; }
+            public string groupIcon { get; set; } = string.Empty;
+            public Dictionary<string, PathConfig> path { get; set; } = new();
         }
 
         public class PathConfig {
-            public string tooltip { get; set; }
-            public string args { get; set; }
+            public string tooltip { get; set; } = string.Empty;
+            public string args { get; set; } = string.Empty;
         }
     }
 }

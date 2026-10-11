@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -68,11 +68,8 @@ namespace AppGroup {
         private ObservableCollection<GroupItem> GroupItems;
         private FileSystemWatcher _fileWatcher;
         private readonly object _loadLock = new object();
-        private bool _isLoading = false;
-        private string tempIcon;
         private readonly IconHelper _iconHelper;
         private DispatcherTimer debounceTimer;
-
         
         private DispatcherTimer _watcherDebounceTimer;
 
@@ -83,7 +80,6 @@ namespace AppGroup {
         private NativeMethods.SubclassProc _subclassProc;
         private const int SUBCLASS_ID = 2;
         private bool _wasHidden = false;
-        private CancellationTokenSource _dragCleanupCts;
 
         private readonly CancellationTokenSource _windowCloseCts = new CancellationTokenSource();
         private bool _isIconDragging = false;
@@ -211,6 +207,9 @@ namespace AppGroup {
                                 NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_RESTORE);
                                 NativeMethods.SetForegroundWindow(_hwnd);
                                 this.AppWindow.IsShownInSwitchers = true;
+                                this.AppWindow.Show();
+                                this.Activate();
+                                PlayContentScaleUp();
                             });
                             return (IntPtr)1;
                         }

@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -271,9 +271,8 @@ namespace AppGroup
                                 // Skip sub-popup shortcuts
                                 if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
                                     try {
-                                        IWshShell shell = new WshShell();
-                                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                                        if (shortcut.Description.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase))
+                                        string? desc = ShellInterop.ReadShortcutDescription(path);
+                                        if (desc != null && desc.EndsWith("- AppGroup Shortcut", StringComparison.OrdinalIgnoreCase))
                                             continue;
                                     }
                                     catch { }
@@ -285,9 +284,10 @@ namespace AppGroup
 
                                     // CMD wrapper
                                     try {
+                                        string runnablePath = ShellInterop.ResolveRunnablePath(path);
                                         ProcessStartInfo psi = new ProcessStartInfo {
                                             FileName = "cmd.exe",
-                                            Arguments = $"/c start \"\" \"{path}\" {args}",
+                                            Arguments = $"/c start \"\" \"{runnablePath}\" {args}",
                                             UseShellExecute = true,
                                             WindowStyle = ProcessWindowStyle.Hidden
                                         };
@@ -348,17 +348,11 @@ namespace AppGroup
 
         public static void UpdateShortcutIcon(string shortcutPath, string originalGroupName, string newGroupName) {
             try {
-                WshShell wshShell = new WshShell();
-                IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
-
-                // Get the old icon location
-                string oldIconLocation = shortcut.IconLocation;
-
-                // Update the icon location
-                string newIconLocation = oldIconLocation.Replace(originalGroupName, newGroupName);
-                shortcut.IconLocation = newIconLocation;
-
-                shortcut.Save();
+                if (!File.Exists(shortcutPath)) return;
+                if (ShellInterop.TryReadShortcut(shortcutPath, out string target, out string args, out string oldIcon, out int iconIdx, out string desc)) {
+                    string newIconLocation = oldIcon.Replace(originalGroupName, newGroupName);
+                    ShellInterop.UpdateShortcutIcon(shortcutPath, newIconLocation, iconIdx);
+                }
             }
             catch (Exception ex) {
                 throw new Exception($"Error updating shortcut icon: {ex.Message}", ex);
@@ -369,19 +363,19 @@ namespace AppGroup
 
         private static void UpdateShortcutTarget(string shortcutPath, string originalGroupName, string newGroupName) {
             try {
-                WshShell wshShell = new WshShell();
-                IWshShortcut shortcut = (IWshShortcut)wshShell.CreateShortcut(shortcutPath);
-
-                string targetPath = shortcut.TargetPath.Replace(originalGroupName, newGroupName);
-                shortcut.TargetPath = targetPath;
-                shortcut.Arguments = $"\"{newGroupName}\"";
-                shortcut.Description = $"{newGroupName} - AppGroup Shortcut";
-
-                // Update the icon location if necessary
-                string iconPath = shortcut.IconLocation.Replace(originalGroupName, newGroupName);
-                shortcut.IconLocation = iconPath;
-
-                shortcut.Save();
+                if (!File.Exists(shortcutPath)) return;
+                if (ShellInterop.TryReadShortcut(shortcutPath, out string target, out string args, out string iconPath, out int iconIdx, out string desc)) {
+                    string newTarget = target.Replace(originalGroupName, newGroupName);
+                    string newIcon = iconPath.Replace(originalGroupName, newGroupName);
+                    string? workingDir = Path.GetDirectoryName(newTarget);
+                    ShellInterop.SaveShortcut(
+                        shortcutPath,
+                        newTarget,
+                        arguments: $"\"{newGroupName}\"",
+                        description: $"{newGroupName} - AppGroup Shortcut",
+                        iconLocation: newIcon,
+                        workingDirectory: workingDir);
+                }
             }
             catch (Exception ex) {
                 throw new Exception($"Error updating shortcut target: {ex.Message}", ex);

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Dispatching;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using System;
@@ -26,21 +26,19 @@ namespace AppGroup {
 
             // Check if running without arguments and another instance is already running
             if (cmdArgs.Length <= 1 && !isSilent) {
-              
-              
-                IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
+                IntPtr existingMainHWnd = NativeMethods.FindAppGroupWindow("App Group", excludeCurrentProcess: true);
                 if (existingMainHWnd != IntPtr.Zero) {
+                    NativeMethods.ShowWindow(existingMainHWnd, NativeMethods.SW_RESTORE);
+                    NativeMethods.SetForegroundWindow(existingMainHWnd);
                     NativeMethods.SendString(existingMainHWnd, "__SHOW_MAIN__");
                     return;
                 }
             }
 
-          
-
             if (!isSilent && cmdArgs.Length > 1) {
-                IntPtr existingPopupHWnd = NativeMethods.FindWindow(null, "Popup Window");
-                IntPtr existingEditHWnd = NativeMethods.FindWindow(null, "Edit Group");
-                IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
+                IntPtr existingPopupHWnd = NativeMethods.FindAppGroupWindow("Popup Window", excludeCurrentProcess: true);
+                IntPtr existingEditHWnd = NativeMethods.FindAppGroupWindow("Edit Group", excludeCurrentProcess: true);
+                IntPtr existingMainHWnd = NativeMethods.FindAppGroupWindow("App Group", excludeCurrentProcess: true);
 
                 // Handle existing windows in constructor for faster response
                 string command = cmdArgs[1];
@@ -94,7 +92,7 @@ namespace AppGroup {
 
             if (cmdArgs.Length <= 1 && !isSilent) {
                 // No arguments provided - check for existing main window instance
-                IntPtr existingMainHWnd = NativeMethods.FindWindow(null, "App Group");
+                IntPtr existingMainHWnd = NativeMethods.FindAppGroupWindow("App Group", excludeCurrentProcess: true);
                 if (existingMainHWnd != IntPtr.Zero) {
                     // Bring existing instance to foreground and exit
                     NativeMethods.SetForegroundWindow(existingMainHWnd);

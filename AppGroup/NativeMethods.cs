@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Windowing;
+using Microsoft.UI.Windowing;
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -169,6 +169,10 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         public const uint SHGFI_SMALLICON = 0x000000001;
         public const uint SHGFI_USEFILEATTRIBUTES = 0x10;
         public const uint SHGFI_SYSICONINDEX = 0x4000;
+        public const int SHIL_LARGE = 0x0;
+        public const int SHIL_SMALL = 0x1;
+        public const int SHIL_EXTRALARGE = 0x2;
+        public const int SHIL_SYSSMALL = 0x3;
         public const int SHIL_JUMBO = 0x4;
 
         #endregion
@@ -314,6 +318,53 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
             public int rgbBk, rgbFg, fStyle, dwRop, fState, Frame, crEffect;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SIZE {
+            public int cx;
+            public int cy;
+            public SIZE(int cx, int cy) { this.cx = cx; this.cy = cy; }
+        }
+
+        [Flags]
+        public enum SIIGBF {
+            SIIGBF_RESIZETOFIT = 0x00,
+            SIIGBF_BIGGERSIZEOK = 0x01,
+            SIIGBF_MEMORYONLY = 0x02,
+            SIIGBF_ICONONLY = 0x04,
+            SIIGBF_THUMBNAILONLY = 0x08,
+            SIIGBF_INCACHEONLY = 0x10,
+            SIIGBF_CROPTOSQUARE = 0x20,
+            SIIGBF_WIDETHUMBNAILS = 0x40,
+            SIIGBF_ICONBACKGROUND = 0x80,
+            SIIGBF_SCALEUP = 0x100
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BITMAP {
+            public int bmType;
+            public int bmWidth;
+            public int bmHeight;
+            public int bmWidthBytes;
+            public ushort bmPlanes;
+            public ushort bmBitsPixel;
+            public IntPtr bmBits;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BITMAPINFOHEADER {
+            public int biSize;
+            public int biWidth;
+            public int biHeight;
+            public short biPlanes;
+            public short biBitCount;
+            public int biCompression;
+            public int biSizeImage;
+            public int biXPelsPerMeter;
+            public int biYPelsPerMeter;
+            public int biClrUsed;
+            public int biClrImportant;
+        }
+
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────
@@ -331,6 +382,17 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
             [PreserveSig] int Draw(ref IMAGELISTDRAWPARAMS pimldp);
             [PreserveSig] int Remove(int i);
             [PreserveSig] int GetIcon(int i, int flags, ref IntPtr picon);
+        }
+
+        [ComImport]
+        [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IShellItemImageFactory {
+            [PreserveSig]
+            int GetImage(
+                [In, MarshalAs(UnmanagedType.Struct)] SIZE size,
+                [In] SIIGBF flags,
+                [Out] out IntPtr phbm);
         }
 
         #endregion
@@ -405,10 +467,41 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern IntPtr FindWindowEx(
             IntPtr parentHandle, IntPtr childAfter,
             string className, string windowTitle);
+
+        /// <summary>
+        /// Checks whether the window belongs to an AppGroup process.
+        /// Prevents false matches against File Explorer windows or other apps that happen to be titled "App Group".
+        /// </summary>
+        public static bool IsAppGroupProcess(IntPtr hWnd, bool excludeCurrentProcess = true) {
+            if (hWnd == IntPtr.Zero) return false;
+            GetWindowThreadProcessId(hWnd, out uint pid);
+            if (pid == 0) return false;
+            if (excludeCurrentProcess && pid == (uint)Environment.ProcessId) return false;
+            try {
+                using var proc = Process.GetProcessById((int)pid);
+                return string.Equals(proc.ProcessName, "AppGroup", StringComparison.OrdinalIgnoreCase);
+            }
+            catch {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Searches all top-level windows matching windowTitle that actually belong to an AppGroup process.
+        /// </summary>
+        public static IntPtr FindAppGroupWindow(string windowTitle, bool excludeCurrentProcess = true) {
+            IntPtr hWnd = IntPtr.Zero;
+            while ((hWnd = FindWindowEx(IntPtr.Zero, hWnd, null, windowTitle)) != IntPtr.Zero) {
+                if (IsAppGroupProcess(hWnd, excludeCurrentProcess)) {
+                    return hWnd;
+                }
+            }
+            return IntPtr.Zero;
+        }
 
         [DllImport("user32.dll")]
         public static extern bool EnumThreadWindows(
@@ -560,6 +653,12 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool DestroyIcon(IntPtr handle);
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────
@@ -631,6 +730,13 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         public static extern int SHGetImageList(
             int iImageList, ref Guid riid, out IImageList ppv);
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+        public static extern int SHCreateItemFromParsingName(
+            [In, MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+            [In] IntPtr pbc,
+            [In] ref Guid riid,
+            [Out, MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory ppv);
+
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────
@@ -646,7 +752,14 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
         // ─────────────────────────────────────────────────────────────────────
         #region P/Invoke — gdi32 / System.Drawing helper
 
-        // (No raw GDI P/Invokes needed; DpiX is retrieved via System.Drawing.Graphics)
+        [DllImport("gdi32.dll")]
+        public static extern int GetObject(IntPtr hgdiobj, int cbBuffer, ref BITMAP lpvObject);
+
+        [DllImport("gdi32.dll")]
+        public static extern int GetDIBits(IntPtr hdc, IntPtr hbmp, uint uStartScan, uint cScanLines, IntPtr lpvBits, ref BITMAPINFOHEADER lpbi, uint uUsage);
+
+        [DllImport("gdi32.dll")]
+        public static extern bool DeleteObject(IntPtr hObject);
 
         #endregion
 

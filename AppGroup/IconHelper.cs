@@ -82,6 +82,7 @@ namespace AppGroup {
         private static async Task<string> DownloadAndCacheRemoteIconAsync(string url) {
             try {
                 string cacheKey = "url_" + Math.Abs(url.GetHashCode());
+             
                 string outputDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup", "Icons");
@@ -464,6 +465,8 @@ namespace AppGroup {
 
                 foreach (string pattern in logoPatterns) {
                     foreach (string file in Directory.GetFiles(logoDir, pattern, SearchOption.AllDirectories)) {
+                        if (Path.GetFileName(file).Contains("contrast-", StringComparison.OrdinalIgnoreCase))
+                            continue;
                         FileInfo fileInfo = new FileInfo(file);
                         if (fileInfo.Length > highestSize) {
                             highestSize = fileInfo.Length;
@@ -636,8 +639,10 @@ namespace AppGroup {
                                 string targetPath = shortcut.TargetPath;
                                 if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
                                     string[] iconInfo = iconPath.Split(',');
-                                    string actualIconPath = iconInfo[0].Trim();
-                                    int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                                    //string actualIconPath = iconInfo[0].Trim();
+                                    //int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                                    string actualIconPath = iconInfo[0].Trim().Trim('"');
+                                    int iconIndex = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out var parsedIdx) ? parsedIdx : 0;
                                     if (File.Exists(actualIconPath)) {
                                         iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
                                     }
@@ -799,8 +804,10 @@ namespace AppGroup {
                     if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
                         // Split the icon path and index
                         string[] iconInfo = iconPath.Split(',');
-                        string actualIconPath = iconInfo[0].Trim();
-                        int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                        //string actualIconPath = iconInfo[0].Trim();
+                        //int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                        string actualIconPath = iconInfo[0].Trim().Trim('"');
+                        int iconIndex = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out var parsedIdx) ? parsedIdx : 0;
 
                         if (File.Exists(actualIconPath)) {
                             using (var extractedIcon = ExtractSpecificIcon(actualIconPath, iconIndex)) {
@@ -1252,7 +1259,7 @@ namespace AppGroup {
                         if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
                             return cachedPath;
 
-
+                     
                         Bitmap result = null;
                         var thread = new System.Threading.Thread(() => {
                             NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);

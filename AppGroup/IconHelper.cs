@@ -81,8 +81,12 @@ namespace AppGroup {
 
         private static async Task<string> DownloadAndCacheRemoteIconAsync(string url) {
             try {
-                string cacheKey = "url_" + Math.Abs(url.GetHashCode());
-               
+                //string cacheKey = "url_" + Math.Abs(url.GetHashCode());
+                string cacheKey;
+                using (var sha = System.Security.Cryptography.SHA1.Create()) {
+                    cacheKey = "url_" + Convert.ToHexString(
+                        sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(url)))[..16].ToLowerInvariant();
+                }
                 string outputDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup", "Icons");

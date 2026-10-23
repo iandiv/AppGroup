@@ -82,7 +82,7 @@ namespace AppGroup {
         private static async Task<string> DownloadAndCacheRemoteIconAsync(string url) {
             try {
                 string cacheKey = "url_" + Math.Abs(url.GetHashCode());
-             
+               
                 string outputDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup", "Icons");
@@ -1219,10 +1219,11 @@ namespace AppGroup {
 
                     // For .exe targets — look up existing cache entry by target path
                     if (ext == ".exe" && File.Exists(targetPath)) {
-                        string cacheKey = IconCache.ComputeFileCacheKey(targetPath);
-                        if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //string cacheKey = IconCache.ComputeFileCacheKey(targetPath);
+                        //if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //    return cachedPath;
+                        if (IconCache.TryGetCachedPath(targetPath, out var cachedPath))
                             return cachedPath;
-
 
                         // Not cached yet — extract and store under target's cache key
                         Bitmap result = null;
@@ -1255,11 +1256,12 @@ namespace AppGroup {
                     }
                     else {
                         // Non-EXE (.msc, .cpl, etc.) — use lnk cache key
-                        string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
-                        if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
-                            return cachedPath;
+                        //string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
+                        //if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //    return cachedPath;
 
-                     
+                        if (IconCache.TryGetCachedPath(lnkPath, out var cachedPath))
+                            return cachedPath;
                         Bitmap result = null;
                         var thread = new System.Threading.Thread(() => {
                             NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
@@ -1293,7 +1295,8 @@ namespace AppGroup {
                         string outPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(lnkPath) + ".png");
                         result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
                         result.Dispose();
-                        IconCache.StoreEntry(targetPath, outPath);
+                        //IconCache.StoreEntry(targetPath, outPath);
+                        IconCache.StoreEntry(lnkPath, outPath);
 
                         return outPath;
                     }

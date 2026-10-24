@@ -81,7 +81,12 @@ namespace AppGroup {
 
         private static async Task<string> DownloadAndCacheRemoteIconAsync(string url) {
             try {
-                string cacheKey = "url_" + Math.Abs(url.GetHashCode());
+                //string cacheKey = "url_" + Math.Abs(url.GetHashCode());
+                string cacheKey;
+                using (var sha = System.Security.Cryptography.SHA1.Create()) {
+                    cacheKey = "url_" + Convert.ToHexString(
+                        sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(url)))[..16].ToLowerInvariant();
+                }
                 string outputDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "AppGroup", "Icons");
@@ -464,6 +469,8 @@ namespace AppGroup {
 
                 foreach (string pattern in logoPatterns) {
                     foreach (string file in Directory.GetFiles(logoDir, pattern, SearchOption.AllDirectories)) {
+                        if (Path.GetFileName(file).Contains("contrast-", StringComparison.OrdinalIgnoreCase))
+                            continue;
                         FileInfo fileInfo = new FileInfo(file);
                         if (fileInfo.Length > highestSize) {
                             highestSize = fileInfo.Length;
@@ -636,8 +643,10 @@ namespace AppGroup {
                                 string targetPath = shortcut.TargetPath;
                                 if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
                                     string[] iconInfo = iconPath.Split(',');
-                                    string actualIconPath = iconInfo[0].Trim();
-                                    int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                                    //string actualIconPath = iconInfo[0].Trim();
+                                    //int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                                    string actualIconPath = iconInfo[0].Trim().Trim('"');
+                                    int iconIndex = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out var parsedIdx) ? parsedIdx : 0;
                                     if (File.Exists(actualIconPath)) {
                                         iconBitmap = ExtractSpecificIcon(actualIconPath, iconIndex);
                                     }
@@ -799,8 +808,10 @@ namespace AppGroup {
                     if (!string.IsNullOrEmpty(iconPath) && iconPath != ",") {
                         // Split the icon path and index
                         string[] iconInfo = iconPath.Split(',');
-                        string actualIconPath = iconInfo[0].Trim();
-                        int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                        //string actualIconPath = iconInfo[0].Trim();
+                        //int iconIndex = iconInfo.Length > 1 ? int.Parse(iconInfo[1].Trim()) : 0;
+                        string actualIconPath = iconInfo[0].Trim().Trim('"');
+                        int iconIndex = iconInfo.Length > 1 && int.TryParse(iconInfo[1].Trim(), out var parsedIdx) ? parsedIdx : 0;
 
                         if (File.Exists(actualIconPath)) {
                             using (var extractedIcon = ExtractSpecificIcon(actualIconPath, iconIndex)) {
@@ -1212,10 +1223,11 @@ namespace AppGroup {
 
                     // For .exe targets — look up existing cache entry by target path
                     if (ext == ".exe" && File.Exists(targetPath)) {
-                        string cacheKey = IconCache.ComputeFileCacheKey(targetPath);
-                        if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //string cacheKey = IconCache.ComputeFileCacheKey(targetPath);
+                        //if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //    return cachedPath;
+                        if (IconCache.TryGetCachedPath(targetPath, out var cachedPath))
                             return cachedPath;
-
 
                         // Not cached yet — extract and store under target's cache key
                         Bitmap result = null;
@@ -1248,11 +1260,12 @@ namespace AppGroup {
                     }
                     else {
                         // Non-EXE (.msc, .cpl, etc.) — use lnk cache key
-                        string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
-                        if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //string cacheKey = IconCache.ComputeFileCacheKey(lnkPath);
+                        //if (IconCache.TryGetCachedPath(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+                        //    return cachedPath;
+
+                        if (IconCache.TryGetCachedPath(lnkPath, out var cachedPath))
                             return cachedPath;
-
-
                         Bitmap result = null;
                         var thread = new System.Threading.Thread(() => {
                             NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
@@ -1286,7 +1299,8 @@ namespace AppGroup {
                         string outPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(lnkPath) + ".png");
                         result.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
                         result.Dispose();
-                        IconCache.StoreEntry(targetPath, outPath);
+                        //IconCache.StoreEntry(targetPath, outPath);
+                        IconCache.StoreEntry(lnkPath, outPath);
 
                         return outPath;
                     }

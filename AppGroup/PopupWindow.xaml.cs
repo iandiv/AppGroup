@@ -152,7 +152,7 @@ namespace AppGroup {
         private static bool _isPopupCurrentlyOpen = false;
         private static DateTime _lastHiddenAt = DateTime.MinValue;
         private const int SLIDE_EXTRA_OFFSET = 60;
-
+        private bool _cardLayoutActive;
         public PopupWindow(string groupFilter = null) {
             InitializeComponent();
 
@@ -541,7 +541,7 @@ namespace AppGroup {
        && IsAccentColorOnStartTaskbarEnabled()) {
                 if (Content is FrameworkElement rootElement)
                     rootElement.RequestedTheme = ElementTheme.Dark;
-
+                ApplyCardBrush(ElementTheme.Dark);
                 string accentResourceKey = "SystemAccentColorDark2";
                 if (Application.Current.Resources.TryGetValue(accentResourceKey, out object accentColor)) {
                     MainGrid.Background = new Microsoft.UI.Xaml.Media.AcrylicBrush {
@@ -564,6 +564,7 @@ namespace AppGroup {
 
             if (Content is FrameworkElement root)
                 root.RequestedTheme = resolvedTheme;
+            ApplyCardBrush(resolvedTheme);
         }
 
         private ElementTheme ResolveWindowsModeTheme() {
@@ -1289,23 +1290,29 @@ namespace AppGroup {
             }
         }
 
+        private void ApplyCardBrush(ElementTheme theme) {
+            if (!_cardLayoutActive) return;
+
+            bool isDark = theme == ElementTheme.Dark ||
+                (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            // CardBackgroundFillColorDefault: Light=#B3FFFFFF, Dark=#0DFFFFFF
+            ScrollView.Background = new SolidColorBrush(isDark
+                ? Windows.UI.Color.FromArgb(13, 255, 255, 255)
+                : Windows.UI.Color.FromArgb(179, 255, 255, 255));
+
+            // CardStrokeColorDefault: Light=#0F000000, Dark=#19000000
+            ScrollView.BorderBrush = new SolidColorBrush(isDark
+                ? Windows.UI.Color.FromArgb(25, 0, 0, 0)
+                : Windows.UI.Color.FromArgb(15, 0, 0, 0));
+        }
         private void ApplyGroupLayout(string headerPosition, string layout, bool groupHeader = false) {
             if (!groupHeader) layout = "Default";
 
-            if (layout == "Card") {
-                    ScrollView.RequestedTheme = (Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default;
-                    bool isDark = ScrollView.ActualTheme == ElementTheme.Dark;
-
-                    // CardBackgroundFillColorDefault: Light=#B3FFFFFF, Dark=#0DFFFFFF
-                    ScrollView.Background = new SolidColorBrush(isDark
-                        ? Windows.UI.Color.FromArgb(13, 255, 255, 255)
-                        : Windows.UI.Color.FromArgb(179, 255, 255, 255));
-
-                    // CardStrokeColorDefault: Light=#0F000000, Dark=#19000000
-                    ScrollView.BorderBrush = new SolidColorBrush(isDark
-                        ? Windows.UI.Color.FromArgb(25, 0, 0, 0)
-                        : Windows.UI.Color.FromArgb(15, 0, 0, 0));
-                ScrollView.BorderThickness = new Thickness(0,0,0,1);
+            _cardLayoutActive = layout == "Card";
+            if (_cardLayoutActive) {
+                ApplyCardBrush((Content as FrameworkElement)?.RequestedTheme ?? ElementTheme.Default);
+                ScrollView.BorderThickness = new Thickness(0, 0, 0, 1);
             }
             else {
                 ScrollView.Background = null;

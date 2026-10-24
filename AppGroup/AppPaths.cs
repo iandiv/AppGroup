@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace AppGroup {
     public static class AppPaths {
-        public static bool UsePortableMode = false;
+        public static bool UsePortableMode = true;
 
         public static string BaseDataPath {
             get {

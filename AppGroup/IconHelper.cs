@@ -388,7 +388,200 @@ namespace AppGroup {
                 return originalIconPath;
             }
         }
+        public static Bitmap CreateBitmapFromHBitmap(IntPtr hBitmap) {
+            if (hBitmap == IntPtr.Zero) return null;
 
+            NativeMethods.BITMAP bm = new NativeMethods.BITMAP();
+            if (NativeMethods.GetObject(hBitmap, Marshal.SizeOf(typeof(NativeMethods.BITMAP)), ref bm) == 0)
+                return null;
+
+            int width = bm.bmWidth;
+            int height = Math.Abs(bm.bmHeight);
+            if (width <= 0 || height <= 0) return null;
+
+            Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var data = bitmap.LockBits(
+                new Rectangle(0, 0, width, height),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            try {
+                NativeMethods.BITMAPINFOHEADER bih = new NativeMethods.BITMAPINFOHEADER {
+                    biSize = Marshal.SizeOf(typeof(NativeMethods.BITMAPINFOHEADER)),
+                    biWidth = width,
+                    biHeight = -height,
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = 0
+                };
+
+                IntPtr hdc = NativeMethods.GetDC(IntPtr.Zero);
+                try {
+                    NativeMethods.GetDIBits(hdc, hBitmap, 0, (uint)height, data.Scan0, ref bih, 0);
+                }
+                finally {
+                    NativeMethods.ReleaseDC(IntPtr.Zero, hdc);
+                }
+            }
+            finally {
+                bitmap.UnlockBits(data);
+            }
+
+            CheckAndFixAlpha(bitmap);
+            return bitmap;
+        }
+
+        private static unsafe void CheckAndFixAlpha(Bitmap bitmap) {
+            var data = bitmap.LockBits(
+                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadWrite,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            try {
+                int totalPixels = bitmap.Width * bitmap.Height;
+                byte* ptr = (byte*)data.Scan0.ToPointer();
+                bool hasNonZeroAlpha = false;
+
+                for (int i = 0; i < totalPixels; i++) {
+                    if (ptr[i * 4 + 3] > 0) { hasNonZeroAlpha = true; break; }
+                }
+
+                if (!hasNonZeroAlpha) {
+                    for (int i = 0; i < totalPixels; i++) ptr[i * 4 + 3] = 255;
+                }
+                else {
+                    for (int i = 0; i < totalPixels; i++) {
+                        byte a = ptr[i * 4 + 3];
+                        if (a > 0 && a < 255) {
+                            ptr[i * 4 + 0] = (byte)Math.Min(255, (ptr[i * 4 + 0] * 255 + a / 2) / a);
+                            ptr[i * 4 + 1] = (byte)Math.Min(255, (ptr[i * 4 + 1] * 255 + a / 2) / a);
+                            ptr[i * 4 + 2] = (byte)Math.Min(255, (ptr[i * 4 + 2] * 255 + a / 2) / a);
+                        }
+                    }
+                }
+            }
+            finally {
+                bitmap.UnlockBits(data);
+            }
+        }
+
+        private static Rectangle GetNonTransparentBounds(Bitmap bmp) {
+            int minX = bmp.Width, minY = bmp.Height, maxX = -1, maxY = -1;
+            try {
+                for (int y = 0; y < bmp.Height; y++) {
+                    for (int x = 0; x < bmp.Width; x++) {
+                        if (bmp.GetPixel(x, y).A > 15) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (maxX < minX || maxY < minY)
+                return new Rectangle(0, 0, bmp.Width, bmp.Height);
+
+            return new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+        }
+
+        
+        private static Bitmap FitImageToSquare(Bitmap originalImage, int size) {
+            try {
+                Rectangle contentBounds = GetNonTransparentBounds(originalImage);
+                Bitmap resizedImage = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+                float scale = Math.Min((float)size / contentBounds.Width, (float)size / contentBounds.Height);
+                int drawWidth = Math.Max(1, (int)(contentBounds.Width * scale));
+                int drawHeight = Math.Max(1, (int)(contentBounds.Height * scale));
+                int drawX = (size - drawWidth) / 2;
+                int drawY = (size - drawHeight) / 2;
+
+                using (Graphics g = Graphics.FromImage(resizedImage)) {
+                    g.Clear(System.Drawing.Color.Transparent);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                    g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                    g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                    g.DrawImage(originalImage, new Rectangle(drawX, drawY, drawWidth, drawHeight), contentBounds, GraphicsUnit.Pixel);
+                }
+                return resizedImage;
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error resizing image: {ex.Message}");
+                return null;
+            }
+        }
+
+        public static Bitmap ExtractAppIconViaShellFactory(string parsingName, int size = 256) {
+            if (string.IsNullOrWhiteSpace(parsingName)) return null;
+
+            try {
+                Bitmap result = null;
+
+                void Action() {
+                    NativeMethods.CoInitializeEx(IntPtr.Zero, NativeMethods.COINIT_APARTMENTTHREADED);
+                    try {
+                        Guid iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+                        int hr = NativeMethods.SHCreateItemFromParsingName(parsingName, IntPtr.Zero, ref iid, out NativeMethods.IShellItemImageFactory factory);
+                        if (hr == 0 && factory != null) {
+                            try {
+                                IntPtr hBitmap = IntPtr.Zero;
+                                hr = factory.GetImage(new NativeMethods.SIZE(size, size), NativeMethods.SIIGBF.SIIGBF_BIGGERSIZEOK | NativeMethods.SIIGBF.SIIGBF_ICONONLY, out hBitmap);
+                                if (hr != 0 || hBitmap == IntPtr.Zero)
+                                    hr = factory.GetImage(new NativeMethods.SIZE(size, size), NativeMethods.SIIGBF.SIIGBF_BIGGERSIZEOK, out hBitmap);
+
+                                if (hBitmap != IntPtr.Zero) {
+                                    try {
+                                        using var rawBmp = CreateBitmapFromHBitmap(hBitmap);
+                                        if (rawBmp != null)
+                                            result = FitImageToSquare(rawBmp, size);   // renamed call
+                                    }
+                                    finally {
+                                        NativeMethods.DeleteObject(hBitmap);
+                                    }
+                                }
+                            }
+                            finally {
+                                Marshal.ReleaseComObject(factory);
+                            }
+                        }
+                    }
+                    catch (Exception ex) {
+                        Debug.WriteLine($"[ExtractAppIconViaShellFactory] Inner error: {ex.Message}");
+                    }
+                    finally {
+                        NativeMethods.CoUninitialize();
+                    }
+                }
+
+                if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA) {
+                    Action();
+                }
+                else {
+                    var thread = new Thread(Action);
+                    thread.SetApartmentState(ApartmentState.STA);
+                    thread.Start();
+                    thread.Join();
+                }
+                return result;
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"[ExtractAppIconViaShellFactory] Error: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static string GetShortcutArguments(string lnkPath) {
+            try {
+                Type t = Type.GetTypeFromProgID("WScript.Shell");
+                dynamic shell = Activator.CreateInstance(t);
+                return (string)shell.CreateShortcut(lnkPath).Arguments ?? "";
+            }
+            catch { return ""; }
+        }
         // Usage examples:
         // 
         // Option 1 - Convert PNG to black and white:
@@ -634,7 +827,13 @@ namespace AppGroup {
                     try {
                         Bitmap iconBitmap = null;
                         if (Path.GetExtension(filePath).ToLower() == ".lnk") {
-                            iconBitmap = await ExtractWindowsAppIconAsync(filePath, outputDirectory);
+                            //iconBitmap = await ExtractWindowsAppIconAsync(filePath, outputDirectory);
+                            string lnkArgs = GetShortcutArguments(filePath);
+                            if (lnkArgs.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+                                iconBitmap = ExtractAppIconViaShellFactory(lnkArgs, 256);
+
+                            if (iconBitmap == null)
+                                iconBitmap = await ExtractWindowsAppIconAsync(filePath, outputDirectory);
 
                             if (iconBitmap == null) {
                                 dynamic shell = Microsoft.VisualBasic.Interaction.CreateObject("WScript.Shell");

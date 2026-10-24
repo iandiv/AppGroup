@@ -186,8 +186,12 @@ namespace AppGroup {
             string safeName = string.Join("_", displayName.Split(System.IO.Path.GetInvalidFileNameChars()));
             string lnkPath = System.IO.Path.Combine(folder, $"{safeName}.lnk");
 
+            string explorerExe = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+
             var shellLink = (IShellLinkW)new CShellLink();
-            shellLink.SetPath($"shell:AppsFolder\\{aumid}");
+            shellLink.SetPath(explorerExe);
+            shellLink.SetArguments($"shell:AppsFolder\\{aumid}");
             shellLink.SetDescription(displayName);
 
             var persistFile = (IPersistFile)shellLink;

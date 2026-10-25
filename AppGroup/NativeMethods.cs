@@ -20,7 +20,8 @@ namespace AppGroup {
         public const uint WM_RBUTTONUP = 0x0205;
         public const uint WM_NULL = 0x0000;
         public const uint WM_TRAYICON = 0x8000;
-
+        public const int SM_CXSMICON = 49;
+        public const int SM_CYSMICON = 50;
         public const int ID_SHOW = 1001;
         public const int ID_EXIT = 1002;
 

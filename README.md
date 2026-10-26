@@ -1,9 +1,9 @@
 > [!NOTE]
 > Please ensure you're downloading from this official repository. An infringing copy has been published on GitHub and the Microsoft Store with no attribution, in violation of the MIT License — DMCA notices have been filed.
 ---
-![AppGroup](https://github.com/user-attachments/assets/169e1383-fe84-4f6b-997e-75ee218abe0c)
+<img width="256"  alt="appgroup high color" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
 
-# App Group
+# AppGroup
 
 Organize, customize, and launch your apps from the Windows taskbar. Create groups with custom icons, nest subgroups, and pin everything with a single drag.
 

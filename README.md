@@ -135,10 +135,19 @@ Add an existing group as an item inside another group. Subgroups can be nested w
 
 ### 6. Import Groups
 
-Click **⋮** in the main window → **Import** → choose **`.agz`** or **TaskbarGroups**.
+#### Import from `.agz`
 
-A preview will show all groups — check or uncheck individual groups before confirming. Selected groups are appended to your existing setup.
+1. Click **⋮** in the main window → **Import** → choose **`.agz`**.
+2. A preview shows all groups. Check or uncheck individual groups before confirming.
+3. Selected groups are appended to your existing setup.
 
+#### Import from `TaskbarGroups`
+
+Transfer your groups, settings, and setup in one click. AppGroup supports direct import of your existing TaskbarGroups data.
+
+1. Click **⋮** in the main window → **Import** → choose **TaskbarGroups**.
+2. In the dialog, type `%APPDATA%\Jack Schierbeck` into the address bar and press Enter. Then click the `taskbar-groups` folder and click **Select Folder**.
+3. A preview shows all groups. Pick the ones you want to include and confirm. They're added to your existing groups.
 ---
 
 

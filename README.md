@@ -1,5 +1,5 @@
 > [!NOTE]
-> Please ensure you're downloading from this official repository. An infringing copy has been published on GitHub and the Microsoft Store with no attribution, in violation of the MIT License — DMCA notices have been filed.
+> Please ensure you're downloading from this official repository.
 ---
 <img width="256"  alt="appgroup high color" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
 
@@ -7,12 +7,19 @@
 
 Organize, customize, and launch your apps from the Windows taskbar. Create groups with custom icons, nest subgroups, and pin everything with a single drag.
 
+[![Latest Release](https://img.shields.io/github/v/release/iandiv/AppGroup?style=for-the-badge&label=Latest&color=0078D4)](https://github.com/iandiv/AppGroup/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/iandiv/AppGroup/total?style=for-the-badge&label=Downloads&color=2EA44F)](https://github.com/iandiv/AppGroup/releases)
+[![Stars](https://img.shields.io/github/stars/iandiv/AppGroup?style=for-the-badge&label=Stars&color=F5B301)](https://github.com/iandiv/AppGroup/stargazers)
+[![License](https://img.shields.io/github/license/iandiv/AppGroup?style=for-the-badge&color=6E7781)](LICENSE)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)
+
+**[⬇ Download the latest release](https://github.com/iandiv/AppGroup/releases/latest)**
+
 ## Table of Contents
 
 - [Features](#features)
 - [Installation](#installation)
 - [How to Use](#how-to-use)
-- [Creating UWP Shortcuts](#creating-uwp-shortcuts)
 - [Support](#support)
 - [License](#license)
 
@@ -23,9 +30,10 @@ Organize, customize, and launch your apps from the Windows taskbar. Create group
 ### Group Management
 - Create, edit, delete, and duplicate groups
 - **Subgroups** — nest groups inside groups, infinitely deep
-- Reorder groups and apps via drag & drop
+- Reorder groups and apps via drag & drop, or sort groups alphabetically (disables manual reordering)
 - Drag a group icon to the Desktop or Taskbar to pin it
 - Jumplist actions: **Edit this Group** and **Launch All**
+- **Launch All** toggle in Settings
 
 ### Appearance & Customization
 - **Icon styles**: Single icon or auto-generated Grid icon from app icons
@@ -39,7 +47,8 @@ Organize, customize, and launch your apps from the Windows taskbar. Create group
 - Toggleable window and content animations
 
 ### App & Shortcut Support
-- UWP and PWA apps (via shortcuts)
+- Drag regular and UWP apps directly into a group from the Windows Start Menu or `shell:AppsFolder`
+- PWA apps (via shortcuts)
 - `.lnk` shortcuts without the arrow overlay (where supported)
 - Steam shortcuts (`.url`)
 - Run apps as Administrator
@@ -58,6 +67,7 @@ Organize, customize, and launch your apps from the Windows taskbar. Create group
 - Grayscale taskbar icon option
 - Supports all taskbar positions: Top, Bottom, Left, Right
 - Run at startup
+- Portable version stores groups in its own directory instead of `AppData\Local\AppGroup\Groups`
 - Built-in update notifier
 
 ---
@@ -74,6 +84,8 @@ App Group is available in four variants:
 | Portable (Bundled) | ❌ | ✅ |
 
 **Not sure which to pick?** Download **Setup (Bundled)** — it includes everything you need.
+
+> **Note:** Since v1.6.0, the portable versions store groups in their own folder. If your existing groups don't appear after upgrading, export them as an `.agz` file from the old version and import them into the portable one.
 
 1. Go to the [Releases page](https://github.com/iandiv/AppGroup/releases) and download your preferred variant.
 2. Run the `.exe` installer (Setup), or extract the `.zip` and run `AppGroup.exe` (Portable).
@@ -94,8 +106,12 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
 Click **+** in the main window and enter a group name.
 
 ### 2. Add Apps
-Click **+** inside the group or drag and drop apps into it.
-For UWP apps (e.g. Calculator, Settings), see [Creating UWP Shortcuts](#creating-uwp-shortcuts).
+Click **+** inside the group, or drag and drop apps into it.
+
+Regular and UWP apps (e.g. Calculator, Settings) can be dragged directly from either of these:
+
+- **The Windows Start Menu**
+- **`shell:AppsFolder`** — press `Win + R`, type `shell:AppsFolder`, and press Enter to open a folder with all installed apps (Win32 and UWP)
 
 ### 3. Customize the Group
 - **Header**: Enable *Show Header* and set its position (Top or Bottom)
@@ -125,16 +141,6 @@ A preview will show all groups — check or uncheck individual groups before con
 
 ---
 
-## Creating UWP Shortcuts
-
-UWP apps (like Calculator or Settings) don't appear as regular files. To add them to a group:
-
-1. Press `Win + R`, type `shell:AppsFolder`, and press Enter — this opens a folder with all installed apps (Win32 and UWP).
-2. Find the app, right-click it, and select **Create shortcut**.
-3. If prompted, click **Yes** — the shortcut will be placed on your Desktop.
-4. Drag that shortcut into your App Group.
-
----
 
 ## Support
 

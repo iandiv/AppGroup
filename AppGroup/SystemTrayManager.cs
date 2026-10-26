@@ -132,16 +132,18 @@ namespace AppGroup {
         // ── Icon & Menu ───────────────────────────────────────────────────────
 
         private static void CreateTrayIcon() {
-            // Load icon fresh each time
             if (_hIcon == IntPtr.Zero) {
+                int w = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON);
+                int h = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSMICON);
+
                 string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AppGroup.ico");
                 if (File.Exists(iconPath)) {
                     _hIcon = NativeMethods.LoadImage(IntPtr.Zero, iconPath,
-                        NativeMethods.IMAGE_ICON, 16, 16, NativeMethods.LR_LOADFROMFILE);
+                        NativeMethods.IMAGE_ICON, w, h, NativeMethods.LR_LOADFROMFILE);
                 }
                 if (_hIcon == IntPtr.Zero) {
                     _hIcon = NativeMethods.LoadImage(IntPtr.Zero, "#32516",
-                        NativeMethods.IMAGE_ICON, 16, 16, 0);
+                        NativeMethods.IMAGE_ICON, w, h, 0);
                 }
             }
 

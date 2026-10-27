@@ -143,11 +143,13 @@ Add an existing group as an item inside another group. Subgroups can be nested w
 
 #### Import from `TaskbarGroups`
 
-Transfer your groups, settings, and setup in one click. AppGroup supports direct import of your existing TaskbarGroups data.
-
-1. Click **⋮** in the main window → **Import** → choose **TaskbarGroups**.
-2. In the dialog, type `%APPDATA%\Jack Schierbeck` into the address bar and press Enter. Then click the `taskbar-groups` folder and click **Select Folder**.
+1. Click ⋮ in the main window → **Import** → choose **TaskbarGroups**.
+2. In the dialog, select the folder that contains `config`, then click **Select Folder**.
+   - **TaskbarGroupsFluent:** type `%APPDATA%\Jack Schierbeck` into the address bar and press Enter. Then click the `taskbar-groups` folder.
+   - **TaskbarGroups:** locate your TaskbarGroups folder.
 3. A preview shows all groups. Pick the ones you want to include and confirm. They're added to your existing groups.
+
+> **Note:** The import automatically finds the `config` folder. Don't select the `config` folder itself, since that isn't supported yet. Select its parent folder.
 ---
 
 

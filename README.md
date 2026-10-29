@@ -1,9 +1,20 @@
 > [!NOTE]
 > Please ensure you're downloading from this official repository.
----
-<img width="256"  alt="appgroup high color" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
 
-# AppGroup
+> [!TIP]
+> **AppGroup v1.6.0 VirusTotal results:** All four release variants were scanned and showed no detections at the time of checking.
+>
+> - [Portable (.zip)](https://www.virustotal.com/gui/file/5b8272f6deed5b14b52192e090a1cd8c244f22b5e4b7849b3ada39582c555bf9)
+> - [Portable (Bundled .zip)](https://www.virustotal.com/gui/file/9a98a8c7101eff049f177e75ff7459421fd7b8458fab5ea4524441c53e0e8685)
+> - [Setup (.exe)](https://www.virustotal.com/gui/file/3388223e02bf595ac417dba011ccd4ab555b5bbcb058bc3f506e0a56e757a5a4)
+> - [Setup (Bundled .exe)](https://www.virustotal.com/gui/file/a6cb1a9e88be7350702eeab3c77ae473827e5216aec817611bc0b11387a35845)
+
+---
+
+<img width="256" alt="appgroup high color" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
+
+
+# App Group
 
 Organize, customize, and launch your apps from the Windows taskbar. Create groups with custom icons, nest subgroups, and pin everything with a single drag.
 

@@ -3,23 +3,33 @@
 
 <div align="center">
 
-<img width="128" alt="AppGroup logo: Windows taskbar app group launcher" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
+<img width="200" alt="AppGroup logo: Windows taskbar app group launcher" src="https://github.com/user-attachments/assets/f952f7fa-2c12-41e1-ba7c-b3b6ea47c586" />
 
 # AppGroup: Windows Taskbar App Groups & Launcher
 
-**Organize your apps into groups you can pin to the Windows taskbar, then open any group from one icon.**
+**Organize your apps into groups you can pin to the Windows taskbar, in a popup that looks and feels like part of Windows 11.**
 
 [![Latest Release](https://img.shields.io/github/v/release/iandiv/AppGroup?style=for-the-badge&label=Latest&color=0078D4)](https://github.com/iandiv/AppGroup/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/iandiv/AppGroup/total?style=for-the-badge&label=Downloads&color=2EA44F)](https://github.com/iandiv/AppGroup/releases)
 [![Stars](https://img.shields.io/github/stars/iandiv/AppGroup?style=for-the-badge&label=Stars&color=F5B301)](https://github.com/iandiv/AppGroup/stargazers)
 [![License: MIT](https://img.shields.io/github/license/iandiv/AppGroup?style=for-the-badge&color=6E7781)](LICENSE)
-![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)
+![Platform: Windows 10 | 11](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)
 
 **[⬇ Download (Setup, Bundled)](https://github.com/iandiv/AppGroup/releases/latest)** · [Quick start](#quick-start) · [Demo](#see-it-in-action) · [FAQ](#faq) · [Get help](#help-and-support)
 
+<p align="center">
+  
+<img  width="310" alt="An AppGroup popup designed in the style of the Windows 11 Quick Settings panel"  src="https://github.com/user-attachments/assets/6cd38b41-ab70-4667-b8e5-70700f4eb89d" />
+
+<img width="300" alt="The Windows 11 Quick Settings panel"  src="https://github.com/user-attachments/assets/52193197-6552-4b8c-8716-7b7c5d7ebb86" />
+
+
+</p>
+<p align="center"><em>An AppGroup popup (left), inspired by the design of Windows 11 Quick Settings (right).</em></p>
+
 </div>
 
-AppGroup is a free, open-source (MIT) taskbar organizer and app launcher for Windows. It keeps the familiar Windows taskbar workflow: you pin a shortcut, and AppGroup supplies the popup and the group's contents.
+AppGroup is a free, open-source (MIT) taskbar organizer and app launcher for Windows. It keeps the familiar Windows taskbar workflow: you pin a shortcut, and AppGroup supplies the popup and the group's contents. Built with WinUI 3, its popups are designed to look and feel like a part of Windows 11, matching the Start menu and the Quick Settings and notification panels, in both Light and Dark mode.
 
 ## Why AppGroup?
 
@@ -30,6 +40,8 @@ A crowded taskbar slows you down. With AppGroup you can, for example:
 - **one for creative apps**,
 
 then open the group you need from a single taskbar icon instead of hunting through a long row of icons. A group can also open all of its apps at once with **Launch All**.
+
+And it doesn't look bolted on: AppGroup follows Windows 11 design (rounded corners, Mica/acrylic-style surfaces, accent colors) so it blends in with the rest of your system.
 
 ## Quick start
 
@@ -72,19 +84,19 @@ https://github.com/user-attachments/assets/6d37560f-16ea-45a9-b8b2-9d94bced0ff2
 <h3 align="center">System tray</h3>
 
 <p align="center">
-  <img width="250" alt="AppGroup running in the Windows system tray" src="https://github.com/user-attachments/assets/8319d486-e1c5-470d-8b8e-1c49f4fb2f92" />
+  <img width="250" alt="AppGroup running in the Windows system tray" src="https://github.com/user-attachments/assets/6cd38b41-ab70-4667-b8e5-70700f4eb89d" />
 </p>
 <p align="center"><em>AppGroup can live in the system tray.</em></p>
 
-<h3 align="center">Layouts and header position</h3>
+<h3 align="center">Looks like part of Windows 11</h3>
 
 <p align="center">
   <img width="250" alt="AppGroup Default layout with the group name header at the bottom" src="https://github.com/user-attachments/assets/4129bc50-9bf6-4e26-9282-bd1d32461632" />
   <img width="250" alt="AppGroup Default layout with the group name header at the top" src="https://github.com/user-attachments/assets/85db9020-94ac-491b-b7e3-d18429db97b1" />
-  <img width="250" alt="AppGroup Card layout with the group name header at the bottom" src="https://github.com/user-attachments/assets/f9f0cfb8-b5cd-4274-b498-0c61527511da" />
-  <img width="250" alt="AppGroup Card layout with the group name header at the top" src="https://github.com/user-attachments/assets/b0afdd7f-4bfe-4c17-a031-f6721f86c020" />
+  <img width="250" alt="AppGroup Card layout styled like the Windows 11 Quick Settings panel, header at the bottom" src="https://github.com/user-attachments/assets/f9f0cfb8-b5cd-4274-b498-0c61527511da" />
+  <img width="250" alt="AppGroup Card layout styled like the Windows 11 Quick Settings panel, header at the top" src="https://github.com/user-attachments/assets/b0afdd7f-4bfe-4c17-a031-f6721f86c020" />
 </p>
-<p align="center"><em>Default and Card layouts, each with the header at the top or bottom.</em></p>
+<p align="center"><em>The Card layout, styled after Windows 11 Quick Settings. Default and Card layouts both work with the header at the top or bottom.</em></p>
 
 <h3 align="center">Import with preview</h3>
 
@@ -102,6 +114,7 @@ https://github.com/user-attachments/assets/ed518124-53a7-40c4-97cb-42d7ac331d63
 - Jumplist actions: **Edit this Group** and **Launch All** (toggle in Settings)
 
 ### Appearance
+- **Native Windows 11 look:** popups styled after the Start menu and Quick Settings, with Light and Dark mode and accent colors
 - **Icon styles:** single icon, or an auto-generated grid icon from the apps' icons
 - **Layouts:** Default or Card; adjustable grid columns
 - Accent-colored group backgrounds; show or hide group name headers (Top or Bottom)
@@ -191,6 +204,9 @@ The source code is public. Download only from this repository's [Releases page](
 
 ### How do I group apps on the Windows taskbar?
 Create a group in AppGroup, add your apps, then drag the group icon onto the taskbar. Clicking the pinned shortcut opens a popup where you can launch any app in the group.
+
+### Does AppGroup look like it belongs in Windows 11?
+Yes. That's a core design goal. The popup is built with WinUI 3 and styled to match native Windows 11 surfaces such as the Start menu and Quick Settings.
 
 ### Does AppGroup modify the Windows taskbar?
 No. AppGroup creates a group shortcut that you pin. Windows still manages the taskbar; AppGroup provides the popup and group contents.

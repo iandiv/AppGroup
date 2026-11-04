@@ -321,6 +321,15 @@
 
 
 
+                <TextBlock VerticalAlignment="Center" Text="Extensions" FontWeight="SemiBold" Margin="5,30,5,5"/>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="ExtensionsListText" TextWrapping="Wrap"/>
+                        <HyperlinkButton Content="Open extensions folder" Padding="0" Click="OpenExtensionsFolder_Click"/>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock VerticalAlignment="Center" Text="About" FontWeight="SemiBold" Margin="5,30,5,5"/>
 
                 <Border Style="{StaticResource SettingsCardStyle}">

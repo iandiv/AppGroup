@@ -1,0 +1,9 @@
+{
+  "id": "appgroup.separators",
+  "name": "Taskbar Separators",
+  "description": "Create separator shortcuts you can pin between taskbar icons.",
+  "version": "1.0.0",
+  "protocol": 1,
+  "executable": "AppGroup.Extension.Separators.exe",
+  "capabilities": [ "taskbarSeparator" ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "appgroup.folders",
+  "name": "Folders",
+  "description": "Add folders to a group and browse their contents from the popup.",
+  "version": "1.0.0",
+  "protocol": 1,
+  "executable": "AppGroup.Extension.Folders.exe",
+  "capabilities": [ "folderItems" ]
+}

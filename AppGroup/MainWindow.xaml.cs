@@ -23,6 +23,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using WinRT.Interop;
 using WinUIEx;
+using AppGroup.Extensions;
 
 namespace AppGroup {
     public class GroupItem : INotifyPropertyChanged {
@@ -777,6 +778,31 @@ namespace AppGroup {
 
         private void ForceTaskbarUpdate_Click(object sender, RoutedEventArgs e) =>
             TaskbarManager.ForceTaskbarUpdateAsync();
+
+        private void MoreMenu_Opening(object sender, object e) {
+            ExtensionManager.Refresh();
+            AddSeparatorMenuItem.Visibility = ExtensionManager.Has(ExtensionCapabilities.TaskbarSeparator)
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void AddSeparator_Click(object sender, RoutedEventArgs e) {
+            var result = await ExtensionManager.RunAsync(ExtensionCapabilities.TaskbarSeparator, "create");
+            string shortcutPath = result?["path"]?.GetValue<string>();
+            if (this.Content?.XamlRoot == null) return;
+
+            bool created = !string.IsNullOrEmpty(shortcutPath) && File.Exists(shortcutPath);
+            var dialog = new ContentDialog {
+                Title = created ? "Separator created" : "Couldn't create separator",
+                Content = created
+                    ? "Right-click the highlighted shortcut and choose \"Pin to taskbar\" (under \"Show more options\" on Windows 11), then drag it where you want it."
+                    : "The Taskbar Separators extension didn't respond. Try reinstalling it.",
+                CloseButtonText = "OK",
+                XamlRoot = this.Content.XamlRoot
+            };
+            if (created)
+                Process.Start("explorer.exe", $"/select,\"{shortcutPath}\"");
+            await dialog.ShowAsync();
+        }
 
         private void AddGroup(object sender, RoutedEventArgs e) {
             int groupId = JsonConfigHelper.GetNextGroupId();

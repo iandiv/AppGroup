@@ -98,7 +98,7 @@
 
 
                         <Button.Flyout>
-                            <MenuFlyout>
+                            <MenuFlyout Opening="MoreMenu_Opening">
                                 <MenuFlyoutSubItem Text="Import" Icon="Download">
                                     <MenuFlyoutItem Text=".agz" Icon="Document" Click="ImportBackupButton_Click"/>
                                     <MenuFlyoutItem Text="TaskbarGroups" Icon="Folder" Click="ImportTbgButton_Click"/>
@@ -107,6 +107,11 @@
                                 <MenuFlyoutItem Text="Export" Icon="Upload" Click="ExportBackupButton_Click"/>
                                 <MenuFlyoutSeparator/>
                                 <MenuFlyoutItem Text="Force Taskbar Update" Icon="Sync" Click="ForceTaskbarUpdate_Click"/>
+                                <MenuFlyoutItem x:Name="AddSeparatorMenuItem" Text="Add Taskbar Separator" Click="AddSeparator_Click" Visibility="Collapsed">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE76F;"/>
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                                 <MenuFlyoutSeparator/>
                                 <MenuFlyoutItem Text="Settings" Icon="Setting" Click="SettingsButton_Click"/>
                             </MenuFlyout>

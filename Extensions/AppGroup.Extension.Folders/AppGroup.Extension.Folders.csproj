@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<AssemblyName>AppGroup.Extension.Folders</AssemblyName>
+		<RootNamespace>AppGroup.Extension.Folders</RootNamespace>
+		<Version>1.0.0</Version>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="System.Drawing.Common" Version="9.0.3" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Update="extension.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
+</Project>

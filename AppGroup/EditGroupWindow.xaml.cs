@@ -14,6 +14,7 @@
     using System.Text.Json.Nodes;
     using System.Threading.Tasks;
     using Windows.ApplicationModel.DataTransfer;
+    using AppGroup.Extensions;
     using Windows.Storage;
     using Windows.Storage.Pickers;
     using WinRT.Interop;
@@ -484,6 +485,11 @@
                 if (e.DataView.Contains(StandardDataFormats.StorageItems)) {
                     var items = await e.DataView.GetStorageItemsAsync();
                     foreach (var item in items) {
+                        if (item is StorageFolder folder) {
+                            if (ExtensionManager.Has(ExtensionCapabilities.FolderItems))
+                                await AddFolderAsync(folder.Path);
+                            continue;
+                        }
                         if (item is StorageFile file) {
                             string resolvedPath = file.Path;
                             string extension = file.FileType;
@@ -677,7 +683,44 @@
                     return null;
             }
         }
-        private void BrowseFilesClick(object sender, RoutedEventArgs e) => BrowseFiles();
+        private void BrowseFilesClick(object sender, RoutedEventArgs e) {
+            if (!ExtensionManager.Has(ExtensionCapabilities.FolderItems) || sender is not FrameworkElement anchor) {
+                BrowseFiles();
+                return;
+            }
+
+            var flyout = new MenuFlyout();
+            var filesItem = new MenuFlyoutItem { Text = "Add files", Icon = new FontIcon { Glyph = "\ue8a5" } };
+            filesItem.Click += (_, _) => BrowseFiles();
+            var folderItem = new MenuFlyoutItem { Text = "Add folder", Icon = new FontIcon { Glyph = "\ue8b7" } };
+            folderItem.Click += (_, _) => BrowseFolder();
+            flyout.Items.Add(filesItem);
+            flyout.Items.Add(folderItem);
+            flyout.ShowAt(anchor);
+        }
+
+        private async void BrowseFolder() {
+            var folderPicker = new FolderPicker { SuggestedStartLocation = PickerLocationId.Desktop };
+            folderPicker.FileTypeFilter.Add("*");
+            InitializeWithWindow.Initialize(folderPicker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+            StorageFolder folder = await folderPicker.PickSingleFolderAsync();
+            if (folder == null) return;
+            await AddFolderAsync(folder.Path);
+            RefreshListViewState();
+        }
+
+        private async Task AddFolderAsync(string folderPath) {
+            string icon = await IconCache.GetFolderIconPathAsync(folderPath);
+            ExeFiles.Add(new ExeFileModel {
+                FileName = Path.GetFileName(folderPath.TrimEnd('\\', '/')),
+                Icon = icon,
+                FilePath = folderPath,
+                IconPath = icon,
+                Tooltip = "",
+                Args = ""
+            });
+        }
 
       
             // Fix: extracted shared list-view refresh logic to avoid duplication and bugs
@@ -872,6 +915,8 @@
                                     if (string.IsNullOrWhiteSpace(icon) || !File.Exists(icon)) {
                                       if (filePath.EndsWith(".url", StringComparison.OrdinalIgnoreCase))
                                             icon = await IconHelper.GetUrlFileIconAsync(filePath);
+                                        else if (Directory.Exists(filePath))
+                                            icon = await IconCache.GetFolderIconPathAsync(filePath);
                                         else
                                             icon = await IconCache.GetIconPathAsync(filePath);
                                     }

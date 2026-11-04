@@ -6,6 +6,8 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using AppGroup.Extensions;
 using System.Threading.Tasks;
 
 namespace AppGroup {
@@ -28,9 +30,25 @@ namespace AppGroup {
             this.Loaded += SettingsDialog_Loaded;
         }
 
+        private void LoadExtensions() {
+            ExtensionManager.Refresh();
+            var extensions = ExtensionManager.Extensions;
+            ExtensionsListText.Text = extensions.Count == 0
+                ? "No extensions installed."
+                : string.Join("\n", extensions.Select(x => $"{x.Name} {x.Version}: {x.Description}"));
+        }
+
+        private void OpenExtensionsFolder_Click(object sender, RoutedEventArgs e) {
+            string folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AppGroup", "Extensions");
+            Directory.CreateDirectory(folder);
+            Process.Start("explorer.exe", $"\"{folder}\"");
+        }
+
         private async void SettingsDialog_Loaded(object sender, RoutedEventArgs e) {
             try {
                 await LoadCurrentSettingsAsync();
+                LoadExtensions();
                 ThemeComboBox.SelectionChanged += ThemeComboBox_SelectionChanged;
                 PopupThemeComboBox.SelectionChanged += PopupThemeComboBox_SelectionChanged;
                 AccentBackgroundToggle.Toggled += AccentBackgroundToggle_Toggled;

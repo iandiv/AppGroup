@@ -24,6 +24,7 @@ using Windows.Graphics;
 using Windows.UI.ViewManagement;
 using WinRT.Interop;
 using WinUIEx;
+using AppGroup.Extensions;
 using File = System.IO.File;
 
 namespace AppGroup {
@@ -70,6 +71,7 @@ namespace AppGroup {
         }
         public event PropertyChangedEventHandler PropertyChanged;
         public bool IsSubgroup { get; set; }
+        public bool IsFolder { get; set; }
         public string SubgroupName { get; set; }
       
     }
@@ -1468,9 +1470,11 @@ namespace AppGroup {
                         ? properties.Tooltip : GetDisplayNameBackground(path);
                     string customIconPath = !string.IsNullOrEmpty(properties.Icon) ? properties.Icon : null;
 
+                    bool isFolder = Directory.Exists(path);
                     var popupItem = new PopupItem {
                         Path = path,
-                        Name = Path.GetFileNameWithoutExtension(path),
+                        Name = isFolder ? Path.GetFileName(path.TrimEnd('\\', '/')) : Path.GetFileNameWithoutExtension(path),
+                        IsFolder = isFolder,
                         ToolTip = tooltip,
                         Icon = null,
                         Args = properties.Args ?? "",
@@ -1607,6 +1611,9 @@ _ = Task.WhenAll(iconTasks);
                     iconPath = customIcon;
                 }
                
+                else if (item.IsFolder) {
+                    iconPath = await IconCache.GetFolderIconPathAsync(path).ConfigureAwait(false);
+                }
                 else {
                     iconPath = Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase)
                         ? await IconHelper.GetUrlFileIconAsync(path).ConfigureAwait(false)
@@ -1852,41 +1859,77 @@ _ = Task.WhenAll(iconTasks);
                 if (popupItem.IsSubgroup) {
                     OpenSubPopup(popupItem.SubgroupName);
                 }
-              
+                else if (popupItem.IsFolder && ExtensionManager.Has(ExtensionCapabilities.FolderItems)) {
+                    ShowFolderFlyout(popupItem, sender as ListViewBase);
+                }
                 else {
-                    var root = this;
-                    while (root._parentPopup != null) root = root._parentPopup;
-
-                    string capturedPath = popupItem.Path;
-                    string capturedArgs = popupItem.Args;
-
-                    root.DispatcherQueue.TryEnqueue(async () => {
-                        root.StopFocusTimer();
-                        CloseAllChildrenRecursive(root._openSubPopups);
-                        root._openSubPopups.Clear();
-                        root._isLoaded = false;
-                        _isPopupCurrentlyOpen = false;
-                        _lastHiddenAt = DateTime.Now;
-                        var settings = await SettingsHelper.LoadSettingsAsync();
-                        if (root._wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
-                            root.AnimateWindowSlideDown(root.GetWindowHandle(), () => {
-                                root.DispatcherQueue.TryEnqueue(() => {
-                                    root.HideAndResetSize();
-                                    NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
-                                });
-                            });
-                        }
-                        else {
-                            root.Hide();
-                            NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
-                        }
-
-                        TryLaunchApp(capturedPath, capturedArgs);
-                    });
-
-                    if (_parentPopup != null) this.Hide();
+                    LaunchAndHide(popupItem.Path, popupItem.Args);
                 }
             }
+        }
+
+        private void LaunchAndHide(string path, string args) {
+            var root = this;
+            while (root._parentPopup != null) root = root._parentPopup;
+
+            string capturedPath = path;
+            string capturedArgs = args;
+
+            root.DispatcherQueue.TryEnqueue(async () => {
+                root.StopFocusTimer();
+                CloseAllChildrenRecursive(root._openSubPopups);
+                root._openSubPopups.Clear();
+                root._isLoaded = false;
+                _isPopupCurrentlyOpen = false;
+                _lastHiddenAt = DateTime.Now;
+                var settings = await SettingsHelper.LoadSettingsAsync();
+                if (root._wasLaunchedFromTaskbar && settings.EnableWindowSlideAnimation) {
+                    root.AnimateWindowSlideDown(root.GetWindowHandle(), () => {
+                        root.DispatcherQueue.TryEnqueue(() => {
+                            root.HideAndResetSize();
+                            NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
+                        });
+                    });
+                }
+                else {
+                    root.Hide();
+                    NativeMethods.PositionWindowOffScreen(root.GetWindowHandle());
+                }
+
+                TryLaunchApp(capturedPath, capturedArgs);
+            });
+
+            if (_parentPopup != null) this.Hide();
+        }
+
+        private async void ShowFolderFlyout(PopupItem folderItem, ListViewBase listView) {
+            var target = listView?.ContainerFromItem(folderItem) as FrameworkElement;
+            var result = await ExtensionManager.RunAsync(ExtensionCapabilities.FolderItems, "list", "--path", folderItem.Path);
+            if (target == null || result?["items"] is not System.Text.Json.Nodes.JsonArray entries) {
+                LaunchAndHide(folderItem.Path, "");
+                return;
+            }
+
+            var flyout = new MenuFlyout();
+            var openItem = new MenuFlyoutItem { Text = "Open in File Explorer", Icon = new FontIcon { Glyph = "\ued43" } };
+            openItem.Click += (_, _) => LaunchAndHide(folderItem.Path, "");
+            flyout.Items.Add(openItem);
+            if (entries.Count > 0) flyout.Items.Add(new MenuFlyoutSeparator());
+
+            foreach (var entry in entries.OfType<System.Text.Json.Nodes.JsonObject>()) {
+                string entryPath = entry["path"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(entryPath)) continue;
+                string icon = entry["icon"]?.GetValue<string>();
+                var menuItem = new MenuFlyoutItem { Text = entry["name"]?.GetValue<string>() ?? Path.GetFileName(entryPath) };
+                if (!string.IsNullOrEmpty(icon) && File.Exists(icon))
+                    menuItem.Icon = new BitmapIcon { UriSource = new Uri(icon), ShowAsMonochrome = false };
+                menuItem.Click += (_, _) => LaunchAndHide(entryPath, "");
+                flyout.Items.Add(menuItem);
+            }
+
+            flyout.Opened += (_, _) => _isFlyoutOpen = true;
+            flyout.Closed += (_, _) => _isFlyoutOpen = false;
+            flyout.ShowAt(target);
         }
 
         private async void GridView_RightTapped(object sender, RightTappedRoutedEventArgs e) {

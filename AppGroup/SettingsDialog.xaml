@@ -261,6 +261,87 @@
                         </InfoBar>
                     </StackPanel>
                 </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Popup style" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Default: Windows acrylic. Rounded: transparent rounded holder. Solid: opaque rounded panel."
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <ComboBox x:Name="PopupStyleComboBox" Grid.Column="1" VerticalAlignment="Center" MinWidth="160">
+                            <ComboBoxItem Content="Default" Tag="Default"/>
+                            <ComboBoxItem Content="Rounded" Tag="Rounded"/>
+                            <ComboBoxItem Content="Solid" Tag="Solid"/>
+                        </ComboBox>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Corner radius" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Roundness of the popup corners"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <Slider x:Name="CornerRadiusSlider" Width="160" Minimum="0" Maximum="40" StepFrequency="1" Value="8"/>
+                            <TextBlock x:Name="CornerRadiusValue" Width="48" VerticalAlignment="Center" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Background opacity" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Tint strength of the Rounded style"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <Slider x:Name="OpacitySlider" Width="160" Minimum="0" Maximum="100" StepFrequency="1" Value="60"/>
+                            <TextBlock x:Name="OpacityValue" Width="48" VerticalAlignment="Center" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Distance from taskbar" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Gap between the popup and the taskbar edge"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <Slider x:Name="GapSlider" Width="160" Minimum="0" Maximum="40" StepFrequency="1" Value="12"/>
+                            <TextBlock x:Name="GapValue" Width="48" VerticalAlignment="Center" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <TextBlock VerticalAlignment="Center" Text="Others" FontWeight="SemiBold" Margin="5,30,5,5"/>
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid>

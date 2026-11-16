@@ -83,6 +83,10 @@ namespace AppGroup {
         private const int BUTTON_MARGIN = 4;
         private const int DEFAULT_LABEL_SIZE = 12;
         private const string DEFAULT_LABEL_POSITION = "Bottom";
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWA_BORDER_COLOR = 34;
+        private const double CHROME_PAD = 12;
+        private string _appliedPopupStyle = "Default";
         private bool _hasBeenLoaded = false;
 
         private IntPtr _hwnd;
@@ -531,14 +535,92 @@ namespace AppGroup {
             return NativeMethods.DefSubclassProc(hWnd, msg, wParam, lParam);
         }
 
+        private void ApplyWindowChrome(string style) {
+            if (style == _appliedPopupStyle) return;
+            _appliedPopupStyle = style;
+            IntPtr hwnd = this.GetWindowHandle();
+
+            if (style == "Default") {
+                _windowHelper.SetSystemBackdrop(WindowHelper.BackdropType.AcrylicBase);
+                _windowHelper.IsResizable = true;
+                _windowHelper.HasBorder = true;
+                int cornerPref = 0;
+                int borderColor = unchecked((int)0xFFFFFFFF);
+                NativeMethods.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
+                NativeMethods.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+            }
+            else {
+                _windowHelper.SetSystemBackdrop(WindowHelper.BackdropType.None);
+                this.SystemBackdrop = new TransparentTintBackdrop();
+                _windowHelper.IsResizable = false;
+                _windowHelper.HasBorder = false;
+                int cornerPref = 1;
+                int borderColor = unchecked((int)0xFFFFFFFE);
+                NativeMethods.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
+                NativeMethods.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+            }
+        }
+
+        private void ApplyChromeStyle(SettingsHelper.AppSettings settings, string popupTheme, bool useAccent) {
+            ElementTheme theme = useAccent
+                ? ElementTheme.Dark
+                : (popupTheme switch {
+                    "Light" => ElementTheme.Light,
+                    "Dark" => ElementTheme.Dark,
+                    "AppMode" => ResolveAppModeTheme(),
+                    _ => ResolveWindowsModeTheme()
+                });
+
+            if (Content is FrameworkElement root)
+                root.RequestedTheme = theme;
+            ApplyCardBrush(theme);
+            MainGrid.Background = null;
+
+            bool isDark = theme == ElementTheme.Dark ||
+                (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            byte alpha = (settings.PopupStyle == "Solid" || !IsTransparencyEnabled())
+                ? (byte)255
+                : (byte)Math.Round(settings.PopupOpacity * 255 / 100.0);
+
+            Windows.UI.Color tint;
+            if (useAccent && Application.Current.Resources.TryGetValue("SystemAccentColorDark2", out object accent)) {
+                var c = (Windows.UI.Color)accent;
+                tint = Windows.UI.Color.FromArgb(alpha, c.R, c.G, c.B);
+            }
+            else {
+                tint = isDark
+                    ? Windows.UI.Color.FromArgb(alpha, 32, 32, 32)
+                    : Windows.UI.Color.FromArgb(alpha, 243, 243, 243);
+            }
+
+            PopupChrome.Background = new SolidColorBrush(tint);
+            PopupChrome.CornerRadius = new CornerRadius(settings.PopupCornerRadius);
+            PopupChrome.BorderThickness = new Thickness(1);
+            PopupChrome.BorderBrush = new SolidColorBrush(isDark
+                ? Windows.UI.Color.FromArgb(40, 255, 255, 255)
+                : Windows.UI.Color.FromArgb(40, 0, 0, 0));
+        }
+
         private void UpdateMainGridBackground(UISettings uiSettings) {
             var settings = SettingsHelper.GetCurrentSettings();
-            string popupTheme = settings?.PopupTheme ?? "WindowsMode";
+            string popupTheme = settings.PopupTheme ?? "WindowsMode";
+            string popupStyle = settings.PopupStyle ?? "Default";
+            bool useAccent = popupTheme == "WindowsMode"
+                && settings.PopupAccentBackground
+                && IsAccentColorOnStartTaskbarEnabled();
 
-            // Accent color only applies to WindowsMode (it's a Windows/taskbar-level setting)
-            if (popupTheme == "WindowsMode"
-       && settings.PopupAccentBackground
-       && IsAccentColorOnStartTaskbarEnabled()) {
+            if (popupStyle != "Default") {
+                ApplyChromeStyle(settings, popupTheme, useAccent);
+                return;
+            }
+
+            PopupChrome.Background = null;
+            PopupChrome.BorderBrush = null;
+            PopupChrome.BorderThickness = new Thickness(0);
+            PopupChrome.CornerRadius = new CornerRadius(0);
+
+            if (useAccent) {
                 if (Content is FrameworkElement rootElement)
                     rootElement.RequestedTheme = ElementTheme.Dark;
                 ApplyCardBrush(ElementTheme.Dark);
@@ -589,6 +671,13 @@ namespace AppGroup {
                 return isLight ? ElementTheme.Light : ElementTheme.Dark;
             }
             return ElementTheme.Default;
+        }
+
+        private bool IsTransparencyEnabled() {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            object value = key?.GetValue("EnableTransparency");
+            return value == null || (int)value != 0;
         }
 
         private bool IsAccentColorOnStartTaskbarEnabled() {
@@ -939,6 +1028,11 @@ namespace AppGroup {
         // }
 
         private async Task InitializeWindow() {
+            var popupSettings = await SettingsHelper.LoadSettingsAsync();
+            ApplyWindowChrome(popupSettings.PopupStyle);
+            double chromePad = popupSettings.PopupStyle == "Default" ? 0 : CHROME_PAD;
+            PopupChrome.Padding = new Thickness(chromePad);
+
             int maxPathItems = 1;
             int maxColumns = 1;
             bool groupHeader = false;
@@ -1016,8 +1110,9 @@ namespace AppGroup {
             int scaledHeight = (int)(dynamicHeight * scaleFactor);
             if (groupHeader) scaledHeight += 40;
 
-            int finalWidth = scaledWidth + 30;
-            int finalHeight = scaledHeight + 20;
+            int chromeExtra = (int)Math.Round(chromePad * 2 * scaleFactor);
+            int finalWidth = scaledWidth + 30 + chromeExtra;
+            int finalHeight = scaledHeight + 20 + chromeExtra;
             if (layout == "Card" && groupHeader) finalHeight += 15;
 
             int screenHeight = (int)DisplayArea.Primary.WorkArea.Height;

@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AppGroup {
@@ -15,6 +16,7 @@ namespace AppGroup {
         private bool _isLoading = true;
         private bool _isCheckingForUpdates = false;
         private string _updateReleaseUrl = "";
+        private CancellationTokenSource _sliderSaveCts;
 
         public SettingsDialog() {
             this.InitializeComponent();
@@ -34,6 +36,10 @@ namespace AppGroup {
                 ThemeComboBox.SelectionChanged += ThemeComboBox_SelectionChanged;
                 PopupThemeComboBox.SelectionChanged += PopupThemeComboBox_SelectionChanged;
                 AccentBackgroundToggle.Toggled += AccentBackgroundToggle_Toggled;
+                PopupStyleComboBox.SelectionChanged += PopupStyleComboBox_SelectionChanged;
+                CornerRadiusSlider.ValueChanged += PopupSlider_ValueChanged;
+                OpacitySlider.ValueChanged += PopupSlider_ValueChanged;
+                GapSlider.ValueChanged += PopupSlider_ValueChanged;
                 // Wire up toggle events after loading to prevent firing during init
 
                 SystemTrayToggle.Toggled += SystemTrayToggle_Toggled;
@@ -90,6 +96,16 @@ namespace AppGroup {
                 };
                 AccentBackgroundToggle.IsOn = _settings.PopupAccentBackground;
                 UpdateAccentBackgroundState(_settings.PopupTheme);
+                PopupStyleComboBox.SelectedIndex = _settings.PopupStyle switch {
+                    "Rounded" => 1,
+                    "Solid" => 2,
+                    _ => 0
+                };
+                CornerRadiusSlider.Value = _settings.PopupCornerRadius;
+                OpacitySlider.Value = _settings.PopupOpacity;
+                GapSlider.Value = _settings.PopupGap;
+                UpdateSliderLabels();
+                UpdateStyleControlsState(_settings.PopupStyle);
                 var theme = _settings.AppTheme switch {
                     "Light" => ElementTheme.Light,
                     "Dark" => ElementTheme.Dark,
@@ -264,6 +280,48 @@ namespace AppGroup {
                 _isLoading = false;
             }
         }
+        private void UpdateSliderLabels() {
+            CornerRadiusValue.Text = $"{(int)CornerRadiusSlider.Value} px";
+            OpacityValue.Text = $"{(int)OpacitySlider.Value}%";
+            GapValue.Text = $"{(int)GapSlider.Value} px";
+        }
+
+        private void UpdateStyleControlsState(string style) {
+            CornerRadiusSlider.IsEnabled = style == "Rounded" || style == "Solid";
+            OpacitySlider.IsEnabled = style == "Rounded";
+        }
+
+        private async void PopupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+            if (_isLoading) return;
+            try {
+                var selected = (PopupStyleComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Default";
+                UpdateStyleControlsState(selected);
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving popup style: {ex.Message}");
+            }
+        }
+
+        private async void PopupSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e) {
+            UpdateSliderLabels();
+            if (_isLoading) return;
+
+            _sliderSaveCts?.Cancel();
+            _sliderSaveCts = new CancellationTokenSource();
+            var token = _sliderSaveCts.Token;
+
+            try {
+                await Task.Delay(300, token);
+                await SaveSettingsAsync();
+            }
+            catch (OperationCanceledException) {
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving popup slider settings: {ex.Message}");
+            }
+        }
+
         private async Task SaveSettingsAsync() {
             try {
                 if (_settings == null) {
@@ -280,6 +338,11 @@ namespace AppGroup {
                 _settings.EnableLaunchAll = LaunchAllToggle.IsOn;
                 _settings.AppTheme = (ThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "System";
                 _settings.PopupTheme = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "WindowsMode";
+                _settings.PopupAccentBackground = AccentBackgroundToggle.IsOn;
+                _settings.PopupStyle = (PopupStyleComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Default";
+                _settings.PopupCornerRadius = (int)CornerRadiusSlider.Value;
+                _settings.PopupOpacity = (int)OpacitySlider.Value;
+                _settings.PopupGap = (int)GapSlider.Value;
                 // Save to file
                 await SettingsHelper.SaveSettingsAsync(_settings);
 

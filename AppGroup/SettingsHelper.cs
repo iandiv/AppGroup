@@ -22,10 +22,22 @@ namespace AppGroup {
             public string PopupTheme { get; set; } = "WindowsMode";
             public bool PopupAccentBackground { get; set; } = true;
             public bool EnableLaunchAll { get; set; } = false;
+            public string PopupStyle { get; set; } = "Default";
+            public int PopupCornerRadius { get; set; } = 8;
+            public int PopupOpacity { get; set; } = 60;
+            public int PopupGap { get; set; } = 12;
         }
 
 
         private static AppSettings _currentSettings;
+
+        private static void Normalize(AppSettings settings) {
+            settings.PopupCornerRadius = Math.Clamp(settings.PopupCornerRadius, 0, 40);
+            settings.PopupOpacity = Math.Clamp(settings.PopupOpacity, 0, 100);
+            settings.PopupGap = Math.Clamp(settings.PopupGap, 0, 40);
+            if (settings.PopupStyle != "Default" && settings.PopupStyle != "Rounded" && settings.PopupStyle != "Solid")
+                settings.PopupStyle = "Default";
+        }
 
         public static async Task<AppSettings> LoadSettingsAsync() {
             try {
@@ -39,6 +51,7 @@ namespace AppGroup {
                 }
 
                 // Apply startup setting if this is the first time loading
+                Normalize(_currentSettings);
                 await EnsureStartupSettingIsApplied();
             }
             catch (Exception ex) {
@@ -127,6 +140,7 @@ namespace AppGroup {
 
         public static async Task SaveSettingsAsync(AppSettings settings) {
             try {
+                Normalize(settings);
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
 
                 var options = new JsonSerializerOptions {

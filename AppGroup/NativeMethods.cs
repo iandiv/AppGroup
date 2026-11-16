@@ -903,7 +903,24 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
             return TaskbarPosition.Bottom;
         }
 
-        public static void PositionWindowAboveTaskbar(IntPtr hWnd, bool show = true, POINT? cursorOverride = null) { 
+        private static int GetAutoHideTaskbarThickness(MONITORINFO mi, TaskbarPosition pos, float dpiScale) {
+            int fallback = (int)Math.Round(48 * dpiScale);
+            int minVisible = (int)Math.Round(24 * dpiScale);
+
+            var data = new APPBARDATA();
+            data.cbSize = (uint)Marshal.SizeOf(typeof(APPBARDATA));
+            if (SHAppBarMessage(ABM_GETTASKBARPOS, ref data) == IntPtr.Zero) return fallback;
+
+            RECT r = data.rc;
+            int overlapX = Math.Min(r.right, mi.rcMonitor.right) - Math.Max(r.left, mi.rcMonitor.left);
+            int overlapY = Math.Min(r.bottom, mi.rcMonitor.bottom) - Math.Max(r.top, mi.rcMonitor.top);
+            if (overlapX <= 0 || overlapY <= 0) return fallback;
+
+            int visible = (pos == TaskbarPosition.Left || pos == TaskbarPosition.Right) ? overlapX : overlapY;
+            return visible >= minVisible ? visible : fallback;
+        }
+
+        public static void PositionWindowAboveTaskbar(IntPtr hWnd, bool show = true, POINT? cursorOverride = null) {
             try {
                 if (!GetWindowRect(hWnd, out RECT wr)) return;
                 int windowWidth = wr.right - wr.left;
@@ -914,26 +931,40 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
                     cursor = cursorOverride.Value;
                 else if (!GetCursorPos(out cursor))
                     return;
+
                 IntPtr monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
                 var mi = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
                 if (!GetMonitorInfo(monitor, ref mi)) return;
 
                 float dpiScale = GetDpiScaleForMonitor(monitor);
-                int baseTaskbarH = 52;
-                bool autoHide = IsTaskbarAutoHide();
                 TaskbarPosition tbPos = GetTaskbarPosition(mi);
 
-                int spacing;
-                if (autoHide) {
-                    spacing = IsCursorOnTaskbar(cursor, mi, tbPos)
-                        ? (int)Math.Round(baseTaskbarH * dpiScale)
-                        : (int)Math.Round(11 * dpiScale);    // 6 + 5 original logic
+                RECT area = mi.rcWork;
+                bool workEqualsMonitor =
+                    mi.rcWork.top == mi.rcMonitor.top &&
+                    mi.rcWork.bottom == mi.rcMonitor.bottom &&
+                    mi.rcWork.left == mi.rcMonitor.left &&
+                    mi.rcWork.right == mi.rcMonitor.right;
+
+                if (workEqualsMonitor && IsTaskbarAutoHide()) {
+                    int thickness = GetAutoHideTaskbarThickness(mi, tbPos, dpiScale);
+                    switch (tbPos) {
+                        case TaskbarPosition.Top: area.top += thickness; break;
+                        case TaskbarPosition.Bottom: area.bottom -= thickness; break;
+                        case TaskbarPosition.Left: area.left += thickness; break;
+                        case TaskbarPosition.Right: area.right -= thickness; break;
+                    }
                 }
-                else {
-                    spacing = tbPos == TaskbarPosition.Top
-                        ? (int)Math.Round(10 * dpiScale)
-                        : (int)Math.Round(6 * dpiScale);
-                }
+
+                bool onTaskbar = tbPos switch {
+                    TaskbarPosition.Top => cursor.Y < area.top,
+                    TaskbarPosition.Bottom => cursor.Y >= area.bottom,
+                    TaskbarPosition.Left => cursor.X < area.left,
+                    TaskbarPosition.Right => cursor.X >= area.right,
+                    _ => false
+                };
+
+                int gap = (int)Math.Round(SettingsHelper.GetCurrentSettings().PopupGap * dpiScale);
 
                 int x = cursor.X - windowWidth / 2;
                 int y;
@@ -941,49 +972,42 @@ public const int COINIT_APARTMENTTHREADED = 0x2;
                 switch (tbPos) {
                     case TaskbarPosition.Top:
                     case TaskbarPosition.Bottom:
-                        if (IsCursorOnTaskbar(cursor, mi, tbPos)) {
+                        if (onTaskbar) {
                             y = tbPos == TaskbarPosition.Top
-                                ? mi.rcWork.top + spacing
-                                : mi.rcWork.bottom - windowHeight - spacing;
+                                ? area.top + gap
+                                : area.bottom - windowHeight - gap;
                         }
                         else {
-                            y = cursor.Y - windowHeight - spacing;
-                            if (y < mi.rcWork.top + spacing)
-                                y = mi.rcWork.top + spacing;
+                            y = cursor.Y - windowHeight - gap;
+                            if (y < area.top + gap)
+                                y = area.top + gap;
                         }
                         break;
                     case TaskbarPosition.Left:
-                        x = mi.rcWork.left + spacing;
+                        x = area.left + gap;
                         y = cursor.Y - windowHeight / 2;
-                        // Clamp vertically within work area
-                        if (y < mi.rcWork.top + spacing)
-                            y = mi.rcWork.top + spacing;
-                        if (y + windowHeight > mi.rcWork.bottom - spacing)
-                            y = mi.rcWork.bottom - windowHeight - spacing;
+                        if (y < area.top + gap)
+                            y = area.top + gap;
+                        if (y + windowHeight > area.bottom - gap)
+                            y = area.bottom - windowHeight - gap;
                         break;
-
                     case TaskbarPosition.Right:
-                        x = mi.rcWork.right - windowWidth - spacing;
+                        x = area.right - windowWidth - gap;
                         y = cursor.Y - windowHeight / 2;
-                        // Clamp vertically within work area
-                        if (y < mi.rcWork.top + spacing)
-                            y = mi.rcWork.top + spacing;
-                        if (y + windowHeight > mi.rcWork.bottom - spacing)
-                            y = mi.rcWork.bottom - windowHeight - spacing;
+                        if (y < area.top + gap)
+                            y = area.top + gap;
+                        if (y + windowHeight > area.bottom - gap)
+                            y = area.bottom - windowHeight - gap;
                         break;
-
                     default:
-                        y = autoHide
-                            ? mi.rcMonitor.bottom - windowHeight - spacing
-                            : mi.rcWork.bottom - windowHeight - spacing;
+                        y = area.bottom - windowHeight - gap;
                         break;
                 }
 
-                // Clamp horizontally
-                if (x < mi.rcWork.left) x = mi.rcWork.left;
-                if (x + windowWidth > mi.rcWork.right) x = mi.rcWork.right - windowWidth;
+                if (x < area.left) x = area.left;
+                if (x + windowWidth > area.right) x = area.right - windowWidth;
 
-                Debug.WriteLine($"PositionAboveTaskbar → X={x}, Y={y}");
+                Debug.WriteLine($"PositionAboveTaskbar -> X={x}, Y={y}");
 
                 SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0,
                     SWP_NOSIZE | SWP_NOZORDER | (show ? SWP_SHOWWINDOW : 0));

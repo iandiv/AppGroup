@@ -15,7 +15,8 @@
 
     <!--SINGEL TONE TOP HEADER (DEFAULT)--> 
 
-    <Grid x:Name="MainGrid"    >
+    <Border x:Name="PopupChrome">
+    <Grid x:Name="MainGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -48,6 +49,7 @@
             </Grid>
         </StackPanel>
     </Grid>
+    </Border>
     <!--TWO TONE TOP HEADER-->
     <!--<Grid x:Name="MainGrid"  Margin="0,0,0,-5"  >
         <Grid.RowDefinitions>

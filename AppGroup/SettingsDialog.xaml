@@ -261,6 +261,13 @@
                         </InfoBar>
                     </StackPanel>
                 </Border>
+                <InfoBar x:Name="PopupStyleInfoBar"
+                         IsOpen="False"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Margin="0,8,0,8"
+                         Message="Popup style, corner radius, opacity and tint are only available when popup theme is set to App mode."/>
+
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -269,7 +276,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
                             <TextBlock Text="Popup style" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
-                            <TextBlock Text="Default: Windows acrylic. Rounded: transparent rounded holder. Solid: opaque rounded panel."
+                            <TextBlock Text="Default: Windows acrylic. Rounded: tinted panel. Solid: opaque panel. Glass: clear glass like an iPhone folder."
                                        FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Margin="0,2,0,0" TextWrapping="Wrap"/>
@@ -278,6 +285,7 @@
                             <ComboBoxItem Content="Default" Tag="Default"/>
                             <ComboBoxItem Content="Rounded" Tag="Rounded"/>
                             <ComboBoxItem Content="Solid" Tag="Solid"/>
+                            <ComboBoxItem Content="Glass" Tag="Glass"/>
                         </ComboBox>
                     </Grid>
                 </Border>
@@ -310,7 +318,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
                             <TextBlock Text="Background opacity" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
-                            <TextBlock Text="Tint strength of the Rounded style"
+                            <TextBlock Text="Tint strength for Rounded and Glass."
                                        FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Margin="0,2,0,0" TextWrapping="Wrap"/>
@@ -318,6 +326,30 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                             <Slider x:Name="OpacitySlider" Width="160" Minimum="0" Maximum="100" StepFrequency="1" Value="60"/>
                             <TextBlock x:Name="OpacityValue" Width="48" VerticalAlignment="Center" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
+                            <TextBlock Text="Tint color" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock Text="Auto follows the theme. Accent uses the Windows accent color. Custom uses a hex color."
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <ComboBox x:Name="PopupTintComboBox" MinWidth="110">
+                                <ComboBoxItem Content="Auto" Tag="Auto"/>
+                                <ComboBoxItem Content="Accent" Tag="Accent"/>
+                                <ComboBoxItem Content="Custom" Tag="Custom"/>
+                            </ComboBox>
+                            <TextBox x:Name="PopupTintHexBox" Width="110" MaxLength="7" PlaceholderText="#RRGGBB" Visibility="Collapsed"/>
                         </StackPanel>
                     </Grid>
                 </Border>

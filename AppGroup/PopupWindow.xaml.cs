@@ -561,15 +561,12 @@ namespace AppGroup {
             }
         }
 
-        private void ApplyChromeStyle(SettingsHelper.AppSettings settings, string popupTheme, bool useAccent) {
-            ElementTheme theme = useAccent
-                ? ElementTheme.Dark
-                : (popupTheme switch {
-                    "Light" => ElementTheme.Light,
-                    "Dark" => ElementTheme.Dark,
-                    "AppMode" => ResolveAppModeTheme(),
-                    _ => ResolveWindowsModeTheme()
-                });
+        private static string GetEffectiveStyle(SettingsHelper.AppSettings settings) {
+            return settings.PopupTheme == "AppMode" ? (settings.PopupStyle ?? "Default") : "Default";
+        }
+
+        private void ApplyChromeStyle(SettingsHelper.AppSettings settings, string style) {
+            ElementTheme theme = ResolveAppModeTheme();
 
             if (Content is FrameworkElement root)
                 root.RequestedTheme = theme;
@@ -579,39 +576,101 @@ namespace AppGroup {
             bool isDark = theme == ElementTheme.Dark ||
                 (theme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
-            byte alpha = (settings.PopupStyle == "Solid" || !IsTransparencyEnabled())
-                ? (byte)255
-                : (byte)Math.Round(settings.PopupOpacity * 255 / 100.0);
+            bool translucent = style != "Solid" && IsTransparencyEnabled();
+            double opacity = translucent ? settings.PopupOpacity / 100.0 : 1.0;
 
-            Windows.UI.Color tint;
-            if (useAccent && Application.Current.Resources.TryGetValue("SystemAccentColorDark2", out object accent)) {
+            byte baseValue = style == "Glass" ? (byte)255 : (isDark ? (byte)32 : (byte)243);
+            byte r = baseValue;
+            byte g = baseValue;
+            byte b = baseValue;
+
+            string tintSetting = settings.PopupTintColor ?? "Auto";
+            if (SettingsHelper.TryParseHexColor(tintSetting, out byte cr, out byte cg, out byte cb)) {
+                r = cr;
+                g = cg;
+                b = cb;
+            }
+            else if (tintSetting == "Accent"
+                && Application.Current.Resources.TryGetValue("SystemAccentColorDark2", out object accent)) {
                 var c = (Windows.UI.Color)accent;
-                tint = Windows.UI.Color.FromArgb(alpha, c.R, c.G, c.B);
+                r = c.R;
+                g = c.G;
+                b = c.B;
+            }
+
+            static byte ToAlpha(double value) => (byte)Math.Round(Math.Clamp(value, 0, 1) * 255);
+
+            if (style == "Glass") {
+                var fill = new LinearGradientBrush {
+                    StartPoint = new Windows.Foundation.Point(0, 0),
+                    EndPoint = new Windows.Foundation.Point(1, 1)
+                };
+                fill.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(ToAlpha(opacity * 0.9), r, g, b),
+                    Offset = 0
+                });
+                fill.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(ToAlpha(opacity * 0.3), r, g, b),
+                    Offset = 0.3
+                });
+                fill.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(ToAlpha(opacity * 0.3), r, g, b),
+                    Offset = 0.7
+                });
+                fill.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(ToAlpha(opacity * 0.75), r, g, b),
+                    Offset = 1
+                });
+                PopupChrome.Background = fill;
+
+                var rim = new LinearGradientBrush {
+                    StartPoint = new Windows.Foundation.Point(0, 0),
+                    EndPoint = new Windows.Foundation.Point(1, 1)
+                };
+                rim.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(235, 255, 255, 255),
+                    Offset = 0
+                });
+                rim.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(90, 255, 255, 255),
+                    Offset = 0.25
+                });
+                rim.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(55, 255, 255, 255),
+                    Offset = 0.5
+                });
+                rim.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(90, 255, 255, 255),
+                    Offset = 0.75
+                });
+                rim.GradientStops.Add(new GradientStop {
+                    Color = Windows.UI.Color.FromArgb(215, 255, 255, 255),
+                    Offset = 1
+                });
+                PopupChrome.BorderBrush = rim;
+                PopupChrome.BorderThickness = new Thickness(2);
             }
             else {
-                tint = isDark
-                    ? Windows.UI.Color.FromArgb(alpha, 32, 32, 32)
-                    : Windows.UI.Color.FromArgb(alpha, 243, 243, 243);
+                PopupChrome.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(ToAlpha(opacity), r, g, b));
+                PopupChrome.BorderThickness = new Thickness(1);
+                PopupChrome.BorderBrush = new SolidColorBrush(isDark
+                    ? Windows.UI.Color.FromArgb(40, 255, 255, 255)
+                    : Windows.UI.Color.FromArgb(40, 0, 0, 0));
             }
 
-            PopupChrome.Background = new SolidColorBrush(tint);
             PopupChrome.CornerRadius = new CornerRadius(settings.PopupCornerRadius);
-            PopupChrome.BorderThickness = new Thickness(1);
-            PopupChrome.BorderBrush = new SolidColorBrush(isDark
-                ? Windows.UI.Color.FromArgb(40, 255, 255, 255)
-                : Windows.UI.Color.FromArgb(40, 0, 0, 0));
         }
 
         private void UpdateMainGridBackground(UISettings uiSettings) {
             var settings = SettingsHelper.GetCurrentSettings();
             string popupTheme = settings.PopupTheme ?? "WindowsMode";
-            string popupStyle = settings.PopupStyle ?? "Default";
+            string popupStyle = GetEffectiveStyle(settings);
             bool useAccent = popupTheme == "WindowsMode"
                 && settings.PopupAccentBackground
                 && IsAccentColorOnStartTaskbarEnabled();
 
             if (popupStyle != "Default") {
-                ApplyChromeStyle(settings, popupTheme, useAccent);
+                ApplyChromeStyle(settings, popupStyle);
                 return;
             }
 
@@ -1029,8 +1088,9 @@ namespace AppGroup {
 
         private async Task InitializeWindow() {
             var popupSettings = await SettingsHelper.LoadSettingsAsync();
-            ApplyWindowChrome(popupSettings.PopupStyle);
-            double chromePad = popupSettings.PopupStyle == "Default" ? 0 : CHROME_PAD;
+            string effectiveStyle = GetEffectiveStyle(popupSettings);
+            ApplyWindowChrome(effectiveStyle);
+            double chromePad = effectiveStyle == "Default" ? 0 : CHROME_PAD;
             PopupChrome.Padding = new Thickness(chromePad);
 
             int maxPathItems = 1;

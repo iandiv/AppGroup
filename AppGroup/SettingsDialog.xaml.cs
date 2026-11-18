@@ -37,6 +37,8 @@ namespace AppGroup {
                 PopupThemeComboBox.SelectionChanged += PopupThemeComboBox_SelectionChanged;
                 AccentBackgroundToggle.Toggled += AccentBackgroundToggle_Toggled;
                 PopupStyleComboBox.SelectionChanged += PopupStyleComboBox_SelectionChanged;
+                PopupTintComboBox.SelectionChanged += PopupTintComboBox_SelectionChanged;
+                PopupTintHexBox.TextChanged += PopupTintHexBox_TextChanged;
                 CornerRadiusSlider.ValueChanged += PopupSlider_ValueChanged;
                 OpacitySlider.ValueChanged += PopupSlider_ValueChanged;
                 GapSlider.ValueChanged += PopupSlider_ValueChanged;
@@ -96,16 +98,20 @@ namespace AppGroup {
                 };
                 AccentBackgroundToggle.IsOn = _settings.PopupAccentBackground;
                 UpdateAccentBackgroundState(_settings.PopupTheme);
-                PopupStyleComboBox.SelectedIndex = _settings.PopupStyle switch {
-                    "Rounded" => 1,
-                    "Solid" => 2,
-                    _ => 0
-                };
+                SelectByTag(PopupStyleComboBox, _settings.PopupStyle);
+                if (SettingsHelper.TryParseHexColor(_settings.PopupTintColor, out _, out _, out _)) {
+                    SelectByTag(PopupTintComboBox, "Custom");
+                    PopupTintHexBox.Text = _settings.PopupTintColor;
+                }
+                else {
+                    SelectByTag(PopupTintComboBox, _settings.PopupTintColor);
+                }
                 CornerRadiusSlider.Value = _settings.PopupCornerRadius;
                 OpacitySlider.Value = _settings.PopupOpacity;
                 GapSlider.Value = _settings.PopupGap;
                 UpdateSliderLabels();
-                UpdateStyleControlsState(_settings.PopupStyle);
+                UpdateTintHexVisibility();
+                RefreshStyleControlsState();
                 var theme = _settings.AppTheme switch {
                     "Light" => ElementTheme.Light,
                     "Dark" => ElementTheme.Dark,
@@ -257,6 +263,7 @@ namespace AppGroup {
             try {
                 var selected = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
                 UpdateAccentBackgroundState(selected);
+                RefreshStyleControlsState();
                 await SaveSettingsAsync();
             }
             catch (Exception ex) {
@@ -286,16 +293,69 @@ namespace AppGroup {
             GapValue.Text = $"{(int)GapSlider.Value} px";
         }
 
-        private void UpdateStyleControlsState(string style) {
-            CornerRadiusSlider.IsEnabled = style == "Rounded" || style == "Solid";
-            OpacitySlider.IsEnabled = style == "Rounded";
+        private void RefreshStyleControlsState() {
+            string theme = (PopupThemeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "WindowsMode";
+            string style = (PopupStyleComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Default";
+            bool appMode = theme == "AppMode";
+
+            PopupStyleComboBox.IsEnabled = appMode;
+            CornerRadiusSlider.IsEnabled = appMode && style != "Default";
+            OpacitySlider.IsEnabled = appMode && (style == "Rounded" || style == "Glass");
+            PopupTintComboBox.IsEnabled = appMode && style != "Default";
+            PopupTintHexBox.IsEnabled = appMode && style != "Default";
+            PopupStyleInfoBar.IsOpen = !appMode;
+        }
+
+        private static void SelectByTag(ComboBox box, string tag) {
+            foreach (var item in box.Items) {
+                if (item is ComboBoxItem c && string.Equals(c.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase)) {
+                    box.SelectedItem = c;
+                    return;
+                }
+            }
+            box.SelectedIndex = 0;
+        }
+
+        private void UpdateTintHexVisibility() {
+            string tag = (PopupTintComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Auto";
+            PopupTintHexBox.Visibility = tag == "Custom" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void PopupTintComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+            UpdateTintHexVisibility();
+            if (_isLoading) return;
+            try {
+                await SaveSettingsAsync();
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving popup tint: {ex.Message}");
+            }
+        }
+
+        private async void PopupTintHexBox_TextChanged(object sender, TextChangedEventArgs e) {
+            if (_isLoading) return;
+            if (!SettingsHelper.TryParseHexColor(PopupTintHexBox.Text, out _, out _, out _)) return;
+
+            _sliderSaveCts?.Cancel();
+            _sliderSaveCts = new CancellationTokenSource();
+            var token = _sliderSaveCts.Token;
+
+            try {
+                await Task.Delay(300, token);
+                await SaveSettingsAsync();
+            }
+            catch (OperationCanceledException) {
+            }
+            catch (Exception ex) {
+                Debug.WriteLine($"Error saving popup tint: {ex.Message}");
+            }
         }
 
         private async void PopupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) {
             if (_isLoading) return;
             try {
                 var selected = (PopupStyleComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Default";
-                UpdateStyleControlsState(selected);
+                RefreshStyleControlsState();
                 await SaveSettingsAsync();
             }
             catch (Exception ex) {
@@ -343,6 +403,14 @@ namespace AppGroup {
                 _settings.PopupCornerRadius = (int)CornerRadiusSlider.Value;
                 _settings.PopupOpacity = (int)OpacitySlider.Value;
                 _settings.PopupGap = (int)GapSlider.Value;
+                string tintTag = (PopupTintComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Auto";
+                if (tintTag == "Custom") {
+                    if (SettingsHelper.TryParseHexColor(PopupTintHexBox.Text, out _, out _, out _))
+                        _settings.PopupTintColor = SettingsHelper.NormalizeHex(PopupTintHexBox.Text);
+                }
+                else {
+                    _settings.PopupTintColor = tintTag;
+                }
                 // Save to file
                 await SettingsHelper.SaveSettingsAsync(_settings);
 

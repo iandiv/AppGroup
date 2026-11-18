@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -26,6 +27,7 @@ namespace AppGroup {
             public int PopupCornerRadius { get; set; } = 8;
             public int PopupOpacity { get; set; } = 60;
             public int PopupGap { get; set; } = 12;
+            public string PopupTintColor { get; set; } = "Auto";
         }
 
 
@@ -35,8 +37,30 @@ namespace AppGroup {
             settings.PopupCornerRadius = Math.Clamp(settings.PopupCornerRadius, 0, 40);
             settings.PopupOpacity = Math.Clamp(settings.PopupOpacity, 0, 100);
             settings.PopupGap = Math.Clamp(settings.PopupGap, 0, 40);
-            if (settings.PopupStyle != "Default" && settings.PopupStyle != "Rounded" && settings.PopupStyle != "Solid")
+            if (settings.PopupStyle != "Default" && settings.PopupStyle != "Rounded"
+                && settings.PopupStyle != "Solid" && settings.PopupStyle != "Glass")
                 settings.PopupStyle = "Default";
+
+            if (TryParseHexColor(settings.PopupTintColor, out _, out _, out _))
+                settings.PopupTintColor = NormalizeHex(settings.PopupTintColor);
+            else if (settings.PopupTintColor != "Auto" && settings.PopupTintColor != "Accent")
+                settings.PopupTintColor = "Auto";
+        }
+
+        public static bool TryParseHexColor(string value, out byte r, out byte g, out byte b) {
+            r = 0;
+            g = 0;
+            b = 0;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            string hex = value.Trim().TrimStart('#');
+            if (hex.Length != 6) return false;
+            return byte.TryParse(hex.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r)
+                && byte.TryParse(hex.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out g)
+                && byte.TryParse(hex.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out b);
+        }
+
+        public static string NormalizeHex(string value) {
+            return "#" + value.Trim().TrimStart('#').ToUpperInvariant();
         }
 
         public static async Task<AppSettings> LoadSettingsAsync() {

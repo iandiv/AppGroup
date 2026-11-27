@@ -10,12 +10,21 @@
 
 **Organize your apps into groups you can pin to the Windows taskbar, in a popup that looks and feels like part of Windows 11.**
 <p align="center">
+    <a href="https://github.com/topics/taskbar-groups" />
+
+<img width="300" height="90" alt="AppGroup ranked #1 in taskbar-groups" src="https://github.com/user-attachments/assets/8b229ee8-837e-447f-95e5-d5f6b001d88a" />
+
+
+ 
+  </a>
   <a href="https://github.com/topics/windows-tools">
-    <img width="290" height="104" alt="AppGroup ranked #2 in windows-tools" src="https://github.com/user-attachments/assets/7b99e131-3234-445e-91f2-8bc154d6c2dc" />
+    <img width="300" height="90" alt="AppGroup ranked #2 in windows-tools" src="https://github.com/user-attachments/assets/d2da5dcc-8ce0-49ca-bf46-48ff43a9a813" />
+
+  
+
+  
   </a>
-  <a href="https://github.com/topics/taskbar-application">
-    <img width="365" height="104" alt="AppGroup ranked #7 in taskbar-application" src="https://github.com/user-attachments/assets/1ab2ff3f-c249-4715-acbd-efb9b67f2c59" />
-  </a>
+
 </p>
 
 [![Downloads](https://img.shields.io/github/downloads/iandiv/AppGroup/total?style=for-the-badge&label=Downloads&color=2EA44F)](https://github.com/iandiv/AppGroup/releases)

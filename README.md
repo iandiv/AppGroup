@@ -1,3 +1,4 @@
+
 > [!NOTE]
 > Download only from this official repository: [github.com/iandiv/AppGroup](https://github.com/iandiv/AppGroup). 
 
@@ -8,12 +9,21 @@
 # AppGroup: Windows Taskbar App Groups & Launcher
 
 **Organize your apps into groups you can pin to the Windows taskbar, in a popup that looks and feels like part of Windows 11.**
+<p align="center">
+  <a href="https://github.com/topics/windows-tools">
+    <img width="290" height="104" alt="AppGroup ranked #2 in windows-tools" src="https://github.com/user-attachments/assets/7b99e131-3234-445e-91f2-8bc154d6c2dc" />
+  </a>
+  <a href="https://github.com/topics/taskbar-application">
+    <img width="365" height="104" alt="AppGroup ranked #7 in taskbar-application" src="https://github.com/user-attachments/assets/1ab2ff3f-c249-4715-acbd-efb9b67f2c59" />
+  </a>
+</p>
 
-[![Latest Release](https://img.shields.io/github/v/release/iandiv/AppGroup?style=for-the-badge&label=Latest&color=0078D4)](https://github.com/iandiv/AppGroup/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/iandiv/AppGroup/total?style=for-the-badge&label=Downloads&color=2EA44F)](https://github.com/iandiv/AppGroup/releases)
 [![Stars](https://img.shields.io/github/stars/iandiv/AppGroup?style=for-the-badge&label=Stars&color=F5B301)](https://github.com/iandiv/AppGroup/stargazers)
+[![Latest Release](https://img.shields.io/github/v/release/iandiv/AppGroup?style=for-the-badge&label=Latest&color=0078D4)](https://github.com/iandiv/AppGroup/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/iandiv/AppGroup?style=for-the-badge&color=6E7781)](LICENSE)
-![Platform: Windows 10 | 11](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)
+
+
 
 **[⬇ Download (Setup, Bundled)](https://github.com/iandiv/AppGroup/releases/latest)** · [Quick start](#quick-start) · [Demo](#see-it-in-action) · [FAQ](#faq) · [Get help](#help-and-support)
 
